@@ -9,7 +9,7 @@ Zalo user                Zalo Bot Platform              zalo-crypto-bot (Vercel 
    |                            |  POST /webhook  (JSON body)            |
    |                            |--------------------------------------->|
    |                            |                                        |  1. WebhookSecretGuard checks
-   |                            |                                        |     x-webhook-secret / ?secret=
+   |                            |                                        |     X-Bot-Api-Secret-Token header
    |                            |                                        |  2. ValidationPipe validates
    |                            |                                        |     ZaloWebhookDto
    |                            |                                        |  3. WebhookController extracts

@@ -25,32 +25,42 @@ Receives inbound updates from the Zalo Bot Platform.
 
 ### Authentication
 
-Requires the shared secret configured via `WEBHOOK_SECRET_TOKEN`, passed as
-either:
+Requires the shared secret configured via `WEBHOOK_SECRET_TOKEN` (the same
+value registered as `secret_token` via the Bot API's `setWebhook` call —
+see docs/SETUP.md), passed as either:
 
-- header `x-webhook-secret: <token>`, or
-- query parameter `?secret=<token>`
+- header `X-Bot-Api-Secret-Token: <token>` — what Zalo itself actually sends
+  on every webhook request, or
+- query parameter `?secret=<token>` — manual/local testing convenience only
 
 Missing/incorrect secret → `401 Unauthorized`.
 
 ### Request body
 
+Confirmed against <https://bot.zaloplatforms.com/docs/webhook/>. The whole
+update is wrapped in `{ ok, result }`:
+
 ```json
 {
-  "event_name": "message.text",
-  "message": {
-    "message_id": "abc123",
-    "text": "/gia btc",
-    "chat": { "id": "user-or-chat-id" },
-    "from": { "id": "sender-id", "display_name": "Nguyen Van A" }
+  "ok": true,
+  "result": {
+    "event_name": "message.text.received",
+    "message": {
+      "message_id": "2d758cb5e222177a4e35",
+      "text": "/gia btc",
+      "chat": { "id": "6ede9afa66b88fe6d6a9", "chat_type": "PRIVATE" },
+      "from": { "id": "6ede9afa66b88fe6d6a9", "display_name": "Nguyen Van A", "is_bot": false },
+      "date": 1750316131602
+    }
   }
 }
 ```
 
-Only `message.text` and `message.chat.id` are required for the bot to
-reply; other fields are optional and currently unused. Payloads with no
-`message` (e.g. a "bot added to group" event) are accepted and silently
-acknowledged.
+Only `result.message.text` and `result.message.chat.id` are required for
+the bot to reply; other fields are optional and currently unused. Payloads
+with no `result.message` (e.g. `event_name: "message.unsupported.received"`,
+sent for protected accounts, or a "bot added to group" event) are accepted
+and silently acknowledged.
 
 ### Response
 

@@ -13,7 +13,8 @@ export const envValidationSchema = Joi.object({
 
   ZALO_BOT_TOKEN: Joi.string().required(),
   ZALO_API_BASE_URL: Joi.string().uri().required(),
-  WEBHOOK_SECRET_TOKEN: Joi.string().min(8).required(),
+  // Zalo's setWebhook API requires secret_token to be 8-256 characters.
+  WEBHOOK_SECRET_TOKEN: Joi.string().min(8).max(256).required(),
 
   COINGECKO_API_BASE_URL: Joi.string().uri().required(),
   COINGECKO_API_KEY: Joi.string().allow('').optional(),

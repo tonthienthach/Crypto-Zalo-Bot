@@ -3,7 +3,7 @@
 ## 1. Prerequisites
 
 - Node.js 18+ and npm
-- A Zalo account able to create/manage a Zalo Bot
+- A Zalo account
 - [ngrok](https://ngrok.com/) (or any HTTP tunnel) for local webhook testing
 - (Optional) Git, for version control and CI
 
@@ -20,20 +20,18 @@ npm install
 
 ## 3. Create a Zalo Bot and get a token
 
-> Exact menu names may change — this reflects the general Zalo Bot Platform
-> onboarding flow at the time of writing. If the UI has moved, search Zalo's
-> official bot/developer documentation for "Zalo Bot Platform" or "Zalo Bot
-> Manager".
-
-1. Open the Zalo Bot Manager (Zalo's bot-creation mini app, conceptually
-   similar to Telegram's BotFather).
-2. Create a new bot: choose a name, username, and avatar.
-3. The bot manager issues a **bot token** — copy it, this is your
-   `ZALO_BOT_TOKEN`. Treat it like a password; never commit it.
-4. Note the Bot API base URL documented for your bot (this project assumes a
-   Telegram-Bot-API-like shape: `https://bot-api.zapps.me/bot<TOKEN>/<method>`).
-   Set the base *without* the token as `ZALO_API_BASE_URL` in your `.env`
-   (the token is appended by `ZaloService` at call time).
+1. Open the **Zalo Bot Creator**: <https://zalo.me/s/botcreator/>.
+2. Follow the on-screen flow to create a bot (name, avatar, etc.).
+3. On success you'll see a message like:
+   ```
+   [Thông báo] Khởi tạo Bot thành công
+   Vui lòng sử dụng token sau để tích hợp HTTP API:
+   <numeric-id>:<random-string>
+   ```
+   Copy that whole `<numeric-id>:<random-string>` value — this is your
+   `ZALO_BOT_TOKEN`. **Treat it like a password; never commit it.** Anyone
+   with this token can fully control your bot.
+4. Full API reference: <https://bot.zaloplatforms.com/docs/build-your-bot/>.
 
 ## 4. Configure environment variables
 
@@ -45,8 +43,8 @@ Fill in every variable — see the inline comments in `.env.example`. At
 minimum you need:
 
 - `ZALO_BOT_TOKEN` — from step 3
-- `ZALO_API_BASE_URL` — from step 3
-- `WEBHOOK_SECRET_TOKEN` — invent a long random string, e.g. `openssl rand -hex 32`
+- `ZALO_API_BASE_URL` — `https://bot-api.zaloplatforms.com/bot` (default, confirmed against the official docs)
+- `WEBHOOK_SECRET_TOKEN` — invent a random string, 8-256 characters, e.g. `openssl rand -hex 32`
 - `COINGECKO_API_BASE_URL` — `https://api.coingecko.com/api/v3` (default free tier)
 - `USD_TO_VND_RATE` — a static rate, e.g. `25400`
 
@@ -68,7 +66,8 @@ curl http://localhost:3000/health
 
 ## 6. Expose your local server with ngrok
 
-Zalo's servers need a public HTTPS URL to send webhook calls to.
+Zalo's servers need a public HTTPS URL to send webhook calls to (Zalo
+explicitly rejects `localhost`/private IPs).
 
 ```bash
 ngrok http 3000
@@ -76,21 +75,42 @@ ngrok http 3000
 
 Copy the `https://<random>.ngrok-free.app` URL ngrok prints.
 
-## 7. Register the webhook URL with Zalo
+## 7. Register the webhook with Zalo (`setWebhook` API call)
 
-In the Zalo Bot Manager, set the bot's webhook URL to:
+Unlike some bot platforms, this isn't a form field in a dashboard — you
+register the webhook by calling the Bot API's `setWebhook` method directly.
+A helper script is included:
 
+```bash
+npm run webhook:register -- https://<random>.ngrok-free.app/webhook
 ```
-https://<random>.ngrok-free.app/webhook?secret=<WEBHOOK_SECRET_TOKEN>
+
+This POSTs `{ url, secret_token }` to
+`https://bot-api.zaloplatforms.com/bot<TOKEN>/setWebhook` using the values
+from your `.env` (`ZALO_BOT_TOKEN`, `WEBHOOK_SECRET_TOKEN`). Zalo
+immediately sends a test request to your endpoint and reports back whether
+it succeeded — check the script's printed response for
+`"outcome": "webhook.ok"`.
+
+Equivalent manual curl, if you'd rather not use the script:
+
+```bash
+curl -X POST "https://bot-api.zaloplatforms.com/bot<TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://<random>.ngrok-free.app/webhook", "secret_token": "<WEBHOOK_SECRET_TOKEN>"}'
 ```
 
-(or configure the platform to send the `x-webhook-secret` header instead of
-a query param, if it supports custom headers — `WebhookSecretGuard` accepts
-either.)
+From then on, every webhook POST Zalo sends carries header
+`X-Bot-Api-Secret-Token: <WEBHOOK_SECRET_TOKEN>`, which `WebhookSecretGuard`
+validates on every request.
+
+> Re-run `npm run webhook:register` any time your public URL changes (new
+> ngrok tunnel, new Vercel deployment domain).
 
 ## 8. Test end-to-end
 
-Send your bot a message from the Zalo app:
+Send your bot a message from Zalo (or share it to a group via the invite
+link from the bot creator flow):
 
 ```
 /gia btc

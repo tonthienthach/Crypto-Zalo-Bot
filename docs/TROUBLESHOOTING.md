@@ -16,25 +16,30 @@ restart.
 
 ## Bot never replies / webhook seems to receive nothing
 
-1. Confirm the webhook URL registered with Zalo matches your actual public
-   URL exactly, including the `?secret=...` query param (or the
-   `x-webhook-secret` header, if configured that way).
+1. Confirm the webhook URL was actually registered via `setWebhook` (see
+   docs/SETUP.md) — check the response you got back from
+   `npm run webhook:register` included `"outcome": "webhook.ok"`. Run
+   `curl "https://bot-api.zaloplatforms.com/bot<TOKEN>/getWebhookInfo"` to
+   see what URL Zalo currently has on file.
 2. Check `WEBHOOK_SECRET_TOKEN` matches on both sides — a mismatch causes a
-   silent `401` (Zalo Bot Manager should show a delivery failure/log entry;
-   check its dashboard).
+   silent `401` on every request (Zalo sends it back as the
+   `X-Bot-Api-Secret-Token` header on every webhook POST).
 3. Locally: make sure ngrok is still running and the tunnel URL hasn't
    rotated (free ngrok URLs change every restart unless you have a
-   reserved domain) — re-register the webhook URL if it has.
+   reserved domain) — re-run `npm run webhook:register` with the new URL if
+   it has.
 4. Check the server logs (`npm run start:dev` terminal, or
    `vercel logs <deployment-url>` in production) for `HTTP` log lines and
    any `AllExceptionsFilter`/`WebhookController` error entries.
 
 ## `401 Unauthorized` on every webhook call
 
-- `WEBHOOK_SECRET_TOKEN` differs between what's deployed and what's
-  registered with Zalo. Re-check both.
+- `WEBHOOK_SECRET_TOKEN` differs between what's deployed and what you
+  registered as `secret_token` via `setWebhook`. Re-check both, and re-run
+  `npm run webhook:register` after changing either.
 - If testing with `curl`/Postman, make sure you're sending
-  `x-webhook-secret: <token>` header or `?secret=<token>` query param.
+  `X-Bot-Api-Secret-Token: <token>` header (or `?secret=<token>` query
+  param, accepted only as a manual-testing convenience).
 
 ## Bot replies "Không thể lấy dữ liệu giá lúc này" (CoinGecko unavailable)
 

@@ -63,14 +63,18 @@ deployed to the function.
 ## 5. Point the Zalo webhook at your production domain
 
 After the first production deploy, Vercel gives you a domain like
-`https://zalo-crypto-bot.vercel.app` (or your configured custom domain). Set
-the bot's webhook URL in the Zalo Bot Manager to:
+`https://zalo-crypto-bot.vercel.app` (or your configured custom domain).
+Register it via the Bot API's `setWebhook` call — the same helper script
+used locally works here too, just point it at your production domain:
 
-```
-https://zalo-crypto-bot.vercel.app/webhook?secret=<WEBHOOK_SECRET_TOKEN>
+```bash
+npm run webhook:register -- https://zalo-crypto-bot.vercel.app/webhook
 ```
 
-Use the **same** `WEBHOOK_SECRET_TOKEN` value you set in step 3.
+(Requires `ZALO_BOT_TOKEN` and `WEBHOOK_SECRET_TOKEN` in your local `.env`
+to match exactly what you set on Vercel in step 3 — the script calls the
+Zalo API directly, it doesn't touch Vercel.) Confirm the response includes
+`"outcome": "webhook.ok"`.
 
 ## 6. Verify
 

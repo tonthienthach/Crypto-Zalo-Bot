@@ -36,7 +36,7 @@ jobs:
         run: npm run test:e2e -- --ci
         env:
           ZALO_BOT_TOKEN: ci-test-token
-          ZALO_API_BASE_URL: https://bot-api.zapps.me/bot
+          ZALO_API_BASE_URL: https://bot-api.zaloplatforms.com/bot
           WEBHOOK_SECRET_TOKEN: ci-test-webhook-secret
           COINGECKO_API_BASE_URL: https://api.coingecko.com/api/v3
           USD_TO_VND_RATE: '25400'

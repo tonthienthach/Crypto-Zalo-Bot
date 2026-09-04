@@ -1,6 +1,6 @@
 process.env.NODE_ENV = 'test';
 process.env.ZALO_BOT_TOKEN = 'test-bot-token';
-process.env.ZALO_API_BASE_URL = 'https://bot-api.zapps.me/bot';
+process.env.ZALO_API_BASE_URL = 'https://bot-api.zaloplatforms.com/bot';
 process.env.WEBHOOK_SECRET_TOKEN = 'test-webhook-secret-1234';
 process.env.COINGECKO_API_BASE_URL = 'https://api.coingecko.com/api/v3';
 process.env.USD_TO_VND_RATE = '25400';
@@ -53,7 +53,7 @@ describe('WebhookController (e2e)', () => {
   it('rejects webhook calls without the correct secret', async () => {
     await request(app.getHttpServer())
       .post('/webhook')
-      .send({ message: { text: '/gia btc', chat: { id: '123' } } })
+      .send({ ok: true, result: { message: { text: '/gia btc', chat: { id: '123' } } } })
       .expect(401);
   });
 
@@ -70,8 +70,14 @@ describe('WebhookController (e2e)', () => {
 
     const response = await request(app.getHttpServer())
       .post('/webhook')
-      .set('x-webhook-secret', SECRET)
-      .send({ message: { text: '/gia btc', chat: { id: 'chat-1' } } })
+      .set('x-bot-api-secret-token', SECRET)
+      .send({
+        ok: true,
+        result: {
+          event_name: 'message.text.received',
+          message: { text: '/gia btc', chat: { id: 'chat-1', chat_type: 'PRIVATE' } },
+        },
+      })
       .expect(200);
 
     expect(response.body).toEqual({ ok: true });
@@ -92,8 +98,14 @@ describe('WebhookController (e2e)', () => {
 
     await request(app.getHttpServer())
       .post('/webhook')
-      .set('x-webhook-secret', SECRET)
-      .send({ message: { text: '/gia', chat: { id: 'chat-2' } } })
+      .set('x-bot-api-secret-token', SECRET)
+      .send({
+        ok: true,
+        result: {
+          event_name: 'message.text.received',
+          message: { text: '/gia', chat: { id: 'chat-2', chat_type: 'PRIVATE' } },
+        },
+      })
       .expect(200);
 
     expect(getTopMarkets).toHaveBeenCalled();
@@ -105,8 +117,14 @@ describe('WebhookController (e2e)', () => {
 
     const response = await request(app.getHttpServer())
       .post('/webhook')
-      .set('x-webhook-secret', SECRET)
-      .send({ message: { text: '/gia btc', chat: { id: 'chat-3' } } })
+      .set('x-bot-api-secret-token', SECRET)
+      .send({
+        ok: true,
+        result: {
+          event_name: 'message.text.received',
+          message: { text: '/gia btc', chat: { id: 'chat-3', chat_type: 'PRIVATE' } },
+        },
+      })
       .expect(200);
 
     expect(response.body).toEqual({ ok: true });
@@ -116,8 +134,8 @@ describe('WebhookController (e2e)', () => {
   it('acks silently when the payload has no message', async () => {
     const response = await request(app.getHttpServer())
       .post('/webhook')
-      .set('x-webhook-secret', SECRET)
-      .send({ event_name: 'bot_added' })
+      .set('x-bot-api-secret-token', SECRET)
+      .send({ ok: true, result: { event_name: 'bot_added' } })
       .expect(200);
 
     expect(response.body).toEqual({ ok: true });

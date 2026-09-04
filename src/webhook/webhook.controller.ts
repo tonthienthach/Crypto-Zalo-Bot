@@ -45,7 +45,7 @@ export class WebhookController {
   @UseGuards(WebhookSecretGuard)
   @HttpCode(HttpStatus.OK)
   async handleWebhook(@Body() payload: ZaloWebhookDto): Promise<{ ok: true }> {
-    const message = payload.message;
+    const message = payload.result?.message;
     const text = message?.text;
     const chatId = message?.chat?.id;
 

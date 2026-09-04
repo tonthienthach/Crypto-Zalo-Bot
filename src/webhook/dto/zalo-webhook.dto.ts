@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsObject,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 
 export class ZaloWebhookChatDto {
   @IsString()
@@ -8,7 +15,7 @@ export class ZaloWebhookChatDto {
 
   @IsOptional()
   @IsString()
-  type?: string;
+  chat_type?: string;
 }
 
 export class ZaloWebhookFromDto {
@@ -19,6 +26,10 @@ export class ZaloWebhookFromDto {
   @IsOptional()
   @IsString()
   display_name?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  is_bot?: boolean;
 }
 
 export class ZaloWebhookMessageDto {
@@ -41,12 +52,7 @@ export class ZaloWebhookMessageDto {
   from?: ZaloWebhookFromDto;
 }
 
-/**
- * Validated shape of an inbound Zalo Bot webhook call. `message` is optional
- * because some webhook events (e.g. bot added to a group) carry no message
- * — those are acknowledged and ignored by WebhookController.
- */
-export class ZaloWebhookDto {
+export class ZaloWebhookResultDto {
   @IsOptional()
   @IsString()
   event_name?: string;
@@ -55,4 +61,22 @@ export class ZaloWebhookDto {
   @ValidateNested()
   @Type(() => ZaloWebhookMessageDto)
   message?: ZaloWebhookMessageDto;
+}
+
+/**
+ * Validated shape of an inbound Zalo Bot webhook call — confirmed against
+ * https://bot.zaloplatforms.com/docs/webhook/: the update is wrapped in
+ * `{ ok, result: { event_name, message } }`. `result`/`message` are optional
+ * because some events carry no message (or an unsupported-content event) —
+ * those are acknowledged and ignored by WebhookController.
+ */
+export class ZaloWebhookDto {
+  @IsOptional()
+  @IsBoolean()
+  ok?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ZaloWebhookResultDto)
+  result?: ZaloWebhookResultDto;
 }
