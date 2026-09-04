@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, HttpStatus, Logger, Post, UseGuards } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   CoingeckoService,
   CoingeckoUnavailableError,
@@ -18,7 +19,6 @@ import {
 } from '../utils/format-message.util';
 import { ZaloService } from '../zalo/zalo.service';
 import { ZaloWebhookDto } from './dto/zalo-webhook.dto';
-import { ConfigService } from '@nestjs/config';
 
 @Controller('webhook')
 export class WebhookController {
@@ -45,7 +45,7 @@ export class WebhookController {
   @UseGuards(WebhookSecretGuard)
   @HttpCode(HttpStatus.OK)
   async handleWebhook(@Body() payload: ZaloWebhookDto): Promise<{ ok: true }> {
-    const message = payload.result?.message;
+    const message = payload.message;
     const text = message?.text;
     const chatId = message?.chat?.id;
 

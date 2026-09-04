@@ -1,21 +1,18 @@
 /**
  * Inbound webhook payload sent by the Zalo Bot Platform when an event
- * happens (e.g. a user sends a message). Confirmed against the official
- * docs at https://bot.zaloplatforms.com/docs/webhook/ — the whole update is
- * wrapped in `{ ok, result }`, mirroring the shape of the Bot API's own
- * responses:
+ * happens (e.g. a user sends a message). CONFIRMED LIVE against a real
+ * webhook call from production (2026-09-04) — the update is a FLAT object,
+ * not wrapped in `{ ok, result }` as an earlier reading of the docs
+ * suggested:
  *
  * {
- *   "ok": true,
- *   "result": {
- *     "message": {
- *       "from": { "id": "...", "display_name": "Ted", "is_bot": false },
- *       "chat": { "id": "...", "chat_type": "PRIVATE" },
- *       "text": "Xin chào",
- *       "message_id": "...",
- *       "date": 1750316131602
- *     },
- *     "event_name": "message.text.received"
+ *   "event_name": "message.text.received",
+ *   "message": {
+ *     "date": 1788543207731,
+ *     "chat": { "chat_type": "PRIVATE", "id": "edd5f2ef42baabe4f2ab" },
+ *     "message_id": "02b8d8946c41fe18a757",
+ *     "from": { "id": "edd5f2ef42baabe4f2ab", "is_bot": false, "display_name": "..." },
+ *     "text": "/help"
  *   }
  * }
  */
@@ -38,14 +35,9 @@ export interface ZaloWebhookMessage {
   date?: number;
 }
 
-export interface ZaloWebhookResult {
+export interface ZaloWebhookUpdate {
   event_name?: string;
   message?: ZaloWebhookMessage;
-}
-
-export interface ZaloWebhookUpdate {
-  ok?: boolean;
-  result?: ZaloWebhookResult;
 }
 
 /** Response payload from the Zalo Bot "send message" API call. */

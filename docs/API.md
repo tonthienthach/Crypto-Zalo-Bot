@@ -37,30 +37,29 @@ Missing/incorrect secret → `401 Unauthorized`.
 
 ### Request body
 
-Confirmed against <https://bot.zaloplatforms.com/docs/webhook/>. The whole
-update is wrapped in `{ ok, result }`:
+Confirmed **live against a real production webhook call** (2026-09-04) — the
+update is a **flat** object (an earlier reading of the docs suggested a
+`{ ok, result }` wrapper; that turned out to be wrong — real traffic has no
+such wrapper):
 
 ```json
 {
-  "ok": true,
-  "result": {
-    "event_name": "message.text.received",
-    "message": {
-      "message_id": "2d758cb5e222177a4e35",
-      "text": "/gia btc",
-      "chat": { "id": "6ede9afa66b88fe6d6a9", "chat_type": "PRIVATE" },
-      "from": { "id": "6ede9afa66b88fe6d6a9", "display_name": "Nguyen Van A", "is_bot": false },
-      "date": 1750316131602
-    }
+  "event_name": "message.text.received",
+  "message": {
+    "message_id": "2d758cb5e222177a4e35",
+    "text": "/gia btc",
+    "chat": { "id": "6ede9afa66b88fe6d6a9", "chat_type": "PRIVATE" },
+    "from": { "id": "6ede9afa66b88fe6d6a9", "display_name": "Nguyen Van A", "is_bot": false },
+    "date": 1750316131602
   }
 }
 ```
 
-Only `result.message.text` and `result.message.chat.id` are required for
-the bot to reply; other fields are optional and currently unused. Payloads
-with no `result.message` (e.g. `event_name: "message.unsupported.received"`,
-sent for protected accounts, or a "bot added to group" event) are accepted
-and silently acknowledged.
+Only `message.text` and `message.chat.id` are required for the bot to
+reply; other fields are optional and currently unused. Payloads with no
+`message` (e.g. `event_name: "message.unsupported.received"`, sent for
+protected accounts, or a "bot added to group" event) are accepted and
+silently acknowledged.
 
 ### Response
 

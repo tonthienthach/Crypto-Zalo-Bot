@@ -52,7 +52,15 @@ export class ZaloWebhookMessageDto {
   from?: ZaloWebhookFromDto;
 }
 
-export class ZaloWebhookResultDto {
+/**
+ * Validated shape of an inbound Zalo Bot webhook call. CONFIRMED LIVE
+ * against a real production webhook call (2026-09-04) — the update is a
+ * FLAT object: `{ event_name, message }`, not wrapped in `{ ok, result }`.
+ * `message` is optional because some events carry no message (e.g. a "bot
+ * added to group" event) — those are acknowledged and ignored by
+ * WebhookController.
+ */
+export class ZaloWebhookDto {
   @IsOptional()
   @IsString()
   event_name?: string;
@@ -61,22 +69,4 @@ export class ZaloWebhookResultDto {
   @ValidateNested()
   @Type(() => ZaloWebhookMessageDto)
   message?: ZaloWebhookMessageDto;
-}
-
-/**
- * Validated shape of an inbound Zalo Bot webhook call — confirmed against
- * https://bot.zaloplatforms.com/docs/webhook/: the update is wrapped in
- * `{ ok, result: { event_name, message } }`. `result`/`message` are optional
- * because some events carry no message (or an unsupported-content event) —
- * those are acknowledged and ignored by WebhookController.
- */
-export class ZaloWebhookDto {
-  @IsOptional()
-  @IsBoolean()
-  ok?: boolean;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => ZaloWebhookResultDto)
-  result?: ZaloWebhookResultDto;
 }

@@ -11,8 +11,8 @@ import { Request } from 'express';
 @Injectable()
 export class UserThrottlerGuard extends ThrottlerGuard {
   protected async getTracker(req: Request): Promise<string> {
-    const body = req.body as { result?: { message?: { chat?: { id?: string } } } } | undefined;
-    const chatId = body?.result?.message?.chat?.id;
+    const body = req.body as { message?: { chat?: { id?: string } } } | undefined;
+    const chatId = body?.message?.chat?.id;
     return chatId ? `chat:${chatId}` : (req.ip ?? 'unknown');
   }
 }

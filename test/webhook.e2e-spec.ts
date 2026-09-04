@@ -53,7 +53,10 @@ describe('WebhookController (e2e)', () => {
   it('rejects webhook calls without the correct secret', async () => {
     await request(app.getHttpServer())
       .post('/webhook')
-      .send({ ok: true, result: { message: { text: '/gia btc', chat: { id: '123' } } } })
+      .send({
+        event_name: 'message.text.received',
+        message: { text: '/gia btc', chat: { id: '123' } },
+      })
       .expect(401);
   });
 
@@ -72,11 +75,8 @@ describe('WebhookController (e2e)', () => {
       .post('/webhook')
       .set('x-bot-api-secret-token', SECRET)
       .send({
-        ok: true,
-        result: {
-          event_name: 'message.text.received',
-          message: { text: '/gia btc', chat: { id: 'chat-1', chat_type: 'PRIVATE' } },
-        },
+        event_name: 'message.text.received',
+        message: { text: '/gia btc', chat: { id: 'chat-1', chat_type: 'PRIVATE' } },
       })
       .expect(200);
 
@@ -100,11 +100,8 @@ describe('WebhookController (e2e)', () => {
       .post('/webhook')
       .set('x-bot-api-secret-token', SECRET)
       .send({
-        ok: true,
-        result: {
-          event_name: 'message.text.received',
-          message: { text: '/gia', chat: { id: 'chat-2', chat_type: 'PRIVATE' } },
-        },
+        event_name: 'message.text.received',
+        message: { text: '/gia', chat: { id: 'chat-2', chat_type: 'PRIVATE' } },
       })
       .expect(200);
 
@@ -119,11 +116,8 @@ describe('WebhookController (e2e)', () => {
       .post('/webhook')
       .set('x-bot-api-secret-token', SECRET)
       .send({
-        ok: true,
-        result: {
-          event_name: 'message.text.received',
-          message: { text: '/gia btc', chat: { id: 'chat-3', chat_type: 'PRIVATE' } },
-        },
+        event_name: 'message.text.received',
+        message: { text: '/gia btc', chat: { id: 'chat-3', chat_type: 'PRIVATE' } },
       })
       .expect(200);
 
@@ -135,7 +129,7 @@ describe('WebhookController (e2e)', () => {
     const response = await request(app.getHttpServer())
       .post('/webhook')
       .set('x-bot-api-secret-token', SECRET)
-      .send({ ok: true, result: { event_name: 'bot_added' } })
+      .send({ event_name: 'bot_added' })
       .expect(200);
 
     expect(response.body).toEqual({ ok: true });
