@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test -- --ci --coverage
+
+      - name: E2E tests
+        run: npm run test:e2e -- --ci
+        env:
+          ZALO_BOT_TOKEN: ci-test-token
+          ZALO_API_BASE_URL: https://bot-api.zapps.me/bot
+          WEBHOOK_SECRET_TOKEN: ci-test-webhook-secret
+          COINGECKO_API_BASE_URL: https://api.coingecko.com/api/v3
+          USD_TO_VND_RATE: '25400'
+
+      - name: Build
+        run: npm run build
