@@ -4,6 +4,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Cache } from 'cache-manager';
 import { firstValueFrom } from 'rxjs';
+import { CoinPaprikaService } from '../coinpaprika/coinpaprika.service';
 import {
   DEFAULT_TOP_MARKETS_LIMIT,
   SYMBOL_TO_COINGECKO_ID,
@@ -40,6 +41,7 @@ export class CoingeckoService {
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly coinPaprikaService: CoinPaprikaService,
   ) {
     this.baseUrl = this.configService.get<string>('coingecko.apiBaseUrl')!;
     this.apiKey = this.configService.get<string>('coingecko.apiKey') ?? '';
@@ -78,8 +80,10 @@ export class CoingeckoService {
     }
 
     const results: CoinMarketData[] = [];
+    const resolvedSymbols = new Set<string>();
     for (const [id, entry] of Object.entries(data)) {
       const symbol = idToSymbol.get(id) ?? id;
+      resolvedSymbols.add(symbol);
       results.push({
         id,
         symbol,
@@ -88,6 +92,15 @@ export class CoingeckoService {
         changePercent24h: entry.usd_24h_change ?? null,
         marketCapUsd: entry.usd_market_cap,
       });
+    }
+
+    // CoinGecko didn't know one or more symbols (missing from
+    // SYMBOL_TO_COINGECKO_ID, or genuinely absent) — fall back to
+    // CoinPaprika's free ticker snapshot for just those before giving up.
+    const unresolvedSymbols = uniqueSymbols.filter((symbol) => !resolvedSymbols.has(symbol));
+    if (unresolvedSymbols.length > 0) {
+      const fallbackResults = await this.coinPaprikaService.getPricesBySymbols(unresolvedSymbols);
+      results.push(...fallbackResults);
     }
 
     if (results.length === 0) {

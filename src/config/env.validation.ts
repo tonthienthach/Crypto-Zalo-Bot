@@ -19,6 +19,7 @@ export const envValidationSchema = Joi.object({
   COINGECKO_API_BASE_URL: Joi.string().uri().required(),
   COINGECKO_API_KEY: Joi.string().allow('').optional(),
   COINGECKO_CACHE_TTL_SECONDS: Joi.number().integer().min(0).default(30),
+  COINPAPRIKA_CACHE_TTL_SECONDS: Joi.number().integer().min(0).default(30),
 
   USD_TO_VND_RATE: Joi.number().positive().required(),
 

@@ -41,6 +41,8 @@ export const SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
   uni: 'uniswap',
   pepe: 'pepe',
   wld: 'worldcoin-wld',
+  ygg: 'yield-guild-games',
+  '2z': 'doublezero',
 };
 
 export const DEFAULT_TOP_MARKETS_LIMIT = 5;

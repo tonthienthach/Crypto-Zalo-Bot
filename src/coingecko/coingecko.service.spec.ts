@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { of, throwError } from 'rxjs';
+import { CoinPaprikaService } from '../coinpaprika/coinpaprika.service';
 import {
   CoingeckoService,
   CoingeckoUnavailableError,
@@ -14,6 +15,7 @@ describe('CoingeckoService', () => {
   let httpGet: jest.Mock;
   let cacheGet: jest.Mock;
   let cacheSet: jest.Mock;
+  let coinPaprikaGetPricesBySymbols: jest.Mock;
 
   const config: Record<string, unknown> = {
     'coingecko.apiBaseUrl': 'https://api.coingecko.com/api/v3',
@@ -25,6 +27,7 @@ describe('CoingeckoService', () => {
     httpGet = jest.fn();
     cacheGet = jest.fn().mockResolvedValue(undefined);
     cacheSet = jest.fn().mockResolvedValue(undefined);
+    coinPaprikaGetPricesBySymbols = jest.fn().mockResolvedValue([]);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -35,6 +38,10 @@ describe('CoingeckoService', () => {
           useValue: { get: (key: string) => config[key] },
         },
         { provide: CACHE_MANAGER, useValue: { get: cacheGet, set: cacheSet } },
+        {
+          provide: CoinPaprikaService,
+          useValue: { getPricesBySymbols: coinPaprikaGetPricesBySymbols },
+        },
       ],
     }).compile();
 
@@ -88,12 +95,51 @@ describe('CoingeckoService', () => {
       expect(result[0].priceUsd).toBe(65000);
     });
 
-    it('throws UnknownCoinSymbolsError when CoinGecko returns no data', async () => {
+    it('throws UnknownCoinSymbolsError when CoinGecko and the CoinPaprika fallback both find nothing', async () => {
       httpGet.mockReturnValueOnce(of({ data: {} }));
 
       await expect(service.getPricesBySymbols(['doesnotexist'])).rejects.toBeInstanceOf(
         UnknownCoinSymbolsError,
       );
+      expect(coinPaprikaGetPricesBySymbols).toHaveBeenCalledWith(['doesnotexist']);
+    });
+
+    it('falls back to CoinPaprika for symbols CoinGecko could not resolve', async () => {
+      httpGet.mockReturnValueOnce(
+        of({
+          data: {
+            bitcoin: { usd: 65000, usd_24h_change: 2.5, usd_market_cap: 1_000_000_000 },
+          },
+        }),
+      );
+      coinPaprikaGetPricesBySymbols.mockResolvedValueOnce([
+        {
+          id: 'yield-guild-games',
+          symbol: 'ygg',
+          name: 'Yield Guild Games',
+          priceUsd: 0.024,
+          changePercent24h: 1.5,
+          marketCapUsd: 23_000_000,
+        },
+      ]);
+
+      const result = await service.getPricesBySymbols(['btc', 'ygg']);
+
+      expect(coinPaprikaGetPricesBySymbols).toHaveBeenCalledWith(['ygg']);
+      expect(result).toHaveLength(2);
+      expect(result.map((coin) => coin.symbol)).toEqual(['btc', 'ygg']);
+    });
+
+    it('does not call the CoinPaprika fallback when CoinGecko resolves every symbol', async () => {
+      httpGet.mockReturnValueOnce(
+        of({
+          data: { bitcoin: { usd: 65000, usd_24h_change: 2.5, usd_market_cap: 1_000_000_000 } },
+        }),
+      );
+
+      await service.getPricesBySymbols(['btc']);
+
+      expect(coinPaprikaGetPricesBySymbols).not.toHaveBeenCalled();
     });
 
     it('throws CoingeckoUnavailableError when the HTTP call fails', async () => {

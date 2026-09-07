@@ -77,6 +77,16 @@ malformed request bodies (`400`, from DTO validation) that happen *before*
 the controller can even attempt a reply. See docs/ARCHITECTURE.md → "Error
 handling philosophy".
 
+### Price source fallback
+
+Ticker symbols are first resolved against CoinGecko (`SYMBOL_TO_COINGECKO_ID`
+in `src/coingecko/coingecko.constants.ts`). Any symbol CoinGecko doesn't
+resolve is retried against CoinPaprika's free, no-API-key ticker snapshot
+(`src/coinpaprika/coinpaprika.service.ts`) before giving up with
+`UnknownCoinSymbolsError`. This fallback never runs when CoinGecko resolves
+every requested symbol, and a CoinPaprika outage never breaks the CoinGecko
+path — it just means fewer symbols get filled in.
+
 ### Supported commands (message text)
 
 | Input | Behavior |

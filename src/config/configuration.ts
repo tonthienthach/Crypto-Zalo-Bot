@@ -21,6 +21,10 @@ export default () => ({
     cacheTtlSeconds: parseInt(process.env.COINGECKO_CACHE_TTL_SECONDS ?? '30', 10),
   },
 
+  coinpaprika: {
+    cacheTtlSeconds: parseInt(process.env.COINPAPRIKA_CACHE_TTL_SECONDS ?? '30', 10),
+  },
+
   currency: {
     usdToVndRate: parseFloat(process.env.USD_TO_VND_RATE ?? '25400'),
   },
