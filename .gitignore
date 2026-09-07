@@ -4,6 +4,9 @@
 /build
 /.vercel
 
+# aidlc
+/.aidlc
+
 # logs
 logs
 *.log
