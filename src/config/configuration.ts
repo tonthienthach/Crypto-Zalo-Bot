@@ -33,4 +33,16 @@ export default () => ({
     ttlSeconds: parseInt(process.env.THROTTLE_TTL_SECONDS ?? '10', 10),
     limit: parseInt(process.env.THROTTLE_LIMIT ?? '5', 10),
   },
+
+  cron: {
+    secretToken: process.env.CRON_SECRET_TOKEN,
+  },
+
+  digest: {
+    chatId: process.env.DIGEST_CHAT_ID,
+    coinSymbols: (process.env.DIGEST_COIN_SYMBOLS ?? 'btc,eth,ygg')
+      .split(',')
+      .map((symbol) => symbol.trim().toLowerCase())
+      .filter(Boolean),
+  },
 });

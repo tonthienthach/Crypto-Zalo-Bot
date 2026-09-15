@@ -122,7 +122,17 @@ link from the bot creator flow):
 You should receive a formatted reply within a couple of seconds. Watch the
 `npm run start:dev` terminal for structured request logs.
 
-## 9. Run the test suite
+## 9. Find your chat_id for the daily digest
+
+The daily digest (`docs/ARCHITECTURE.md` → "Daily digest") pushes to a
+single fixed `DIGEST_CHAT_ID`, not to whoever happens to message the bot.
+To find yours: send the bot any message (step 8 above), then check the
+`npm run start:dev` structured request logs for the incoming `POST /webhook`
+call — the JSON body's `message.chat.id` field is your chat_id. Set it as
+`DIGEST_CHAT_ID` in `.env` (local) and as a Vercel env var (production, see
+`docs/DEPLOYMENT.md`).
+
+## 10. Run the test suite
 
 ```bash
 npm test          # unit tests

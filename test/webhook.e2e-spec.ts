@@ -6,6 +6,8 @@ process.env.COINGECKO_API_BASE_URL = 'https://api.coingecko.com/api/v3';
 process.env.USD_TO_VND_RATE = '25400';
 process.env.THROTTLE_TTL_SECONDS = '10';
 process.env.THROTTLE_LIMIT = '100';
+process.env.CRON_SECRET_TOKEN = 'test-cron-secret-1234';
+process.env.DIGEST_CHAT_ID = 'test-digest-chat-id';
 
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';

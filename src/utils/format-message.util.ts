@@ -47,6 +47,12 @@ export function formatPriceReply(coins: CoinMarketData[], usdToVndRate: number):
   return ['💰 Giá thị trường:', ...lines].join('\n');
 }
 
+/** Daily scheduled digest for a fixed watchlist (e.g. the 9am BTC/ETH/YGG push). */
+export function formatDailyDigestReply(coins: CoinMarketData[], usdToVndRate: number): string {
+  const lines = coins.map((coin) => formatCoinLine(coin, usdToVndRate));
+  return ['🌅 Bản tin giá sáng nay:', ...lines].join('\n');
+}
+
 /** Full reply for "/gia" with no symbols — top-N coins by market cap. */
 export function formatTopMarketsReply(coins: CoinMarketData[], usdToVndRate: number): string {
   const lines = coins.map((coin, index) => `${index + 1}. ${formatCoinLine(coin, usdToVndRate)}`);

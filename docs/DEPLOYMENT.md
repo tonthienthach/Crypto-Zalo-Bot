@@ -35,6 +35,9 @@ vercel env add THROTTLE_TTL_SECONDS production
 vercel env add THROTTLE_LIMIT production
 vercel env add LOG_LEVEL production
 vercel env add NODE_ENV production
+vercel env add CRON_SECRET_TOKEN production
+vercel env add DIGEST_CHAT_ID production
+vercel env add DIGEST_COIN_SYMBOLS production   # optional, defaults to btc,eth,ygg
 ```
 
 `vercel env add <name> production` prompts you to paste the value.
@@ -96,7 +99,23 @@ vercel rollback <url>     # promote a previous deployment back to production
 Or from the dashboard: Deployments tab → find the last-known-good
 deployment → "Promote to Production".
 
-## 8. Ongoing deploys
+## 8. Enable the daily digest cron
+
+The 9am BTC/ETH/YGG digest is triggered by a GitHub Actions workflow
+(`.github/workflows/daily-digest.yml`), not by Vercel itself — see
+`docs/ARCHITECTURE.md` ("Daily digest") for why. It needs two repo secrets
+(GitHub repo → Settings → Secrets and variables → Actions):
+
+```bash
+gh secret set APP_URL --body "https://zalo-crypto-bot.vercel.app"
+gh secret set CRON_SECRET_TOKEN --body "<same value you set on Vercel in step 3>"
+```
+
+Verify it end-to-end without waiting for 9am by running the workflow
+manually (GitHub → Actions → "Daily crypto digest" → "Run workflow"), then
+confirm the digest message arrives in the configured `DIGEST_CHAT_ID` chat.
+
+## 9. Ongoing deploys
 
 Once the GitHub repo is connected to the Vercel project (Vercel dashboard →
 Project → Git), every push to `main` triggers a production deployment and

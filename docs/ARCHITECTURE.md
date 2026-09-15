@@ -46,9 +46,10 @@ the reply is never carried in the webhook's own response body.
 | `command-parser/` | Pure text-parsing service: turns a raw chat message into a `ParsedCommand` (`PRICE`, `TOP_MARKETS`, `HELP`, `UNKNOWN`). No I/O, fully unit-testable, handles accented/unaccented Vietnamese. |
 | `zalo/` | Talks to the Zalo Bot "send message" API. Never throws — a failed send is logged and swallowed so an outbound Zalo outage can't turn into an unhandled webhook exception. |
 | `webhook/` | `WebhookController` — the only place that wires parsing + CoinGecko + Zalo together. Guarded by `WebhookSecretGuard`, DTO-validated by `ZaloWebhookDto`. Always acknowledges 200 to Zalo. |
+| `digest/` | `DigestController` — `POST /cron/daily-digest`, a machine-triggered (not user-triggered) endpoint that fetches the configured watchlist (`DIGEST_COIN_SYMBOLS`, default `btc,eth,ygg`) and pushes it to `DIGEST_CHAT_ID`. Guarded by `CronSecretGuard`. Has no scheduler of its own — see "Daily digest" below for what calls it. |
 | `health/` | `GET /health` — liveness endpoint for uptime monitoring and Vercel health checks. |
 | `common/filters` | `AllExceptionsFilter` — global catch-all; never leaks a stack trace to the client, and always answers webhook paths with 200 to avoid retry storms. |
-| `common/guards` | `WebhookSecretGuard` (shared-secret auth for `/webhook`) and `UserThrottlerGuard` (per-chat-id rate limiting, not per-IP — see below). |
+| `common/guards` | `WebhookSecretGuard` (shared-secret auth for `/webhook`), `CronSecretGuard` (shared-secret auth for `/cron/daily-digest`), and `UserThrottlerGuard` (per-chat-id rate limiting, not per-IP — see below). |
 | `common/interceptors` | `LoggingInterceptor` — structured (JSON) request/response logging. |
 | `utils/format-message.util.ts` | Pure functions that turn `CoinMarketData[]` into the final chat message text (USD, VND estimate, 24h % with emoji). No side effects — fully unit-testable. |
 
@@ -123,6 +124,42 @@ cold-start latency, mitigated by:
 Both entry points share the exact same `AppModule`, global pipes, filters,
 and interceptors — there is no behavioral drift between "how it runs on my
 machine" and "how it runs in production".
+
+### Daily digest (scheduled push)
+
+Unlike the webhook flow, this bot never has a long-running process to host
+an in-process cron (`@nestjs/schedule`) — a Vercel Function only exists for
+the duration of a request. So the scheduling itself lives *outside* the app:
+
+```
+GitHub Actions (cron: 0 2 * * * UTC = 9:00 ICT)
+   |
+   |  POST /cron/daily-digest
+   |  X-Cron-Secret-Token: <CRON_SECRET_TOKEN>
+   v
+DigestController  -->  CoingeckoService.getPricesBySymbols(['btc','eth','ygg'])
+                   -->  formatDailyDigestReply(...)
+                   -->  ZaloService.sendTextMessage(DIGEST_CHAT_ID, text)
+```
+
+- **Why GitHub Actions instead of Vercel Cron**: Vercel's Hobby-plan cron
+  jobs only guarantee daily granularity with looser timing precision; a
+  GitHub Actions `schedule` trigger is free and lands close to the requested
+  minute, which matters for a "9am sharp" digest. `workflow_dispatch` is also
+  wired in so the digest can be triggered manually for testing.
+- **Single recipient, no subscriber store**: `DIGEST_CHAT_ID` is a single
+  env var, not a database-backed subscriber list — this bot serves one
+  person's personal watchlist. If/when multiple recipients are needed, that's
+  the point to introduce persistence (see "Why is the cache best-effort"
+  above for the same serverless-statelessness constraint that would apply).
+- **Auth model differs from `/webhook`**: `/cron/daily-digest` has no Zalo
+  signature to verify (nothing came from Zalo), so it uses a separate
+  `CronSecretGuard` + `CRON_SECRET_TOKEN` rather than reusing
+  `WebhookSecretGuard`.
+- **Failure handling**: like the webhook path, `DigestController` always
+  returns `200 { ok: true }` — a CoinGecko or Zalo outage is logged
+  server-side, not surfaced as an HTTP failure, so the scheduler doesn't
+  retry-storm a transient outage.
 
 ### Error handling philosophy
 

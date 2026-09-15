@@ -9,6 +9,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { UserThrottlerGuard } from './common/guards/user-throttler.guard';
 import { CoingeckoModule } from './coingecko/coingecko.module';
 import { CommandParserModule } from './command-parser/command-parser.module';
+import { DigestModule } from './digest/digest.module';
 import { HealthModule } from './health/health.module';
 import { WebhookModule } from './webhook/webhook.module';
 import { ZaloModule } from './zalo/zalo.module';
@@ -35,6 +36,7 @@ import { ZaloModule } from './zalo/zalo.module';
     CommandParserModule,
     ZaloModule,
     WebhookModule,
+    DigestModule,
     HealthModule,
   ],
   providers: [

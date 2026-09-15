@@ -25,4 +25,10 @@ export const envValidationSchema = Joi.object({
 
   THROTTLE_TTL_SECONDS: Joi.number().integer().min(1).default(10),
   THROTTLE_LIMIT: Joi.number().integer().min(1).default(5),
+
+  // Daily digest cron hook (see src/digest) — same length constraint as
+  // WEBHOOK_SECRET_TOKEN, for the same reason (long random string).
+  CRON_SECRET_TOKEN: Joi.string().min(8).max(256).required(),
+  DIGEST_CHAT_ID: Joi.string().required(),
+  DIGEST_COIN_SYMBOLS: Joi.string().default('btc,eth,ygg'),
 });
