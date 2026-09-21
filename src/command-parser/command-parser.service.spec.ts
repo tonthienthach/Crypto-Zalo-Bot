@@ -70,4 +70,37 @@ describe('CommandParserService', () => {
     expect(parser.parse('')).toEqual({ type: CommandType.UNKNOWN, symbols: [] });
     expect(parser.parse('   ')).toEqual({ type: CommandType.UNKNOWN, symbols: [] });
   });
+
+  it('parses "/dangky btc eth" as a subscribe command with symbols', () => {
+    expect(parser.parse('/dangky btc eth')).toEqual({
+      type: CommandType.SUBSCRIBE,
+      symbols: ['btc', 'eth'],
+    });
+  });
+
+  it('parses "/dangky btc,eth" (comma-separated) the same as space-separated', () => {
+    expect(parser.parse('/dangky btc,eth')).toEqual({
+      type: CommandType.SUBSCRIBE,
+      symbols: ['btc', 'eth'],
+    });
+  });
+
+  it('parses "/dangky" with no symbols as a subscribe command with empty symbols', () => {
+    expect(parser.parse('/dangky')).toEqual({ type: CommandType.SUBSCRIBE, symbols: [] });
+  });
+
+  it('parses "/huy" as an unsubscribe command', () => {
+    expect(parser.parse('/huy')).toEqual({ type: CommandType.UNSUBSCRIBE, symbols: [] });
+  });
+
+  it('parses "/watchlist" with no symbols as a view command', () => {
+    expect(parser.parse('/watchlist')).toEqual({ type: CommandType.WATCHLIST, symbols: [] });
+  });
+
+  it('parses "/watchlist btc sol" as an edit command with symbols', () => {
+    expect(parser.parse('/watchlist btc sol')).toEqual({
+      type: CommandType.WATCHLIST,
+      symbols: ['btc', 'sol'],
+    });
+  });
 });

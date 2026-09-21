@@ -36,9 +36,36 @@ vercel env add THROTTLE_LIMIT production
 vercel env add LOG_LEVEL production
 vercel env add NODE_ENV production
 vercel env add CRON_SECRET_TOKEN production
-vercel env add DIGEST_CHAT_ID production
-vercel env add DIGEST_COIN_SYMBOLS production   # optional, defaults to btc,eth,ygg
+vercel env add CRON_SECRET production           # SAME value as CRON_SECRET_TOKEN — see step 8
+vercel env add DIGEST_CRON_TRACKING production  # optional, defaults to "true" — see step 8
 ```
+
+`POSTGRES_URL` (step 3a below) and `DIGEST_CHAT_ID`/`DIGEST_COIN_SYMBOLS`
+(legacy, one-off migration only — see step 3a) are set separately.
+
+## 3a. Attach Vercel Postgres and run migrations
+
+Digest subscribers (`/dangky`, `/huy`, `/watchlist`) are stored in Postgres
+— see `docs/ROADMAP.md` Initiative 1 and `src/subscribers`.
+
+1. Dashboard → Project → Storage → **Create Database** → Postgres (this
+   provisions via the Neon integration; Vercel auto-sets `POSTGRES_URL` as a
+   project env var for all environments).
+2. Pull it into your local `.env` for running migrations from your machine:
+   ```bash
+   vercel env pull .env
+   ```
+3. Create the `subscribers` table:
+   ```bash
+   npm run db:migrate
+   ```
+4. **One-time only**, if you're upgrading from the pre-multi-tenant
+   single-recipient digest: seed the existing `DIGEST_CHAT_ID`/
+   `DIGEST_COIN_SYMBOLS` values (still in your `.env` from before) as the
+   first subscriber row, so that recipient doesn't lose their digest:
+   ```bash
+   npm run db:seed-digest-subscriber
+   ```
 
 `vercel env add <name> production` prompts you to paste the value.
 
@@ -101,19 +128,39 @@ deployment → "Promote to Production".
 
 ## 8. Enable the daily digest cron
 
-The 9am BTC/ETH/YGG digest is triggered by a GitHub Actions workflow
-(`.github/workflows/daily-digest.yml`), not by Vercel itself — see
-`docs/ARCHITECTURE.md` ("Daily digest") for why. It needs two repo secrets
-(GitHub repo → Settings → Secrets and variables → Actions):
+The 9am BTC/ETH/YGG digest is triggered by **Vercel Cron** (`vercel.json` →
+`crons`, `0 2 * * *` = 02:00 UTC = 09:00 ICT) — see `docs/ARCHITECTURE.md`
+("Daily digest") for the full flow and why this replaced an earlier GitHub
+Actions workflow (it was firing hours late).
+
+Vercel Cron sends a `GET` request with no custom headers, but auto-attaches
+`Authorization: Bearer <value>` when a project env var literally named
+`CRON_SECRET` is set. Set it to the **same value** as `CRON_SECRET_TOKEN`
+(step 3) so `CronSecretGuard` accepts it:
 
 ```bash
-gh secret set APP_URL --body "https://zalo-crypto-bot.vercel.app"
-gh secret set CRON_SECRET_TOKEN --body "<same value you set on Vercel in step 3>"
+vercel env add CRON_SECRET production   # paste the same value as CRON_SECRET_TOKEN
 ```
 
-Verify it end-to-end without waiting for 9am by running the workflow
-manually (GitHub → Actions → "Daily crypto digest" → "Run workflow"), then
-confirm the digest message arrives in the configured `DIGEST_CHAT_ID` chat.
+Crons only run on deployed (production) instances, not preview/local — after
+your next `vercel --prod` deploy, verify without waiting for 9am by calling
+the endpoint manually with the legacy header (still supported for testing):
+
+```bash
+curl -X POST "https://zalo-crypto-bot.vercel.app/cron/daily-digest" \
+  -H "X-Cron-Secret-Token: <CRON_SECRET_TOKEN value>"
+```
+
+Confirm the digest message arrives for each active subscriber in the
+`subscribers` table (message the bot with `/dangky` first if the table is
+still empty).
+
+While `DIGEST_CRON_TRACKING` is unset/`true` (the default), the message will
+include a trailing `🕐 [cron-tracking] ...` line showing the actual ICT
+arrival time and drift from 09:00 — watch this over the next few days to
+confirm Vercel Cron's timing is acceptable, then set
+`DIGEST_CRON_TRACKING=false` and redeploy to remove it. See
+`.aidlc/runs/2026-09-17-cron-digest-drift/` for the tracking plan.
 
 ## 9. Ongoing deploys
 

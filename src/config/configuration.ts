@@ -39,10 +39,18 @@ export default () => ({
   },
 
   digest: {
-    chatId: process.env.DIGEST_CHAT_ID,
-    coinSymbols: (process.env.DIGEST_COIN_SYMBOLS ?? 'btc,eth,ygg')
-      .split(',')
-      .map((symbol) => symbol.trim().toLowerCase())
-      .filter(Boolean),
+    // Temporary: appends a "fired at HH:mm ICT, drift ±Xm" line to the digest
+    // message so cron timing can be eyeballed in the chat itself for a few
+    // days after the GitHub Actions -> Vercel Cron switch (see
+    // .aidlc/runs/2026-09-17-cron-digest-drift). Set to "false" once the
+    // drift has been confirmed acceptable.
+    cronTrackingEnabled: process.env.DIGEST_CRON_TRACKING !== 'false',
+  },
+
+  db: {
+    // Vercel Postgres (Neon integration) connection string — auto-populated
+    // by Vercel when the integration is attached; set manually for local
+    // dev. See docs/DEPLOYMENT.md.
+    connectionString: process.env.POSTGRES_URL,
   },
 });

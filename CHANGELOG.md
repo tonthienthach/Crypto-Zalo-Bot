@@ -8,7 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Nothing yet.
+- Multi-tenant digest subscriptions (Initiative 1, see `docs/ROADMAP.md`):
+  new `/dangky [symbols...]`, `/huy`, and `/watchlist [symbols...]` commands,
+  backed by a new `subscribers` table in Vercel Postgres (`src/subscribers`).
+  `DigestController` now sends the daily digest to every active subscriber
+  with their own watchlist instead of a single hardcoded `DIGEST_CHAT_ID`.
+  Migration tooling: `npm run db:migrate` and
+  `npm run db:seed-digest-subscriber` (see `docs/DEPLOYMENT.md` step 3a).
+
+### Changed
+- Daily digest cron switched from a GitHub Actions `schedule` workflow to
+  **Vercel Cron** (`vercel.json` "crons"), after the GH Actions trigger was
+  observed firing ~4h late. `/cron/daily-digest` now accepts any HTTP method
+  (`@All`) and `CronSecretGuard` also accepts Vercel's auto-injected
+  `Authorization: Bearer <CRON_SECRET>` header, alongside the existing
+  `X-Cron-Secret-Token` header used for manual testing.
+
+### Added
+- Temporary cron drift tracking: `DigestController` logs actual-vs-expected
+  (09:00 ICT) invocation time on every run, and — while
+  `DIGEST_CRON_TRACKING=true` (default) — appends a visible drift line to
+  the digest message itself so timing can be monitored in-chat for a few
+  days. See `.aidlc/runs/2026-09-17-cron-digest-drift/`.
+
+### Removed
+- `.github/workflows/daily-digest.yml` (replaced by Vercel Cron).
 
 ## [0.1.0] - 2026-09-04
 
