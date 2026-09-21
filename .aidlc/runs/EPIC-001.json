@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 2,
+  "runId": "EPIC-001",
+  "pipelineId": "ai-native-full",
+  "context": {
+    "epic": "EPIC-001"
+  },
+  "startedAt": "2026-09-21T16:00:54.244Z",
+  "updatedAt": "2026-09-21T16:16:15.523Z",
+  "currentStepIdx": 6,
+  "status": "running",
+  "steps": [
+    {
+      "stepIdx": 0,
+      "agent": "aidlc-native-originator",
+      "name": "intent",
+      "revision": 1,
+      "status": "approved",
+      "startedAt": "2026-09-21T16:00:54.244Z",
+      "artifactsProduced": [],
+      "finishedAt": "2026-09-21T16:07:37.849Z",
+      "feedback": "Manually marked done via aidlc step done."
+    },
+    {
+      "stepIdx": 1,
+      "agent": "aidlc-native-product-owner",
+      "name": "spec",
+      "revision": 1,
+      "status": "approved",
+      "artifactsProduced": [],
+      "finishedAt": "2026-09-21T16:09:51.393Z",
+      "feedback": "Manually marked done via aidlc step done."
+    },
+    {
+      "stepIdx": 2,
+      "agent": "aidlc-native-engineer",
+      "name": "build-plan",
+      "revision": 1,
+      "status": "approved",
+      "artifactsProduced": [],
+      "finishedAt": "2026-09-21T16:10:54.561Z",
+      "feedback": "Manually marked done via aidlc step done."
+    },
+    {
+      "stepIdx": 3,
+      "agent": "aidlc-native-engineer",
+      "name": "implement",
+      "revision": 1,
+      "status": "approved",
+      "artifactsProduced": [],
+      "finishedAt": "2026-09-21T16:13:06.868Z",
+      "feedback": "Manually marked done via aidlc step done."
+    },
+    {
+      "stepIdx": 4,
+      "agent": "aidlc-native-verifier",
+      "name": "verify",
+      "revision": 1,
+      "status": "approved",
+      "artifactsProduced": [],
+      "finishedAt": "2026-09-21T16:14:26.083Z",
+      "feedback": "Manually marked done via aidlc step done."
+    },
+    {
+      "stepIdx": 5,
+      "agent": "aidlc-native-reviewer",
+      "name": "review",
+      "revision": 1,
+      "status": "approved",
+      "artifactsProduced": [],
+      "finishedAt": "2026-09-21T16:16:15.521Z",
+      "feedback": "Manually marked done via aidlc step done."
+    },
+    {
+      "stepIdx": 6,
+      "agent": "aidlc-native-operator",
+      "name": "maintain",
+      "revision": 1,
+      "status": "pending",
+      "artifactsProduced": []
+    }
+  ]
+}

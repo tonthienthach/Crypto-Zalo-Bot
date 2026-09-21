@@ -8,14 +8,22 @@ import {
 import { CommandParserService } from '../command-parser/command-parser.service';
 import { CommandType } from '../command-parser/interfaces/parsed-command.interface';
 import { WebhookSecretGuard } from '../common/guards/webhook-secret.guard';
+import { InvalidWatchlistError, SubscribersService } from '../subscribers/subscribers.service';
+import { DEFAULT_WATCHLIST } from '../subscribers/subscribers.constants';
 import {
   formatGenericErrorReply,
   formatHelpReply,
+  formatInvalidWatchlistReply,
   formatPriceReply,
   formatServiceUnavailableReply,
+  formatSubscribeReply,
   formatTopMarketsReply,
   formatUnknownCommandReply,
   formatUnknownSymbolsReply,
+  formatUnsubscribeReply,
+  formatWatchlistNotSubscribedReply,
+  formatWatchlistUpdatedReply,
+  formatWatchlistViewReply,
 } from '../utils/format-message.util';
 import { ZaloService } from '../zalo/zalo.service';
 import { ZaloWebhookDto } from './dto/zalo-webhook.dto';
@@ -30,6 +38,7 @@ export class WebhookController {
     private readonly coingeckoService: CoingeckoService,
     private readonly zaloService: ZaloService,
     private readonly configService: ConfigService,
+    private readonly subscribersService: SubscribersService,
   ) {
     this.usdToVndRate = this.configService.get<number>('currency.usdToVndRate')!;
   }
@@ -82,6 +91,38 @@ export class WebhookController {
           );
           return;
         }
+        case CommandType.SUBSCRIBE: {
+          const watchlist = command.symbols.length > 0 ? command.symbols : DEFAULT_WATCHLIST;
+          const subscriber = await this.subscribersService.subscribe(chatId, watchlist);
+          await this.zaloService.sendTextMessage(
+            chatId,
+            formatSubscribeReply(subscriber.watchlist),
+          );
+          return;
+        }
+        case CommandType.UNSUBSCRIBE: {
+          await this.subscribersService.unsubscribe(chatId);
+          await this.zaloService.sendTextMessage(chatId, formatUnsubscribeReply());
+          return;
+        }
+        case CommandType.WATCHLIST: {
+          if (command.symbols.length === 0) {
+            const subscriber = await this.subscribersService.findActiveByChatId(chatId);
+            await this.zaloService.sendTextMessage(
+              chatId,
+              formatWatchlistViewReply(subscriber?.watchlist ?? null),
+            );
+            return;
+          }
+          const updated = await this.subscribersService.updateWatchlist(chatId, command.symbols);
+          await this.zaloService.sendTextMessage(
+            chatId,
+            updated
+              ? formatWatchlistUpdatedReply(updated.watchlist)
+              : formatWatchlistNotSubscribedReply(),
+          );
+          return;
+        }
         case CommandType.UNKNOWN:
         default: {
           await this.zaloService.sendTextMessage(chatId, formatUnknownCommandReply());
@@ -100,6 +141,10 @@ export class WebhookController {
     }
     if (error instanceof CoingeckoUnavailableError) {
       await this.zaloService.sendTextMessage(chatId, formatServiceUnavailableReply());
+      return;
+    }
+    if (error instanceof InvalidWatchlistError) {
+      await this.zaloService.sendTextMessage(chatId, formatInvalidWatchlistReply(error.message));
       return;
     }
 

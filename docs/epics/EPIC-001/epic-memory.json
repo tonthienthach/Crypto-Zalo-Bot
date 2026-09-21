@@ -1,0 +1,62 @@
+{
+  "epic": "EPIC-001",
+  "summary": "Multi-tenant digest subscriptions: subscriber list backed by Vercel Postgres, replacing the single hardcoded DIGEST_CHAT_ID/DIGEST_COIN_SYMBOLS. Code (feat b3d5ddb + e2e fix fc70c49) already shipped to master before this epic's paper trail was written retroactively. verify.md: fail (5/10 AC untested, all due to no scratch DB + missing SubscribersService/DigestController unit tests, not real defects). review.md: hold-retroactively/ship-at-HEAD (1 blocker already fixed one commit later, 2 should-fix: no feature-branch/PR used, chat_id has no max length before being persisted). Not yet deployed — docs/DEPLOYMENT.md step 3a (attach Postgres, run migration, seed legacy recipient) still outstanding. Maintain phase not run: no production signal exists yet.",
+  "entries": [
+    {
+      "at": "2026-09-21T16:16:37.872Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Chose @neondatabase/serverless over @vercel/postgres (deprecated) for the Postgres/Neon connection."
+    },
+    {
+      "at": "2026-09-21T16:16:37.991Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Neon HTTP driver (neon()), not a pooled client — matches serverless/no-long-lived-connection architecture."
+    },
+    {
+      "at": "2026-09-21T16:16:38.104Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "Success metric (intent.md): >=1 subscriber other than the original DIGEST_CHAT_ID recipient active within 30 days of production deploy."
+    },
+    {
+      "at": "2026-09-21T16:16:38.269Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "Follow-up work needed before this epic is fully clean: subscribers.service.spec.ts (AC09), digest.controller.spec.ts (AC07), e2e case for DEFAULT_WATCHLIST fallback (AC02), chat_id @MaxLength on ZaloWebhookChatDto (review finding #3)."
+    },
+    {
+      "at": "2026-09-21T16:16:38.400Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "context",
+      "text": "This epic's artifacts were written retroactively after the code already shipped (see intent.md provenance note) -- verify.md/review.md independence is caveated as a result."
+    },
+    {
+      "at": "2026-09-21T16:23:55.547Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Closed 3 of verify.md's 5 untested ACs (AC02 default-watchlist e2e, AC07 digest isolation, AC09 watchlist validation) via subscribers.service.spec.ts + digest.controller.spec.ts + 1 new e2e case, commit 41e4e93. Unit suite now 63 tests (was 46), e2e now 11 (was 10)."
+    },
+    {
+      "at": "2026-09-21T16:23:55.703Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "AC04 (upsert reactivation) and AC08 (seed-script idempotency) still untested -- both require a real Postgres instance, not available in this environment. AC04's query shape is proven via a mocked Neon driver. Real proof for both is naturally covered by the first production deploy (docs/DEPLOYMENT.md step 3a)."
+    },
+    {
+      "at": "2026-09-21T16:53:10.392Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Closed AC04/AC08 (the last 2 untested ACs) with real Postgres execution: spun up a scratch postgres:16-alpine Docker container, applied the real migration via psql, ran subscribe()'s and db-seed-digest-subscriber.js's exact ON CONFLICT upsert SQL twice each, confirmed no duplicates, then removed the container. verify.md is now PASS 10/10."
+    }
+  ],
+  "reflections": [
+    {
+      "at": "2026-09-21T16:16:38.520Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "text": "Retrofitting an ai-native epic onto already-shipped code is valuable: writing spec.md surfaced a real broken-CI bug (POSTGRES_URL missing from e2e env setup) that had gone unnoticed because npm test and npm run test:e2e are separate commands and only the former was run after the original implementation. Next time: run the FULL command suite (unit + e2e + build) before considering any feature done, not just unit tests."
+    }
+  ],
+  "updatedAt": "2026-09-21T16:53:10.437Z"
+}

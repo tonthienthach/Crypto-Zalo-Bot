@@ -3,6 +3,9 @@ import { CommandType, ParsedCommand } from './interfaces/parsed-command.interfac
 
 const PRICE_COMMAND_ALIASES = new Set(['gia', 'gía', 'giá', 'price']);
 const HELP_COMMAND_ALIASES = new Set(['help', 'start', 'trogiup', 'trợgiúp']);
+const SUBSCRIBE_COMMAND_ALIASES = new Set(['dangky', 'subscribe']);
+const UNSUBSCRIBE_COMMAND_ALIASES = new Set(['huy', 'huydangky', 'unsubscribe']);
+const WATCHLIST_COMMAND_ALIASES = new Set(['watchlist', 'danhsach', 'ds']);
 
 @Injectable()
 export class CommandParserService {
@@ -34,6 +37,18 @@ export class CommandParserService {
       return { type: CommandType.HELP, symbols: [] };
     }
 
+    if (UNSUBSCRIBE_COMMAND_ALIASES.has(command)) {
+      return { type: CommandType.UNSUBSCRIBE, symbols: [] };
+    }
+
+    if (SUBSCRIBE_COMMAND_ALIASES.has(command)) {
+      return { type: CommandType.SUBSCRIBE, symbols: this.parseSymbols(rawSymbols) };
+    }
+
+    if (WATCHLIST_COMMAND_ALIASES.has(command)) {
+      return { type: CommandType.WATCHLIST, symbols: this.parseSymbols(rawSymbols) };
+    }
+
     if (!PRICE_COMMAND_ALIASES.has(rawCommand.toLowerCase()) && command !== 'gia') {
       return { type: CommandType.UNKNOWN, symbols: [] };
     }
@@ -42,11 +57,16 @@ export class CommandParserService {
       return { type: CommandType.TOP_MARKETS, symbols: [] };
     }
 
-    const symbols = Array.from(
-      new Set(rawSymbols.map((symbol) => this.stripDiacritics(symbol.toLowerCase()))),
-    );
+    return { type: CommandType.PRICE, symbols: this.parseSymbols(rawSymbols) };
+  }
 
-    return { type: CommandType.PRICE, symbols };
+  /** Normalizes symbol tokens: lowercase, diacritics stripped, deduped, comma- or space-separated. */
+  private parseSymbols(rawSymbols: string[]): string[] {
+    const tokens = rawSymbols
+      .flatMap((token) => token.split(','))
+      .map((token) => token.trim())
+      .filter(Boolean);
+    return Array.from(new Set(tokens.map((symbol) => this.stripDiacritics(symbol.toLowerCase()))));
   }
 
   /** Removes Vietnamese diacritics so "/giá" and "/gia" resolve to the same command. */

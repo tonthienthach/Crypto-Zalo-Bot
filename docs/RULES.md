@@ -68,17 +68,30 @@ docs(deployment): add Vercel rollback steps
 test(coingecko): cover cache-read failure path
 ```
 
-## Branching (simplified git flow)
+## Branching
 
-- `main` — always deployable; every commit here is (or was) in production.
-- `dev` — integration branch; features land here first.
-- `feature/<short-description>` — branched from `dev`, merged back into
-  `dev` via PR once CI passes and the required tests are added.
-- Hotfixes to production: `hotfix/<short-description>` branched from
-  `main`, merged into both `main` and `dev`.
+**Enforced from 2026-09-21** (see `docs/epics/EPIC-001/artifacts/review.md`
+finding #2 — prior to this date, every commit went directly to `master`
+despite this section; that history is not rewritten, but new work follows
+this from here on):
+
+- `master` — the only long-lived branch, and the trunk: always deployable,
+  every commit here is (or was) in production. No separate `dev`/`main`
+  split — at this project's scale (single maintainer/small team), one
+  trunk is simpler and there is no integration-branch use case a direct
+  `feature/* -> master` PR doesn't already cover.
+- `feature/<short-description>` — branched from `master`, merged back into
+  `master` via PR once CI passes and the required tests are added.
+- `hotfix/<short-description>` — same rule, branched from and merged back
+  into `master`; the separate name is only a signal to reviewers that it's
+  urgent, not a different merge target.
 
 PRs require: CI green (lint + unit + e2e + build), at least the tests
-described above for any new behavior.
+described above for any new behavior. Direct pushes to `master` are not
+used going forward, including for docs-only or process/tooling changes —
+the AIDLC epic pipeline (`docs/epics/<EPIC-ID>/artifacts/implement.md`)
+already tracks this per-epic; a PR just makes it enforceable, not just
+documented.
 
 ## Code style
 

@@ -29,6 +29,17 @@ export const envValidationSchema = Joi.object({
   // Daily digest cron hook (see src/digest) — same length constraint as
   // WEBHOOK_SECRET_TOKEN, for the same reason (long random string).
   CRON_SECRET_TOKEN: Joi.string().min(8).max(256).required(),
-  DIGEST_CHAT_ID: Joi.string().required(),
-  DIGEST_COIN_SYMBOLS: Joi.string().default('btc,eth,ygg'),
+  DIGEST_CRON_TRACKING: Joi.string().valid('true', 'false').default('true'),
+  // Legacy single-tenant digest recipient — no longer read at runtime
+  // (DigestController now reads subscribers from the DB, see
+  // src/subscribers). Kept optional so scripts/db-seed-digest-subscriber.js
+  // can still migrate the old recipient into the `subscribers` table.
+  DIGEST_CHAT_ID: Joi.string().optional(),
+  DIGEST_COIN_SYMBOLS: Joi.string().optional(),
+
+  // Vercel Postgres (Neon integration) connection string — see
+  // docs/ROADMAP.md Initiative 1 and docs/DEPLOYMENT.md.
+  POSTGRES_URL: Joi.string()
+    .uri({ scheme: ['postgres', 'postgresql'] })
+    .required(),
 });

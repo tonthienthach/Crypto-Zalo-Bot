@@ -1,0 +1,100 @@
+{
+  "id": "EPIC-001",
+  "title": "Multi-tenant digest subscriptions",
+  "description": "Initiative 1 (docs/ROADMAP.md): replace the single hardcoded DIGEST_CHAT_ID/DIGEST_COIN_SYMBOLS recipient with a Postgres-backed subscriber list (/dangky, /huy, /watchlist), so any chat can manage its own daily digest subscription and watchlist.",
+  "pipeline": "ai-native-full",
+  "agent": null,
+  "agents": [
+    "aidlc-native-originator",
+    "aidlc-native-product-owner",
+    "aidlc-native-engineer",
+    "aidlc-native-engineer",
+    "aidlc-native-verifier",
+    "aidlc-native-reviewer",
+    "aidlc-native-operator"
+  ],
+  "currentStep": 0,
+  "status": "in_progress",
+  "strict_mode": true,
+  "createdAt": "2026-09-21T16:00:54.223Z",
+  "stepStates": [
+    {
+      "agent": "aidlc-native-originator",
+      "name": "intent",
+      "status": "in_progress",
+      "revision": 1,
+      "runStatus": "awaiting_work",
+      "startedAt": "2026-09-21T16:00:54.244Z",
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-product-owner",
+      "name": "spec",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-engineer",
+      "name": "build-plan",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-engineer",
+      "name": "implement",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-verifier",
+      "name": "verify",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-reviewer",
+      "name": "review",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-operator",
+      "name": "maintain",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    }
+  ],
+  "updatedAt": "2026-09-21T16:00:54.244Z"
+}

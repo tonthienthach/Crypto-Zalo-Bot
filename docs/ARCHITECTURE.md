@@ -43,10 +43,11 @@ the reply is never carried in the webhook's own response body.
 | --- | --- |
 | `config/` | `ConfigModule` setup: Joi schema (`env.validation.ts`) validated once at boot, typed config object (`configuration.ts`). Fails fast — the process refuses to start if a required env var is missing or malformed. |
 | `coingecko/` | Talks to the CoinGecko public REST API (`/simple/price`, `/coins/markets`), maps ticker symbols to CoinGecko coin ids, normalizes responses into `CoinMarketData`, and applies a best-effort cache. |
-| `command-parser/` | Pure text-parsing service: turns a raw chat message into a `ParsedCommand` (`PRICE`, `TOP_MARKETS`, `HELP`, `UNKNOWN`). No I/O, fully unit-testable, handles accented/unaccented Vietnamese. |
+| `command-parser/` | Pure text-parsing service: turns a raw chat message into a `ParsedCommand` (`PRICE`, `TOP_MARKETS`, `HELP`, `SUBSCRIBE`, `UNSUBSCRIBE`, `WATCHLIST`, `UNKNOWN`). No I/O, fully unit-testable, handles accented/unaccented Vietnamese. |
+| `subscribers/` | `SubscribersService` — CRUD over the `subscribers` table (Vercel Postgres / Neon) backing `/dangky`, `/huy`, `/watchlist`, and the daily digest recipient list. The only stateful/persistent module in the app; see "Persistence" below. |
 | `zalo/` | Talks to the Zalo Bot "send message" API. Never throws — a failed send is logged and swallowed so an outbound Zalo outage can't turn into an unhandled webhook exception. |
-| `webhook/` | `WebhookController` — the only place that wires parsing + CoinGecko + Zalo together. Guarded by `WebhookSecretGuard`, DTO-validated by `ZaloWebhookDto`. Always acknowledges 200 to Zalo. |
-| `digest/` | `DigestController` — `POST /cron/daily-digest`, a machine-triggered (not user-triggered) endpoint that fetches the configured watchlist (`DIGEST_COIN_SYMBOLS`, default `btc,eth,ygg`) and pushes it to `DIGEST_CHAT_ID`. Guarded by `CronSecretGuard`. Has no scheduler of its own — see "Daily digest" below for what calls it. |
+| `webhook/` | `WebhookController` — the only place that wires parsing + CoinGecko + Zalo + Subscribers together. Guarded by `WebhookSecretGuard`, DTO-validated by `ZaloWebhookDto`. Always acknowledges 200 to Zalo. |
+| `digest/` | `DigestController` — `POST /cron/daily-digest`, a machine-triggered (not user-triggered) endpoint that loads active subscribers from `SubscribersService` and pushes each their own watchlist. Guarded by `CronSecretGuard`. Has no scheduler of its own — see "Daily digest" below for what calls it. |
 | `health/` | `GET /health` — liveness endpoint for uptime monitoring and Vercel health checks. |
 | `common/filters` | `AllExceptionsFilter` — global catch-all; never leaks a stack trace to the client, and always answers webhook paths with 200 to avoid retry storms. |
 | `common/guards` | `WebhookSecretGuard` (shared-secret auth for `/webhook`), `CronSecretGuard` (shared-secret auth for `/cron/daily-digest`), and `UserThrottlerGuard` (per-chat-id rate limiting, not per-IP — see below). |
@@ -103,8 +104,11 @@ in this setup. Consequently:
 | Long-lived connections / websockets | Not supported | Supported |
 
 This bot is a stateless request/response webhook consumer with bursty,
-low-average traffic — a textbook fit for serverless. The one real cost is
-cold-start latency, mitigated by:
+low-average traffic — a textbook fit for serverless. The application
+processes themselves hold no state between invocations; the one piece of
+durable state (subscriber list + watchlists, see "Persistence" below) lives
+in Vercel Postgres, not in the function instance. The one real cost of the
+serverless model is cold-start latency, mitigated by:
 
 1. `api/index.ts` caches the built Nest application (`cachedAppPromise`) at
    module scope, so the Nest DI container is only constructed once per warm
@@ -132,26 +136,47 @@ an in-process cron (`@nestjs/schedule`) — a Vercel Function only exists for
 the duration of a request. So the scheduling itself lives *outside* the app:
 
 ```
-GitHub Actions (cron: 0 2 * * * UTC = 9:00 ICT)
+Vercel Cron (vercel.json "crons": 0 2 * * * UTC = 9:00 ICT)
    |
-   |  POST /cron/daily-digest
-   |  X-Cron-Secret-Token: <CRON_SECRET_TOKEN>
+   |  GET /cron/daily-digest
+   |  Authorization: Bearer <CRON_SECRET>  (auto-injected by Vercel)
    v
-DigestController  -->  CoingeckoService.getPricesBySymbols(['btc','eth','ygg'])
+DigestController  -->  SubscribersService.listActive()  -- for each subscriber:
+                   -->  CoingeckoService.getPricesBySymbols(subscriber.watchlist)
                    -->  formatDailyDigestReply(...)
-                   -->  ZaloService.sendTextMessage(DIGEST_CHAT_ID, text)
+                   -->  ZaloService.sendTextMessage(subscriber.chatId, text)
 ```
 
-- **Why GitHub Actions instead of Vercel Cron**: Vercel's Hobby-plan cron
-  jobs only guarantee daily granularity with looser timing precision; a
-  GitHub Actions `schedule` trigger is free and lands close to the requested
-  minute, which matters for a "9am sharp" digest. `workflow_dispatch` is also
-  wired in so the digest can be triggered manually for testing.
-- **Single recipient, no subscriber store**: `DIGEST_CHAT_ID` is a single
-  env var, not a database-backed subscriber list — this bot serves one
-  person's personal watchlist. If/when multiple recipients are needed, that's
-  the point to introduce persistence (see "Why is the cache best-effort"
-  above for the same serverless-statelessness constraint that would apply).
+- **Why Vercel Cron (switched from GitHub Actions on 2026-09-17)**: GitHub
+  Actions' `schedule` trigger runs on shared infrastructure with no timing
+  guarantee — it was observed firing ~4h late (13:00 ICT instead of 9:00),
+  a known GitHub Actions limitation under load. Vercel Cron is triggered by
+  the platform hosting the function itself. **Caveat**: on Vercel's Hobby
+  plan, cron jobs are documented as possibly landing within an hour of the
+  scheduled time — tighter than the GH Actions incident, but not minute-exact.
+  `DigestController.sendDailyDigest` logs the actual-vs-expected drift on
+  every run (see "Cron drift tracking" below) so this can be measured
+  instead of assumed. `/cron/daily-digest` also still accepts POST with the
+  `X-Cron-Secret-Token` header for manual testing (`curl`) — see
+  docs/DEPLOYMENT.md.
+- **Auth model change**: Vercel Cron only supports GET requests and does not
+  let you set custom headers per cron entry. Instead, when a project env var
+  named exactly `CRON_SECRET` is set, Vercel auto-attaches
+  `Authorization: Bearer <CRON_SECRET>` to its request. `CronSecretGuard`
+  accepts either that header or the original `X-Cron-Secret-Token` header —
+  set both `CRON_SECRET` and `CRON_SECRET_TOKEN` to the same value on Vercel.
+- **Cron drift tracking (temporary)**: `DigestController` logs
+  actual-vs-expected (09:00 ICT) invocation drift on every run, and — while
+  `DIGEST_CRON_TRACKING` is `true` (the default) — appends a
+  `🕐 [cron-tracking] ...` line to the digest message itself, so drift is
+  visible directly in the chat over several days. Turn it off by setting
+  `DIGEST_CRON_TRACKING=false` once Vercel Cron's timing has been confirmed
+  acceptable. See `.aidlc/runs/2026-09-17-cron-digest-drift/` for the
+  investigation this was added for.
+- **Per-subscriber isolation**: `DigestController` sends to each active
+  subscriber sequentially (not `Promise.all`), catching and logging errors
+  per subscriber — one subscriber's unknown-symbol typo or a single failed
+  Zalo send doesn't block or fail the rest of the run.
 - **Auth model differs from `/webhook`**: `/cron/daily-digest` has no Zalo
   signature to verify (nothing came from Zalo), so it uses a separate
   `CronSecretGuard` + `CRON_SECRET_TOKEN` rather than reusing
@@ -161,15 +186,41 @@ DigestController  -->  CoingeckoService.getPricesBySymbols(['btc','eth','ygg'])
   server-side, not surfaced as an HTTP failure, so the scheduler doesn't
   retry-storm a transient outage.
 
+### Persistence (Vercel Postgres)
+
+The only durable state in the app: the `subscribers` table (`chat_id`,
+`watchlist text[]`, `is_active`, `created_at`) backing `/dangky`, `/huy`,
+`/watchlist`, and the daily digest recipient list. See
+`docs/ROADMAP.md` Initiative 1 for why (multi-tenant SaaS foundation) and
+`docs/DEPLOYMENT.md` step 3a for setup.
+
+- **Provider**: Vercel Postgres, which is Vercel's native integration with
+  [Neon](https://neon.tech) — provisioned from the Vercel dashboard, and
+  `POSTGRES_URL` is auto-populated as a project env var across all
+  environments.
+- **Driver**: `@neondatabase/serverless`'s HTTP query function (`neon(...)`
+  in `SubscribersService`), not a pooled client. Each Vercel Function
+  invocation makes at most a handful of queries, so a per-call HTTP request
+  avoids managing a connection pool across cold starts — the usual
+  serverless-vs-long-lived-connection tradeoff from the table above applies
+  to Postgres connections just as much as to in-memory state.
+- **Schema migrations**: plain `.sql` files under `db/migrations/`, applied
+  in filename order by `npm run db:migrate` (`scripts/db-migrate.js`). No
+  migration framework — the schema is small and changes infrequently enough
+  that a hand-run script is simpler than adding a dependency.
+- **Soft delete**: `/huy` sets `is_active = false` rather than deleting the
+  row, so `watchlist` history survives and re-subscribing via `/dangky`
+  restores it.
+
 ### Error handling philosophy
 
 The bot must **never** go silent and **never** leak a stack trace:
 
 1. `WebhookController` wraps command handling in a try/catch. Known,
-   expected failure modes (`UnknownCoinSymbolsError`, `CoingeckoUnavailableError`)
-   get a specific, friendly Vietnamese reply. Anything else falls through to
-   a generic "something went wrong" reply, with the real error logged
-   server-side only.
+   expected failure modes (`UnknownCoinSymbolsError`, `CoingeckoUnavailableError`,
+   `InvalidWatchlistError`) get a specific, friendly Vietnamese reply.
+   Anything else falls through to a generic "something went wrong" reply,
+   with the real error logged server-side only.
 2. `AllExceptionsFilter` is the last line of defense for errors thrown
    *before* the controller body runs (e.g. a guard or pipe failure). It
    never returns a stack trace, and for any `/webhook*` path it still

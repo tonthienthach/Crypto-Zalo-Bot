@@ -48,9 +48,34 @@ export function formatPriceReply(coins: CoinMarketData[], usdToVndRate: number):
 }
 
 /** Daily scheduled digest for a fixed watchlist (e.g. the 9am BTC/ETH/YGG push). */
-export function formatDailyDigestReply(coins: CoinMarketData[], usdToVndRate: number): string {
+export function formatDailyDigestReply(
+  coins: CoinMarketData[],
+  usdToVndRate: number,
+  cronTrackingLine?: string,
+): string {
   const lines = coins.map((coin) => formatCoinLine(coin, usdToVndRate));
-  return ['🌅 Bản tin giá sáng nay:', ...lines].join('\n');
+  const body = ['🌅 Bản tin giá sáng nay:', ...lines];
+  if (cronTrackingLine) body.push('', cronTrackingLine);
+  return body.join('\n');
+}
+
+const EXPECTED_DIGEST_HOUR_ICT = 9;
+const ICT_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+/**
+ * Temporary cron-timing footer (see DIGEST_CRON_TRACKING in
+ * src/config/configuration.ts) — computes how far the actual invocation
+ * landed from the expected 09:00 ICT slot, so drift is visible in the chat
+ * itself across days without needing a database.
+ */
+export function formatCronTrackingLine(invokedAt: Date): string {
+  const ict = new Date(invokedAt.getTime() + ICT_OFFSET_MS);
+  const hours = ict.getUTCHours();
+  const minutes = ict.getUTCMinutes();
+  const label = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  const driftMinutes = (hours - EXPECTED_DIGEST_HOUR_ICT) * 60 + minutes;
+  const sign = driftMinutes >= 0 ? '+' : '';
+  return `🕐 [cron-tracking] nhận lúc ${label} (ICT) — lệch ${sign}${driftMinutes} phút so với 09:00`;
 }
 
 /** Full reply for "/gia" with no symbols — top-N coins by market cap. */
@@ -68,9 +93,58 @@ export function formatHelpReply(): string {
     '• /gia btc eth sol — xem giá nhiều đồng cùng lúc',
     '• /gia (không kèm mã) — top 5 coin theo vốn hóa',
     '• /price btc — tương đương /gia btc (tiếng Anh)',
+    '• /dangky btc eth — đăng ký nhận bản tin giá 9h sáng mỗi ngày',
+    '• /watchlist — xem hoặc /watchlist btc sol để đổi danh sách theo dõi',
+    '• /huy — hủy đăng ký bản tin hàng ngày',
     '',
     'Lệnh có dấu hoặc không dấu đều được hỗ trợ (vd: /giá btc = /gia btc).',
   ].join('\n');
+}
+
+/** Reply for "/dangky [symbols...]" — confirms the digest subscription and its watchlist. */
+export function formatSubscribeReply(watchlist: string[]): string {
+  return [
+    `✅ Đã đăng ký nhận bản tin giá hàng ngày lúc 9h sáng (ICT).`,
+    `Danh sách theo dõi: ${watchlist.join(', ').toUpperCase()}`,
+    'Dùng /watchlist để xem hoặc đổi danh sách, /huy để hủy đăng ký.',
+  ].join('\n');
+}
+
+/** Reply for "/huy". */
+export function formatUnsubscribeReply(): string {
+  return '👋 Đã hủy đăng ký bản tin giá hàng ngày. Gõ /dangky bất cứ lúc nào để đăng ký lại.';
+}
+
+/** Reply for "/watchlist" with no symbols — shows the current watchlist. */
+export function formatWatchlistViewReply(watchlist: string[] | null): string {
+  if (!watchlist || watchlist.length === 0) {
+    return [
+      '📭 Bạn chưa đăng ký bản tin giá hàng ngày.',
+      'Gõ /dangky btc eth để đăng ký với danh sách theo dõi.',
+    ].join('\n');
+  }
+  return [
+    `📋 Danh sách theo dõi hiện tại: ${watchlist.join(', ').toUpperCase()}`,
+    'Dùng /watchlist btc eth sol để đổi danh sách.',
+  ].join('\n');
+}
+
+/** Reply for "/watchlist <symbols...>" — confirms the watchlist was updated. */
+export function formatWatchlistUpdatedReply(watchlist: string[]): string {
+  return `✅ Đã cập nhật danh sách theo dõi: ${watchlist.join(', ').toUpperCase()}`;
+}
+
+/** Reply when "/watchlist <symbols...>" is used by a chat that isn't subscribed yet. */
+export function formatWatchlistNotSubscribedReply(): string {
+  return [
+    '📭 Bạn chưa đăng ký bản tin giá hàng ngày.',
+    'Gõ /dangky btc eth để đăng ký trước, sau đó dùng /watchlist để đổi danh sách.',
+  ].join('\n');
+}
+
+/** Reply when a subscribe/watchlist symbol list is empty or exceeds the cap. */
+export function formatInvalidWatchlistReply(message: string): string {
+  return `⚠️ ${message}`;
 }
 
 export function formatUnknownCommandReply(): string {

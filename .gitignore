@@ -4,8 +4,11 @@
 /build
 /.vercel
 
-# aidlc
-/.aidlc
+# aidlc — shared team process config (workspace.yaml, skills/, templates/,
+# runs/) is tracked so every dev/agent gets the same pipeline; see
+# docs/ROADMAP.md and docs/epics/. Only genuinely local artifact scratch
+# state (docs/epics/*/state.json aside — that one IS tracked) would go here
+# if it ever needs excluding again.
 
 # logs
 logs

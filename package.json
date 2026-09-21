@@ -23,9 +23,12 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "vercel-build": "nest build",
     "webhook:register": "node scripts/register-webhook.js",
+    "db:migrate": "node scripts/db-migrate.js",
+    "db:seed-digest-subscriber": "node scripts/db-seed-digest-subscriber.js",
     "prepare": "husky install"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@nestjs/axios": "^3.0.2",
     "@nestjs/cache-manager": "^2.2.2",
     "@nestjs/common": "^10.3.9",
