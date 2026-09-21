@@ -171,6 +171,26 @@ describe('WebhookController (e2e)', () => {
     expect(sendTextMessage).toHaveBeenCalledWith('chat-4', expect.stringContaining('BTC'));
   });
 
+  it('subscribes with the default watchlist for "/dangky" with no symbols', async () => {
+    subscribe.mockResolvedValue({
+      chatId: 'chat-4b',
+      watchlist: ['btc', 'eth'],
+      isActive: true,
+      createdAt: new Date(),
+    });
+
+    await request(app.getHttpServer())
+      .post('/webhook')
+      .set('x-bot-api-secret-token', SECRET)
+      .send({
+        event_name: 'message.text.received',
+        message: { text: '/dangky', chat: { id: 'chat-4b', chat_type: 'PRIVATE' } },
+      })
+      .expect(200);
+
+    expect(subscribe).toHaveBeenCalledWith('chat-4b', ['btc', 'eth']);
+  });
+
   it('unsubscribes and confirms for "/huy"', async () => {
     await request(app.getHttpServer())
       .post('/webhook')
