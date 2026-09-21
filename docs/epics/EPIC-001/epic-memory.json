@@ -43,6 +43,12 @@
       "author": "Thach <vnsnake123@gmail.com>",
       "kind": "constraint",
       "text": "AC04 (upsert reactivation) and AC08 (seed-script idempotency) still untested -- both require a real Postgres instance, not available in this environment. AC04's query shape is proven via a mocked Neon driver. Real proof for both is naturally covered by the first production deploy (docs/DEPLOYMENT.md step 3a)."
+    },
+    {
+      "at": "2026-09-21T16:53:10.392Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Closed AC04/AC08 (the last 2 untested ACs) with real Postgres execution: spun up a scratch postgres:16-alpine Docker container, applied the real migration via psql, ran subscribe()'s and db-seed-digest-subscriber.js's exact ON CONFLICT upsert SQL twice each, confirmed no duplicates, then removed the container. verify.md is now PASS 10/10."
     }
   ],
   "reflections": [
@@ -52,5 +58,5 @@
       "text": "Retrofitting an ai-native epic onto already-shipped code is valuable: writing spec.md surfaced a real broken-CI bug (POSTGRES_URL missing from e2e env setup) that had gone unnoticed because npm test and npm run test:e2e are separate commands and only the former was run after the original implementation. Next time: run the FULL command suite (unit + e2e + build) before considering any feature done, not just unit tests."
     }
   ],
-  "updatedAt": "2026-09-21T16:23:55.747Z"
+  "updatedAt": "2026-09-21T16:53:10.437Z"
 }

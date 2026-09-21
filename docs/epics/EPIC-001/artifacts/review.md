@@ -2,9 +2,11 @@
 
 **Epic ID:** `EPIC-001`
 **Reviewer:** Reviewer (policy)
-**Status:** Draft — **revised 2026-09-21** after commit `41e4e93` closed 3 of
-`verify.md`'s 5 originally-untested acceptance criteria; see updated §3 row
-and §7.
+**Status:** Draft — **revised twice on 2026-09-21**: after commit `41e4e93`
+closed 3 of `verify.md`'s 5 originally-untested acceptance criteria, then
+again after a scratch-Postgres run closed the remaining 2 (`AC04`, `AC08`)
+— `verify.md`'s overall verdict is now **pass** (10/10). See updated §3 row
+and §6/§7 below.
 **Created:** 2026-09-21
 **Reviewed against:** `docs/RULES.md`, `docs/ARCHITECTURE.md`, `.aidlc/skills/risk-security-reviewer.md` (this repo has no `CLAUDE.md`; `docs/RULES.md` is its equivalent)
 
@@ -40,7 +42,7 @@ the recipient-loading mechanism itself).
 | `docs/RULES.md` "Naming conventions" | kebab-case files, `PascalCase` classes/interfaces, `UPPER_SNAKE_CASE` constants/env vars | yes — `subscribers.service.ts`, `SubscribersService`, `Subscriber`, `MAX_WATCHLIST_SIZE`, `POSTGRES_URL` all conform |
 | `docs/RULES.md` "Adding a new module" | `*.module.ts`/`*.service.ts`/`interfaces/`; export only what's needed; narrowest import | yes — `SubscribersModule` exports only `SubscribersService`; imported only into `WebhookModule`/`DigestModule`, not `AppModule` globally |
 | `docs/RULES.md` "Adding a new bot command" | parser → formatter → controller switch → tests, **e2e case required for new external dependency** | **no, at commit `b3d5ddb`** — zero e2e coverage and a broken e2e boot; **yes, at commit `fc70c49`** — fixed in the very next commit in this diff range. See finding #1. |
-| `docs/RULES.md` "Testing requirements" | every new feature ships with tests | **yes, as of `41e4e93`** — was `partial` at initial review (parsing/formatting/webhook-wiring had unit+e2e coverage, but `SubscribersService.normalizeWatchlist` and `DigestController`'s per-subscriber isolation had none); closed by `subscribers.service.spec.ts` + `digest.controller.spec.ts`. Only `AC04`/`AC08` (real-Postgres-only behaviors) remain untested per `verify.md` §2/§7 — cited, not re-litigated here. |
+| `docs/RULES.md` "Testing requirements" | every new feature ships with tests | **yes, fully** — was `partial` at initial review; closed in two revisions (`41e4e93` for unit/e2e coverage, then a scratch-Postgres run for `AC04`/`AC08`'s real-DB behavior). `verify.md` is now `pass` on all 10 criteria — cited, not re-litigated here. |
 | `docs/RULES.md` "Commit messages — Conventional Commits" | `<type>(<scope>): <summary>` | yes — `feat: add multi-tenant digest subscriptions and switch cron to Vercel`, `test(webhook): fix broken e2e suite...` both conform |
 | `docs/RULES.md` "Branching (simplified git flow)" | `feature/*` branch → PR → merge to `dev`/`main` | **no** — both commits landed directly on `master`. See finding #2. |
 | `docs/RULES.md` "Code style" | no unjustified `any`; secrets only via `ConfigService` | yes — `grep -rn '\bany\b'` across the new/changed files under review found zero matches; `POSTGRES_URL` is read only in `configuration.ts` via `process.env`, consumed everywhere else via `ConfigService.get('db.connectionString')` |
@@ -71,7 +73,7 @@ the recipient-loading mechanism itself).
 ## 6. Not re-checked
 
 Per `verify.md` (already covered there, cited not redone):
-- Whether `EPIC-001-AC01`-`AC10` individually pass/fail/untested — see `verify.md` §2. This review does not re-run those checks; it takes the "5 of 10 untested" result as given and reflects it in finding #… only where it intersects with a *policy* rule (`docs/RULES.md` "Testing requirements"), not as a fresh verification finding.
+- Whether `EPIC-001-AC01`-`AC10` individually pass/fail/untested — see `verify.md` §2, now `pass` on all 10 as of the second revision. This review does not re-run those checks itself; it only reflected the interim "5 of 10 untested" state in the `docs/RULES.md` "Testing requirements" checklist row above, which is now updated to match.
 - Regression check (`npm test`, `npm run test:e2e`, `npm run build` all green) — see `verify.md` §4.
 - Out-of-scope leak check (did anything from `spec.md` §7 ship anyway) — see `verify.md` §5, confirmed clean there.
 
