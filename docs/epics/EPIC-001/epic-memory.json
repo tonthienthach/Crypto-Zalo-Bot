@@ -31,6 +31,18 @@
       "author": "Thach <vnsnake123@gmail.com>",
       "kind": "context",
       "text": "This epic's artifacts were written retroactively after the code already shipped (see intent.md provenance note) -- verify.md/review.md independence is caveated as a result."
+    },
+    {
+      "at": "2026-09-21T16:23:55.547Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Closed 3 of verify.md's 5 untested ACs (AC02 default-watchlist e2e, AC07 digest isolation, AC09 watchlist validation) via subscribers.service.spec.ts + digest.controller.spec.ts + 1 new e2e case, commit 41e4e93. Unit suite now 63 tests (was 46), e2e now 11 (was 10)."
+    },
+    {
+      "at": "2026-09-21T16:23:55.703Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "AC04 (upsert reactivation) and AC08 (seed-script idempotency) still untested -- both require a real Postgres instance, not available in this environment. AC04's query shape is proven via a mocked Neon driver. Real proof for both is naturally covered by the first production deploy (docs/DEPLOYMENT.md step 3a)."
     }
   ],
   "reflections": [
@@ -40,5 +52,5 @@
       "text": "Retrofitting an ai-native epic onto already-shipped code is valuable: writing spec.md surfaced a real broken-CI bug (POSTGRES_URL missing from e2e env setup) that had gone unnoticed because npm test and npm run test:e2e are separate commands and only the former was run after the original implementation. Next time: run the FULL command suite (unit + e2e + build) before considering any feature done, not just unit tests."
     }
   ],
-  "updatedAt": "2026-09-21T16:16:38.567Z"
+  "updatedAt": "2026-09-21T16:23:55.747Z"
 }

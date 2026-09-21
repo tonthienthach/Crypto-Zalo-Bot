@@ -2,7 +2,9 @@
 
 **Epic ID:** `EPIC-001`
 **Reviewer:** Reviewer (policy)
-**Status:** Draft
+**Status:** Draft — **revised 2026-09-21** after commit `41e4e93` closed 3 of
+`verify.md`'s 5 originally-untested acceptance criteria; see updated §3 row
+and §7.
 **Created:** 2026-09-21
 **Reviewed against:** `docs/RULES.md`, `docs/ARCHITECTURE.md`, `.aidlc/skills/risk-security-reviewer.md` (this repo has no `CLAUDE.md`; `docs/RULES.md` is its equivalent)
 
@@ -38,7 +40,7 @@ the recipient-loading mechanism itself).
 | `docs/RULES.md` "Naming conventions" | kebab-case files, `PascalCase` classes/interfaces, `UPPER_SNAKE_CASE` constants/env vars | yes — `subscribers.service.ts`, `SubscribersService`, `Subscriber`, `MAX_WATCHLIST_SIZE`, `POSTGRES_URL` all conform |
 | `docs/RULES.md` "Adding a new module" | `*.module.ts`/`*.service.ts`/`interfaces/`; export only what's needed; narrowest import | yes — `SubscribersModule` exports only `SubscribersService`; imported only into `WebhookModule`/`DigestModule`, not `AppModule` globally |
 | `docs/RULES.md` "Adding a new bot command" | parser → formatter → controller switch → tests, **e2e case required for new external dependency** | **no, at commit `b3d5ddb`** — zero e2e coverage and a broken e2e boot; **yes, at commit `fc70c49`** — fixed in the very next commit in this diff range. See finding #1. |
-| `docs/RULES.md` "Testing requirements" | every new feature ships with tests | partial — parsing/formatting/webhook-wiring have unit+e2e coverage; `SubscribersService.normalizeWatchlist` validation and `DigestController`'s per-subscriber isolation have no test of any kind (already flagged in `verify.md` findings #1, ACs 04/07/08/09). Not re-litigated here — cited from `verify.md`, see §6. |
+| `docs/RULES.md` "Testing requirements" | every new feature ships with tests | **yes, as of `41e4e93`** — was `partial` at initial review (parsing/formatting/webhook-wiring had unit+e2e coverage, but `SubscribersService.normalizeWatchlist` and `DigestController`'s per-subscriber isolation had none); closed by `subscribers.service.spec.ts` + `digest.controller.spec.ts`. Only `AC04`/`AC08` (real-Postgres-only behaviors) remain untested per `verify.md` §2/§7 — cited, not re-litigated here. |
 | `docs/RULES.md` "Commit messages — Conventional Commits" | `<type>(<scope>): <summary>` | yes — `feat: add multi-tenant digest subscriptions and switch cron to Vercel`, `test(webhook): fix broken e2e suite...` both conform |
 | `docs/RULES.md` "Branching (simplified git flow)" | `feature/*` branch → PR → merge to `dev`/`main` | **no** — both commits landed directly on `master`. See finding #2. |
 | `docs/RULES.md` "Code style" | no unjustified `any`; secrets only via `ConfigService` | yes — `grep -rn '\bany\b'` across the new/changed files under review found zero matches; `POSTGRES_URL` is read only in `configuration.ts` via `process.env`, consumed everywhere else via `ConfigService.get('db.connectionString')` |
