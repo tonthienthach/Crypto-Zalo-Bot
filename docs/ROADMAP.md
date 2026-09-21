@@ -34,6 +34,18 @@ read path implemented; not yet deployed/migrated (see docs/DEPLOYMENT.md
 step 3a for the remaining manual steps: attach Postgres, run migration,
 seed the legacy recipient).
 
+**Tracked as:** [`EPIC-001`](../docs/epics/EPIC-001/EPIC-001.md) — full
+paper trail (intent, spec, plan, implementation, independent verify, policy
+review) in `docs/epics/EPIC-001/artifacts/`. `verify.md`: fail (5/10
+acceptance criteria untested — no scratch DB + missing unit tests for
+`SubscribersService`/`DigestController`, not known defects).
+`review.md`: hold-retroactively / ship-at-current-`HEAD` (the one blocker —
+a commit that briefly broke the e2e suite — was already fixed one commit
+later; 2 should-fix items open: no feature-branch/PR was used, and
+`chat.id` has no max length before being persisted). See
+`docs/epics/EPIC-001/artifacts/verify.md` §7 and `review.md` §7 for the
+shortest path to a clean pass.
+
 **Why:** The daily digest is the only feature that can't scale past one
 person today. Turning it into a real subscriber list is the prerequisite
 for any monetization (tiers, alerts, portfolio tracking) — those all need

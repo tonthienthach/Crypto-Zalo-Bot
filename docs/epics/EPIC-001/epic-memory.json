@@ -1,0 +1,44 @@
+{
+  "epic": "EPIC-001",
+  "summary": "Multi-tenant digest subscriptions: subscriber list backed by Vercel Postgres, replacing the single hardcoded DIGEST_CHAT_ID/DIGEST_COIN_SYMBOLS. Code (feat b3d5ddb + e2e fix fc70c49) already shipped to master before this epic's paper trail was written retroactively. verify.md: fail (5/10 AC untested, all due to no scratch DB + missing SubscribersService/DigestController unit tests, not real defects). review.md: hold-retroactively/ship-at-HEAD (1 blocker already fixed one commit later, 2 should-fix: no feature-branch/PR used, chat_id has no max length before being persisted). Not yet deployed — docs/DEPLOYMENT.md step 3a (attach Postgres, run migration, seed legacy recipient) still outstanding. Maintain phase not run: no production signal exists yet.",
+  "entries": [
+    {
+      "at": "2026-09-21T16:16:37.872Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Chose @neondatabase/serverless over @vercel/postgres (deprecated) for the Postgres/Neon connection."
+    },
+    {
+      "at": "2026-09-21T16:16:37.991Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Neon HTTP driver (neon()), not a pooled client — matches serverless/no-long-lived-connection architecture."
+    },
+    {
+      "at": "2026-09-21T16:16:38.104Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "Success metric (intent.md): >=1 subscriber other than the original DIGEST_CHAT_ID recipient active within 30 days of production deploy."
+    },
+    {
+      "at": "2026-09-21T16:16:38.269Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "Follow-up work needed before this epic is fully clean: subscribers.service.spec.ts (AC09), digest.controller.spec.ts (AC07), e2e case for DEFAULT_WATCHLIST fallback (AC02), chat_id @MaxLength on ZaloWebhookChatDto (review finding #3)."
+    },
+    {
+      "at": "2026-09-21T16:16:38.400Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "context",
+      "text": "This epic's artifacts were written retroactively after the code already shipped (see intent.md provenance note) -- verify.md/review.md independence is caveated as a result."
+    }
+  ],
+  "reflections": [
+    {
+      "at": "2026-09-21T16:16:38.520Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "text": "Retrofitting an ai-native epic onto already-shipped code is valuable: writing spec.md surfaced a real broken-CI bug (POSTGRES_URL missing from e2e env setup) that had gone unnoticed because npm test and npm run test:e2e are separate commands and only the former was run after the original implementation. Next time: run the FULL command suite (unit + e2e + build) before considering any feature done, not just unit tests."
+    }
+  ],
+  "updatedAt": "2026-09-21T16:16:38.567Z"
+}
