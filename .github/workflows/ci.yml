@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, dev]
+    branches: [master]
   push:
-    branches: [main, dev]
+    branches: [master]
 
 jobs:
   build-and-test:
@@ -40,6 +40,7 @@ jobs:
           WEBHOOK_SECRET_TOKEN: ci-test-webhook-secret
           COINGECKO_API_BASE_URL: https://api.coingecko.com/api/v3
           USD_TO_VND_RATE: '25400'
+          POSTGRES_URL: postgres://ci:ci@localhost:5432/ci
 
       - name: Build
         run: npm run build

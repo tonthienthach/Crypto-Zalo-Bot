@@ -1,0 +1,370 @@
+version: "1.0"
+name: My AIDLC Workspace
+skills:
+  - id: plan-evaluator
+    path: ./.aidlc/skills/plan-evaluator.md
+  - id: architecture-analyst
+    path: ./.aidlc/skills/architecture-analyst.md
+  - id: pattern-selector
+    path: ./.aidlc/skills/pattern-selector.md
+  - id: risk-security-reviewer
+    path: ./.aidlc/skills/risk-security-reviewer.md
+  - id: task-planner
+    path: ./.aidlc/skills/task-planner.md
+  - id: test-writer
+    path: ./.aidlc/skills/test-writer.md
+  - id: code-reviewer
+    path: ./.aidlc/skills/code-reviewer.md
+  - id: release-manager
+    path: ./.aidlc/skills/release-manager.md
+  - id: maintenance-monitor
+    path: ./.aidlc/skills/maintenance-monitor.md
+  - id: aidlc-native-intent
+    path: ~/.claude/skills/aidlc-native-intent.md
+  - id: aidlc-native-spec
+    path: ~/.claude/skills/aidlc-native-spec.md
+  - id: aidlc-native-build-plan
+    path: ~/.claude/skills/aidlc-native-build-plan.md
+  - id: aidlc-native-implement
+    path: ~/.claude/skills/aidlc-native-implement.md
+  - id: aidlc-native-verify
+    path: ~/.claude/skills/aidlc-native-verify.md
+  - id: aidlc-native-review
+    path: ~/.claude/skills/aidlc-native-review.md
+  - id: aidlc-native-maintain
+    path: ~/.claude/skills/aidlc-native-maintain.md
+agents:
+  - id: plan-evaluator
+    name: Plan Evaluator
+    skills:
+      - plan-evaluator
+    model: claude-opus-5
+    description: >-
+      Evaluates an initiative against business fit — goal, success metric, scope, dependencies — before any technical
+      work starts.
+  - id: architecture-analyst
+    name: Architecture Analyst
+    skills:
+      - architecture-analyst
+    model: claude-opus-5
+    description: Analyzes technical impact of an approved plan on the existing codebase and architecture decisions.
+  - id: pattern-selector
+    name: Pattern Selector
+    skills:
+      - pattern-selector
+    model: claude-sonnet-5
+    description: >-
+      Chooses a concrete technical solution (library, pattern, data store) from a small set of scale-appropriate
+      options.
+  - id: risk-security-reviewer
+    name: Risk & Security Reviewer
+    skills:
+      - risk-security-reviewer
+    model: claude-opus-5
+    description: Hard gate — reviews new data handling, trust boundaries, abuse vectors, and secrets before task planning starts.
+  - id: task-planner
+    name: Task Planner
+    skills:
+      - task-planner
+    model: claude-sonnet-5
+    description: Breaks an approved plan into phased, independently shippable tasks tracked as a doc in docs/tasks/.
+  - id: test-writer
+    name: Test Writer
+    skills:
+      - test-writer
+    model: claude-sonnet-5
+    description: Writes tests for new business logic introduced by a change, matching the project's existing test style.
+  - id: code-reviewer
+    name: Code Reviewer
+    skills:
+      - code-reviewer
+    model: claude-opus-5
+    description: Reviews code changes and PRs for bugs and quality issues, gated on lint/type-check/test passing first.
+  - id: release-manager
+    name: Release Manager
+    skills:
+      - release-manager
+    model: claude-sonnet-5
+    description: Verifies the release checklist (env vars, migrations, docs, rollback plan, smoke check) before production deploy.
+  - id: maintenance-monitor
+    name: Maintenance Monitor
+    skills:
+      - maintenance-monitor
+    model: claude-sonnet-5
+    description: >-
+      Runs post-release to check drift/errors/usage signals and proposes new roadmap initiatives — reports only, never
+      edits.
+  - id: aidlc-native-originator
+    name: Native Originator
+    skills:
+      - aidlc-native-intent
+    model: opus
+    description: native-originator persona — handles intent
+    capabilities:
+      - jira
+      - core-business
+      - web
+  - id: aidlc-native-product-owner
+    name: Native Product Owner
+    skills:
+      - aidlc-native-spec
+    model: opus
+    description: native-product-owner persona — handles spec
+    capabilities:
+      - jira
+      - figma
+      - core-business
+      - web
+  - id: aidlc-native-engineer
+    name: Native Engineer
+    skills:
+      - aidlc-native-build-plan
+      - aidlc-native-implement
+    model: opus
+    description: native-engineer persona — handles build-plan, implement
+    capabilities:
+      - github
+      - files
+  - id: aidlc-native-verifier
+    name: Native Verifier
+    skills:
+      - aidlc-native-verify
+    model: sonnet
+    description: native-verifier persona — handles verify
+    capabilities:
+      - github
+      - files
+  - id: aidlc-native-reviewer
+    name: Native Reviewer
+    skills:
+      - aidlc-native-review
+    model: sonnet
+    description: native-reviewer persona — handles review
+    capabilities:
+      - github
+      - files
+  - id: aidlc-native-operator
+    name: Native Operator
+    skills:
+      - aidlc-native-maintain
+    model: sonnet
+    description: native-operator persona — handles maintain
+    capabilities:
+      - github
+      - files
+pipelines:
+  - id: plan-review
+    description: Steps 1-5 — run before any implementation work starts.
+    steps:
+      - agent: plan-evaluator
+        human_review: true
+      - agent: architecture-analyst
+        human_review: true
+      - agent: pattern-selector
+        human_review: true
+      - agent: risk-security-reviewer
+        human_review: true
+      - agent: task-planner
+        human_review: false
+    on_failure: stop
+  - id: release-review
+    description: >-
+      Steps 7-9 — run after a task-plan phase is implemented, before deploy. Step 6 (implementation) has no agent; it's
+      done directly in the coding session.
+    steps:
+      - agent: test-writer
+        human_review: false
+      - agent: code-reviewer
+        human_review: false
+      - agent: release-manager
+        human_review: true
+    on_failure: stop
+  - id: maintenance
+    description: Step 10 — run periodically after release, independent of the other two pipelines.
+    steps:
+      - agent: maintenance-monitor
+        human_review: false
+    on_failure: stop
+  - id: ai-native-full
+    steps:
+      - name: intent
+        agent: aidlc-native-originator
+        skills:
+          - aidlc-native-intent
+        enabled: true
+        requires: []
+        produces:
+          - docs/epics/{epic}/artifacts/intent.md
+        human_review: true
+        auto_review: false
+      - name: spec
+        agent: aidlc-native-product-owner
+        skills:
+          - aidlc-native-spec
+        enabled: true
+        requires: []
+        produces:
+          - docs/epics/{epic}/artifacts/spec.md
+        human_review: true
+        auto_review: false
+        depends_on:
+          - intent
+      - name: build-plan
+        agent: aidlc-native-engineer
+        skills:
+          - aidlc-native-build-plan
+        enabled: true
+        requires: []
+        produces:
+          - docs/epics/{epic}/artifacts/plan.md
+        human_review: true
+        auto_review: false
+        depends_on:
+          - spec
+      - name: implement
+        agent: aidlc-native-engineer
+        skills:
+          - aidlc-native-implement
+        enabled: true
+        requires: []
+        produces:
+          - docs/epics/{epic}/artifacts/implement.md
+        human_review: true
+        auto_review: false
+        depends_on:
+          - build-plan
+      - name: verify
+        agent: aidlc-native-verifier
+        skills:
+          - aidlc-native-verify
+        enabled: true
+        requires: []
+        produces:
+          - docs/epics/{epic}/artifacts/verify.md
+        human_review: true
+        auto_review: false
+        depends_on:
+          - implement
+      - name: review
+        agent: aidlc-native-reviewer
+        skills:
+          - aidlc-native-review
+        enabled: true
+        requires: []
+        produces:
+          - docs/epics/{epic}/artifacts/review.md
+        human_review: true
+        auto_review: false
+        depends_on:
+          - verify
+      - name: maintain
+        agent: aidlc-native-operator
+        skills:
+          - aidlc-native-maintain
+        enabled: true
+        requires: []
+        produces:
+          - docs/epics/{epic}/artifacts/incident.md
+        human_review: false
+        auto_review: false
+        depends_on:
+          - review
+    on_failure: stop
+environment: {}
+slash_commands:
+  - name: /ai-native-full-intent
+    agent: aidlc-native-originator
+  - name: /ai-native-full-spec
+    agent: aidlc-native-product-owner
+  - name: /ai-native-full-build-plan
+    agent: aidlc-native-engineer
+  - name: /ai-native-full-implement
+    agent: aidlc-native-engineer
+  - name: /ai-native-full-verify
+    agent: aidlc-native-verifier
+  - name: /ai-native-full-review
+    agent: aidlc-native-reviewer
+  - name: /ai-native-full-maintain
+    agent: aidlc-native-operator
+recipes:
+  - id: native-quick
+    description: Small, well-understood change — intent straight to plan, no separate spec.
+    from: ai-native-full
+    steps:
+      - intent
+      - build-plan
+      - implement
+      - verify
+  - id: native-lite
+    description: >-
+      Small change with a precedent already in the codebase — no spec, no separate verify. The human gates sit up front,
+      on intent and build-plan, where a wrong direction is cheapest to correct; implement and review then run to the end
+      unattended. Trade-off: review is the only quality gate left, and nobody reads it before the branch is finished —
+      prefer native-fix when the change has no precedent to follow.
+    from: ai-native-full
+    steps:
+      - intent
+      - build-plan
+      - implement
+      - review
+    gates:
+      intent:
+        human_review: true
+      build-plan:
+        human_review: true
+      implement:
+        human_review: false
+      review:
+        human_review: false
+  - id: native-fix
+    description: >-
+      Bug fix / refactor / tech debt — no spec (there is no new behaviour to specify), but both quality gates kept:
+      verify then review.
+    from: ai-native-full
+    steps:
+      - intent
+      - build-plan
+      - implement
+      - verify
+      - review
+  - id: native-full
+    description: "Full AI-Native flow: intent → spec → build-plan → implement → verify → review."
+    from: ai-native-full
+    steps:
+      - intent
+      - spec
+      - build-plan
+      - implement
+      - verify
+      - review
+  - id: native-hotfix
+    description: >-
+      Production is burning and the cause is already known — straight to plan, ship, review. Trade-off: no intent.md
+      means the engineer starts with only the epic description as context, and skipping verify removes the independent
+      check exactly when haste makes errors likeliest. Prefer native-fix unless the clock genuinely forbids it.
+    from: ai-native-full
+    steps:
+      - build-plan
+      - implement
+      - review
+  - id: native-align
+    description: Agree on scope before engineering starts — stop once acceptance criteria exist, write no code.
+    from: ai-native-full
+    steps:
+      - intent
+      - spec
+  - id: native-spike
+    description: Capture the problem only — no spec, no code.
+    from: ai-native-full
+    steps:
+      - intent
+  - id: native-audit
+    description: Judge a diff that already exists against policy — no epic work, review only.
+    from: ai-native-full
+    steps:
+      - review
+  - id: native-incident
+    description: A production signal arrived — diagnose it and open the follow-up epic.
+    from: ai-native-full
+    steps:
+      - maintain
