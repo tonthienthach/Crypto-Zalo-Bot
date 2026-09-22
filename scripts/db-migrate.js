@@ -49,8 +49,23 @@ async function main() {
 
   for (const file of files) {
     console.log(`Applying ${file}...`);
-    const statement = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
-    await sql.query(statement);
+    const content = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+    // Neon's HTTP driver executes each call as a single prepared statement —
+    // it rejects a file with multiple ;-separated statements in one call
+    // ("cannot insert multiple commands into a prepared statement"), unlike
+    // psql. Split on ';' and run each statement separately. Naive split is
+    // fine here: these migration files are plain DDL with no string literals
+    // containing a semicolon.
+    const statements = content
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('--'))
+      .join('\n')
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const statement of statements) {
+      await sql.query(statement);
+    }
   }
   console.log(`Applied ${files.length} migration(s) successfully.`);
 }
