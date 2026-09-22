@@ -8,10 +8,10 @@ work progresses or new direction is decided, rather than starting a new doc.
 Status legend: `Idea` (not committed) · `Planned` (scoped, not started) ·
 `In progress` · `Shipped` · `Dropped` (with reason).
 
-## Current state (2026-09-21)
+## Current state (2026-09-22)
 
 Bot on Vercel serverless, now with a Postgres-backed subscriber list
-(Initiative 1, in progress):
+(Initiative 1, deployed):
 - Interactive commands (`/gia`, `/top`, `/help`) work per any Zalo chat that
   messages the bot — no persistence needed, stateless per request.
 - `/dangky [symbols...]`, `/huy`, `/watchlist [symbols...]` let any chat
@@ -23,28 +23,36 @@ Bot on Vercel serverless, now with a Postgres-backed subscriber list
   hardcoded `DIGEST_CHAT_ID`/`DIGEST_COIN_SYMBOLS` env vars are no longer
   read at runtime (kept only for the one-off
   `npm run db:seed-digest-subscriber` migration).
-- Not yet deployed: the Postgres integration must be attached and
-  `npm run db:migrate` run on the production DB (see `docs/DEPLOYMENT.md`
-  step 3a) before this ships.
+- **Deployed 2026-09-22**: Vercel Postgres (Neon) attached, migration +
+  legacy-recipient seed run against production, code deployed
+  (`https://zalo-crypto-bot.vercel.app`, `/health` confirmed `ok`). First
+  real 9am ICT digest send under the new per-subscriber path not yet
+  observed — see Initiative 1's `Not yet confirmed` note.
 
 ## Initiative 1: Multi-tenant subscriptions (SaaS foundation)
 
-**Status:** In progress (2026-09-21) — persistence, commands, and digest
-read path implemented; not yet deployed/migrated (see docs/DEPLOYMENT.md
-step 3a for the remaining manual steps: attach Postgres, run migration,
-seed the legacy recipient).
+**Status:** Shipped (2026-09-22) — Vercel Postgres (Neon) attached,
+`db:migrate` + `db:seed-digest-subscriber` run against production,
+current `master` deployed (`https://zalo-crypto-bot.vercel.app`, `/health`
+returns `ok`). **Not yet confirmed:** the first real 9am ICT digest send
+under the new per-subscriber path (next occurrence after 2026-09-22), and
+`intent.md`'s success metric (≥1 non-original subscriber active within 30
+days of this date) — revisit both once observed.
 
 **Tracked as:** [`EPIC-001`](../docs/epics/EPIC-001/EPIC-001.md) — full
 paper trail (intent, spec, plan, implementation, independent verify, policy
-review) in `docs/epics/EPIC-001/artifacts/`. `verify.md`: fail (5/10
-acceptance criteria untested — no scratch DB + missing unit tests for
-`SubscribersService`/`DigestController`, not known defects).
-`review.md`: hold-retroactively / ship-at-current-`HEAD` (the one blocker —
-a commit that briefly broke the e2e suite — was already fixed one commit
-later; 2 should-fix items open: no feature-branch/PR was used, and
-`chat.id` has no max length before being persisted). See
-`docs/epics/EPIC-001/artifacts/verify.md` §7 and `review.md` §7 for the
-shortest path to a clean pass.
+review) in `docs/epics/EPIC-001/artifacts/`. `verify.md`: **pass (10/10)**
+after two revisions — closed via new unit tests
+(`subscribers.service.spec.ts`, `digest.controller.spec.ts`) and a scratch
+Docker Postgres run proving the upsert/seed SQL for real. `review.md`:
+hold-retroactively / ship-at-`HEAD` — the one blocker (a commit that
+briefly broke the e2e suite) was fixed one commit later; 2 should-fix
+items remain open by owner decision (branching policy — since resolved,
+see docs/RULES.md; `chat.id` has no max length before being persisted —
+not yet fixed). The branching-policy and `.aidlc`-tracking follow-ups from
+`review.md` are done (PR #1); the migration-script multi-statement bug
+(scope item 7 below) was found and fixed via PR #2 during actual
+deployment.
 
 **Why:** The daily digest is the only feature that can't scale past one
 person today. Turning it into a real subscriber list is the prerequisite
@@ -65,11 +73,20 @@ a way to know *who* the users are and *what* they each want.
 5. ✅ Migration tooling: `npm run db:seed-digest-subscriber` seeds the
    existing `DIGEST_CHAT_ID` value as the first subscriber row so the
    current recipient doesn't lose their digest on deploy.
-6. ⬜ Not done yet: attach the Postgres integration on the live Vercel
-   project, run `npm run db:migrate` + `npm run db:seed-digest-subscriber`
-   against production, and confirm the next 9am digest goes out correctly
-   (see `docs/DEPLOYMENT.md` step 3a). Flip this initiative to `Shipped`
-   once that's confirmed.
+6. ✅ Attached the Postgres integration on the live Vercel project, ran
+   `npm run db:migrate` + `npm run db:seed-digest-subscriber` against
+   production, deployed (2026-09-22). ⬜ Not yet confirmed: the next 9am
+   ICT digest actually arriving correctly under the new per-subscriber
+   path — check after the next occurrence.
+7. Along the way, a second real bug was found and fixed only once real
+   deployment was attempted: `db-migrate.js` called Neon's HTTP driver
+   with a whole multi-statement `.sql` file in one `sql.query()` call,
+   which Neon rejects ("cannot insert multiple commands into a prepared
+   statement") — `psql`-based scratch-DB testing during `verify.md` missed
+   this because `psql -f` handles multi-statement files fine, unlike the
+   driver actually used in production. Fixed in
+   `fix/migrate-script-multi-statement` (PR #2) by splitting each file
+   into individual statements before executing.
 
 **Open questions:**
 - Do `/dangky` writes need their own rate limit / abuse guard beyond the
