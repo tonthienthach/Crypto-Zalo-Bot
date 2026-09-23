@@ -1,0 +1,124 @@
+{
+  "id": "EPIC-002",
+  "title": "Price alerts",
+  "description": "Initiative 2 (docs/ROADMAP.md): price alerts — let a chat register a price threshold for a coin (e.g. /canhbao btc > 100000) and get pushed a Zalo message when the price crosses it. Builds on EPIC-001's persistence layer.",
+  "pipeline": "ai-native-full",
+  "agent": null,
+  "agents": [
+    "aidlc-native-originator",
+    "aidlc-native-product-owner",
+    "aidlc-native-engineer",
+    "aidlc-native-engineer",
+    "aidlc-native-verifier",
+    "aidlc-native-reviewer",
+    "aidlc-native-operator"
+  ],
+  "currentStep": 3,
+  "status": "in_progress",
+  "strict_mode": true,
+  "createdAt": "2026-09-23T03:23:25.000Z",
+  "stepStates": [
+    {
+      "agent": "aidlc-native-originator",
+      "name": "intent",
+      "status": "approved",
+      "revision": 1,
+      "runStatus": "approved",
+      "startedAt": "2026-09-23T03:23:25.000Z",
+      "finishedAt": "2026-09-23T03:32:26.335Z",
+      "history": [
+        {
+          "at": "2026-09-23T03:32:26.335Z",
+          "action": "approved",
+          "note": "Approved by originator (Thach); translated to Vietnamese, artifact_language: vi set."
+        }
+      ],
+      "artifactsProduced": [
+        "docs/epics/EPIC-002/artifacts/intent.md"
+      ]
+    },
+    {
+      "agent": "aidlc-native-product-owner",
+      "name": "spec",
+      "status": "approved",
+      "revision": 1,
+      "runStatus": "approved",
+      "startedAt": "2026-09-23T03:32:26.335Z",
+      "finishedAt": "2026-09-23T03:48:15.817Z",
+      "history": [
+        {
+          "at": "2026-09-23T03:48:15.817Z",
+          "action": "approved",
+          "note": "Approved by originator (Thach)."
+        }
+      ],
+      "artifactsProduced": [
+        "docs/epics/EPIC-002/artifacts/spec.md"
+      ]
+    },
+    {
+      "agent": "aidlc-native-engineer",
+      "name": "build-plan",
+      "status": "approved",
+      "revision": 1,
+      "runStatus": "approved",
+      "startedAt": "2026-09-23T03:48:15.817Z",
+      "finishedAt": "2026-09-23T04:09:23.503Z",
+      "history": [
+        {
+          "at": "2026-09-23T04:09:23.503Z",
+          "action": "approved",
+          "note": "Approved by originator (Thach)."
+        }
+      ],
+      "artifactsProduced": [
+        "docs/epics/EPIC-002/artifacts/plan.md"
+      ]
+    },
+    {
+      "agent": "aidlc-native-engineer",
+      "name": "implement",
+      "status": "in_progress",
+      "revision": 1,
+      "runStatus": "awaiting_work",
+      "startedAt": "2026-09-23T04:09:23.503Z",
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-verifier",
+      "name": "verify",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-reviewer",
+      "name": "review",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-operator",
+      "name": "maintain",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    }
+  ],
+  "updatedAt": "2026-09-23T04:09:23.503Z"
+}

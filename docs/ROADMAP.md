@@ -94,7 +94,8 @@ a way to know *who* the users are and *what* they each want.
 
 ## Initiative 2: Price alerts (threshold notifications)
 
-**Status:** Idea
+**Status:** In progress (started 2026-09-23) — intent phase.
+**Tracked as:** [`EPIC-002`](../docs/epics/EPIC-002/EPIC-002.md).
 **Why:** Highest-retention feature for crypto users — depends on
 Initiative 1's persistence layer existing first.
 **Scope (sketch):** `/canhbao btc > 100000` command; a periodic cron
