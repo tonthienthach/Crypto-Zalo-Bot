@@ -8,9 +8,22 @@ import {
 import { CommandParserService } from '../command-parser/command-parser.service';
 import { CommandType } from '../command-parser/interfaces/parsed-command.interface';
 import { WebhookSecretGuard } from '../common/guards/webhook-secret.guard';
+import {
+  AlertConditionAlreadyMetError,
+  AlertLimitReachedError,
+  AlertNotFoundError,
+  PriceAlertsService,
+} from '../price-alerts/price-alerts.service';
 import { InvalidWatchlistError, SubscribersService } from '../subscribers/subscribers.service';
 import { DEFAULT_WATCHLIST } from '../subscribers/subscribers.constants';
 import {
+  formatAlertAlreadyMetReply,
+  formatAlertCreatedReply,
+  formatAlertDeletedReply,
+  formatAlertInvalidReply,
+  formatAlertLimitReply,
+  formatAlertListReply,
+  formatAlertNotFoundReply,
   formatGenericErrorReply,
   formatHelpReply,
   formatInvalidWatchlistReply,
@@ -39,6 +52,7 @@ export class WebhookController {
     private readonly zaloService: ZaloService,
     private readonly configService: ConfigService,
     private readonly subscribersService: SubscribersService,
+    private readonly priceAlertsService: PriceAlertsService,
   ) {
     this.usdToVndRate = this.configService.get<number>('currency.usdToVndRate')!;
   }
@@ -123,6 +137,40 @@ export class WebhookController {
           );
           return;
         }
+        case CommandType.ALERT_CREATE: {
+          const { direction, threshold } = command.alert!;
+          const created = await this.priceAlertsService.create(
+            chatId,
+            command.symbols[0],
+            direction!,
+            threshold!,
+          );
+          await this.zaloService.sendTextMessage(
+            chatId,
+            formatAlertCreatedReply(
+              created.alert,
+              created.position,
+              created.currentPriceUsd,
+              this.usdToVndRate,
+            ),
+          );
+          return;
+        }
+        case CommandType.ALERT_LIST: {
+          const alerts = await this.priceAlertsService.listByChat(chatId);
+          await this.zaloService.sendTextMessage(chatId, formatAlertListReply(alerts));
+          return;
+        }
+        case CommandType.ALERT_DELETE: {
+          const index = command.alert!.index!;
+          const deleted = await this.priceAlertsService.deleteByIndex(chatId, index);
+          await this.zaloService.sendTextMessage(chatId, formatAlertDeletedReply(deleted, index));
+          return;
+        }
+        case CommandType.ALERT_INVALID: {
+          await this.zaloService.sendTextMessage(chatId, formatAlertInvalidReply());
+          return;
+        }
         case CommandType.UNKNOWN:
         default: {
           await this.zaloService.sendTextMessage(chatId, formatUnknownCommandReply());
@@ -145,6 +193,21 @@ export class WebhookController {
     }
     if (error instanceof InvalidWatchlistError) {
       await this.zaloService.sendTextMessage(chatId, formatInvalidWatchlistReply(error.message));
+      return;
+    }
+    if (error instanceof AlertLimitReachedError) {
+      await this.zaloService.sendTextMessage(chatId, formatAlertLimitReply(error.limit));
+      return;
+    }
+    if (error instanceof AlertConditionAlreadyMetError) {
+      await this.zaloService.sendTextMessage(
+        chatId,
+        formatAlertAlreadyMetReply(error.symbol, error.direction, error.currentPriceUsd),
+      );
+      return;
+    }
+    if (error instanceof AlertNotFoundError) {
+      await this.zaloService.sendTextMessage(chatId, formatAlertNotFoundReply(error.index));
       return;
     }
 

@@ -29,6 +29,7 @@ export class AlertLimitReachedError extends Error {
 export class AlertConditionAlreadyMetError extends Error {
   constructor(
     public readonly symbol: string,
+    public readonly direction: AlertDirection,
     public readonly currentPriceUsd: number,
   ) {
     super(`Alert condition for ${symbol} is already met at ${currentPriceUsd}`);
@@ -95,7 +96,7 @@ export class PriceAlertsService {
 
     const [coin] = await this.coingeckoService.getPricesBySymbols([symbol]);
     if (isConditionMet(direction, threshold, coin.priceUsd)) {
-      throw new AlertConditionAlreadyMetError(symbol, coin.priceUsd);
+      throw new AlertConditionAlreadyMetError(symbol, direction, coin.priceUsd);
     }
 
     const id = await this.redis.incr(REDIS_KEYS.nextId);
