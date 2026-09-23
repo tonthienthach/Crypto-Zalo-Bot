@@ -11,6 +11,7 @@ import { CoingeckoModule } from './coingecko/coingecko.module';
 import { CommandParserModule } from './command-parser/command-parser.module';
 import { DigestModule } from './digest/digest.module';
 import { HealthModule } from './health/health.module';
+import { PriceAlertsModule } from './price-alerts/price-alerts.module';
 import { WebhookModule } from './webhook/webhook.module';
 import { ZaloModule } from './zalo/zalo.module';
 
@@ -37,6 +38,7 @@ import { ZaloModule } from './zalo/zalo.module';
     ZaloModule,
     WebhookModule,
     DigestModule,
+    PriceAlertsModule,
     HealthModule,
   ],
   providers: [

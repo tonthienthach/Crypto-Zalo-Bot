@@ -43,14 +43,15 @@ the reply is never carried in the webhook's own response body.
 | --- | --- |
 | `config/` | `ConfigModule` setup: Joi schema (`env.validation.ts`) validated once at boot, typed config object (`configuration.ts`). Fails fast — the process refuses to start if a required env var is missing or malformed. |
 | `coingecko/` | Talks to the CoinGecko public REST API (`/simple/price`, `/coins/markets`), maps ticker symbols to CoinGecko coin ids, normalizes responses into `CoinMarketData`, and applies a best-effort cache. |
-| `command-parser/` | Pure text-parsing service: turns a raw chat message into a `ParsedCommand` (`PRICE`, `TOP_MARKETS`, `HELP`, `SUBSCRIBE`, `UNSUBSCRIBE`, `WATCHLIST`, `UNKNOWN`). No I/O, fully unit-testable, handles accented/unaccented Vietnamese. |
-| `subscribers/` | `SubscribersService` — CRUD over the `subscribers` table (Vercel Postgres / Neon) backing `/dangky`, `/huy`, `/watchlist`, and the daily digest recipient list. The only stateful/persistent module in the app; see "Persistence" below. |
-| `zalo/` | Talks to the Zalo Bot "send message" API. Never throws — a failed send is logged and swallowed so an outbound Zalo outage can't turn into an unhandled webhook exception. |
+| `command-parser/` | Pure text-parsing service: turns a raw chat message into a `ParsedCommand` (`PRICE`, `TOP_MARKETS`, `HELP`, `SUBSCRIBE`, `UNSUBSCRIBE`, `WATCHLIST`, `ALERT_CREATE`/`ALERT_LIST`/`ALERT_DELETE`/`ALERT_INVALID`, `UNKNOWN`). No I/O, fully unit-testable, handles accented/unaccented Vietnamese. |
+| `subscribers/` | `SubscribersService` — CRUD over the `subscribers` table (Vercel Postgres / Neon) backing `/dangky`, `/huy`, `/watchlist`, and the daily digest recipient list. See "Persistence" below. |
+| `price-alerts/` | `PriceAlertsService` — alert storage in Upstash Redis (`/canhbao`); `PriceAlertsController` — `/cron/price-alerts`, the per-minute check, guarded by `PriceAlertsCronSecretGuard`; `evaluateAlert()` — the pure fire / re-arm / cooldown rules. See "Price alerts" below. |
+| `zalo/` | Talks to the Zalo Bot "send message" API. Never throws — a failed send is logged and swallowed so an outbound Zalo outage can't turn into an unhandled webhook exception. Resolves `true`/`false` so callers that care (the alert check) know whether the send landed. |
 | `webhook/` | `WebhookController` — the only place that wires parsing + CoinGecko + Zalo + Subscribers together. Guarded by `WebhookSecretGuard`, DTO-validated by `ZaloWebhookDto`. Always acknowledges 200 to Zalo. |
 | `digest/` | `DigestController` — `POST /cron/daily-digest`, a machine-triggered (not user-triggered) endpoint that loads active subscribers from `SubscribersService` and pushes each their own watchlist. Guarded by `CronSecretGuard`. Has no scheduler of its own — see "Daily digest" below for what calls it. |
 | `health/` | `GET /health` — liveness endpoint for uptime monitoring and Vercel health checks. |
-| `common/filters` | `AllExceptionsFilter` — global catch-all; never leaks a stack trace to the client, and always answers webhook paths with 200 to avoid retry storms. |
-| `common/guards` | `WebhookSecretGuard` (shared-secret auth for `/webhook`), `CronSecretGuard` (shared-secret auth for `/cron/daily-digest`), and `UserThrottlerGuard` (per-chat-id rate limiting, not per-IP — see below). |
+| `common/filters` | `AllExceptionsFilter` — global catch-all; never leaks a stack trace to the client, and answers webhook paths with 200 for any *unexpected* (non-`HttpException`) error to avoid retry storms. Guard and DTO-validation failures keep their `401`/`400` (see `docs/API.md`). |
+| `common/guards` | `WebhookSecretGuard` (shared-secret auth for `/webhook`), `CronSecretGuard` (shared-secret auth for `/cron/daily-digest`), `PriceAlertsCronSecretGuard` (same mechanism, its own `PRICE_ALERTS_CRON_SECRET`, for `/cron/price-alerts` — that secret lives at cron-job.org, so it must not also unlock the digest), and `UserThrottlerGuard` (per-chat-id rate limiting, not per-IP — see below). |
 | `common/interceptors` | `LoggingInterceptor` — structured (JSON) request/response logging. |
 | `utils/format-message.util.ts` | Pure functions that turn `CoinMarketData[]` into the final chat message text (USD, VND estimate, 24h % with emoji). No side effects — fully unit-testable. |
 
@@ -211,6 +212,56 @@ The only durable state in the app: the `subscribers` table (`chat_id`,
 - **Soft delete**: `/huy` sets `is_active = false` rather than deleting the
   row, so `watchlist` history survives and re-subscribing via `/dangky`
   restores it.
+
+### Price alerts (Upstash Redis + external per-minute scheduler)
+
+`/canhbao btc > 100000` stores an alert. A check every minute sends a Zalo
+message when the price crosses the level, then re-arms silently once the
+price is back past the level by 0.5%, with at most one message per alert per
+15 minutes. Full spec and plan: `docs/epics/EPIC-002/`.
+
+```
+cron-job.org (every minute)
+   |  GET /cron/price-alerts   X-Cron-Secret-Token: <PRICE_ALERTS_CRON_SECRET>
+   v
+PriceAlertsController --> run lock (SET NX EX 120) -- already held? skip run
+                      --> PriceAlertsService.listAll()           (SMEMBERS + MGET)
+                      --> CoingeckoService.getPricesBySymbols()  (ONE call, all distinct coins)
+                      --> evaluateAlert() per alert: fire / rearm / none
+                      --> ZaloService.sendTextMessage() true?  -> mark fired (SET XX)
+                      --> delivery + run summary logs (LPUSH + LTRIM), release lock
+```
+
+- **Why Redis, not the existing Postgres**: Neon's free plan scales compute
+  to zero after 5 minutes idle and includes 100 CU-hours/month. A query every
+  minute would keep it awake permanently (~180 CU-hours/month at 0.25 CU),
+  exhausting the quota and taking `/dangky` and the digest down with it.
+  Upstash's free tier (500k commands/month) covers ~6 commands per run ×
+  43,200 runs/month (~260k), and Neon still only wakes for subscriber
+  commands and the 9am digest.
+- **Why cron-job.org, not Vercel Cron**: Vercel Hobby only allows daily cron
+  jobs. GitHub Actions `schedule` was rejected for the same reasons the
+  digest left it (5-minute minimum, observed firing hours late).
+- **Concurrency**: the run lock (a fresh token per run) means two
+  overlapping scheduler calls never evaluate the same alert twice. It is
+  released with a compare-and-delete Lua script, so a run that outlived the
+  TTL can never free the next run's lock. Each alert is its own key and
+  state writes use `SET ... XX`, so an alert its chat deleted mid-run is
+  never recreated.
+- **Delivery**: an alert is only marked fired once Zalo accepted the
+  message. A failed send stays armed and is retried on the next runs; only
+  after 3 failures in a row does it back off to one attempt per 5 minutes.
+  Failures go to a separate capped list — so a chat that blocked the bot
+  neither costs a Zalo call every minute forever nor evicts the successful
+  deliveries the success metric reads.
+- **Run time**: no new send starts once the send phase (after the price
+  lookup) is 6s old; the rest stay armed for the next run, so with Zalo's 8s
+  send timeout the send phase stays around 14s at most.
+- **Budgets to watch**: every run `MGET`s all alerts, so Upstash's 10 GB/month
+  bandwidth becomes the ceiling at roughly 1,000 alerts — revisit the data
+  layout before then. Vercel Hobby's 4h Active CPU/month (~330 ms CPU per
+  run) is the other; `npm run alerts:report` and Vercel → Usage show where
+  both stand.
 
 ### Error handling philosophy
 

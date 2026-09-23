@@ -5,12 +5,17 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
+
+/** Upper bound on a chat id we persist — real Zalo ids are 20 hex chars. */
+export const MAX_CHAT_ID_LENGTH = 64;
 
 export class ZaloWebhookChatDto {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(MAX_CHAT_ID_LENGTH)
   id!: string;
 
   @IsOptional()

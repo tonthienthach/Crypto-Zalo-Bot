@@ -49,6 +49,24 @@
       "author": "Thach <vnsnake123@gmail.com>",
       "kind": "decision",
       "text": "Closed AC04/AC08 (the last 2 untested ACs) with real Postgres execution: spun up a scratch postgres:16-alpine Docker container, applied the real migration via psql, ran subscribe()'s and db-seed-digest-subscriber.js's exact ON CONFLICT upsert SQL twice each, confirmed no duplicates, then removed the container. verify.md is now PASS 10/10."
+    },
+    {
+      "at": "2026-09-22T07:51:09.754Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Deployed to production 2026-09-22: Vercel Postgres (Neon) attached by owner, db:migrate + db:seed-digest-subscriber run against real production DB, code deployed via 'vercel deploy --prod'. /health confirmed ok."
+    },
+    {
+      "at": "2026-09-22T07:51:09.952Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Found a THIRD real bug only during actual deployment (outside spec.md's original ACs): db-migrate.js sent a whole multi-statement .sql file to Neon's HTTP driver in one sql.query() call -- rejected ('cannot insert multiple commands into a prepared statement'). The scratch-psql verification done for AC04/AC08 used 'psql -f' which handles multi-statement files fine, masking this. Fixed by splitting each migration file into individual statements (PR #2, commit 0115944)."
+    },
+    {
+      "at": "2026-09-22T07:51:10.141Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "Lesson: verifying a script's SQL logic via psql is not equivalent to verifying the SCRIPT ITSELF against the real driver it uses in production. Future DB scripts should be smoke-tested with the actual driver (even against a scratch/mock endpoint) before being marked verified, not just the underlying SQL."
     }
   ],
   "reflections": [
@@ -56,7 +74,12 @@
       "at": "2026-09-21T16:16:38.520Z",
       "author": "Thach <vnsnake123@gmail.com>",
       "text": "Retrofitting an ai-native epic onto already-shipped code is valuable: writing spec.md surfaced a real broken-CI bug (POSTGRES_URL missing from e2e env setup) that had gone unnoticed because npm test and npm run test:e2e are separate commands and only the former was run after the original implementation. Next time: run the FULL command suite (unit + e2e + build) before considering any feature done, not just unit tests."
+    },
+    {
+      "at": "2026-09-22T07:51:10.393Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "text": "Retroactive verify/review caught 2 of 3 real bugs (e2e boot break, missing test coverage) before deploy, but missed a 3rd (multi-statement SQL vs Neon's HTTP driver) because the scratch-DB proof used psql directly instead of running the actual script under test. Next time: always execute the real script/tool being verified, not just its underlying SQL, against the scratch environment."
     }
   ],
-  "updatedAt": "2026-09-21T16:53:10.437Z"
+  "updatedAt": "2026-09-22T07:51:10.492Z"
 }

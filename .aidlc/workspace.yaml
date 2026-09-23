@@ -1,5 +1,6 @@
 version: "1.0"
 name: My AIDLC Workspace
+artifact_language: vi
 skills:
   - id: plan-evaluator
     path: ./.aidlc/skills/plan-evaluator.md

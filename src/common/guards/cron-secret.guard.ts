@@ -23,15 +23,18 @@ const BEARER_PREFIX = 'Bearer ';
 @Injectable()
 export class CronSecretGuard implements CanActivate {
   private readonly logger = new Logger(CronSecretGuard.name);
+  /** Config path of the secret this guard checks — overridden by subclasses with their own secret. */
+  protected readonly secretConfigKey: string = 'cron.secretToken';
 
   constructor(private readonly configService: ConfigService) {}
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
-    const expectedSecret = this.configService.get<string>('cron.secretToken');
+    const expectedSecret = this.configService.get<string>(this.secretConfigKey);
     const providedSecret = this.extractProvidedSecret(request);
 
-    if (!providedSecret || providedSecret !== expectedSecret) {
+    // An unset expected secret rejects every call instead of matching nothing-vs-nothing.
+    if (!expectedSecret || !providedSecret || providedSecret !== expectedSecret) {
       this.logger.warn(`Rejected cron call with invalid secret from ${request.ip}`);
       throw new UnauthorizedException('Invalid cron secret');
     }

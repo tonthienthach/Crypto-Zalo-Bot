@@ -1,4 +1,5 @@
 import { CoinMarketData } from '../coingecko/interfaces/coingecko-response.interface';
+import { AlertDirection, PriceAlert } from '../price-alerts/interfaces/price-alert.interface';
 
 const USD_FORMATTER = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -96,6 +97,8 @@ export function formatHelpReply(): string {
     '• /dangky btc eth — đăng ký nhận bản tin giá 9h sáng mỗi ngày',
     '• /watchlist — xem hoặc /watchlist btc sol để đổi danh sách theo dõi',
     '• /huy — hủy đăng ký bản tin hàng ngày',
+    '• /canhbao btc > 100000 — báo khi giá BTC vượt lên trên $100,000 (dùng < để báo khi rơi xuống dưới)',
+    '• /canhbao — xem cảnh báo, /canhbao xoa 1 để xoá cảnh báo số 1',
     '',
     'Lệnh có dấu hoặc không dấu đều được hỗ trợ (vd: /giá btc = /gia btc).',
   ].join('\n');
@@ -159,6 +162,103 @@ export function formatUnknownSymbolsReply(symbols: string[]): string {
 
 export function formatServiceUnavailableReply(): string {
   return '⚠️ Không thể lấy dữ liệu giá lúc này (dịch vụ CoinGecko đang bận hoặc quá giới hạn). Vui lòng thử lại sau ít phút.';
+}
+
+const ALERT_SYNTAX_EXAMPLE = 'Ví dụ: /canhbao btc > 100000 hoặc /canhbao eth < 2000';
+
+/** Like USD_FORMATTER, but shows all 8 decimals /canhbao accepts, so tiny thresholds don't read as $0.00. */
+const ALERT_THRESHOLD_FORMATTER = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 8,
+});
+
+/** "BTC > $100,000.00" — the alert condition as shown to the user. */
+function formatAlertCondition(
+  symbol: string,
+  direction: AlertDirection,
+  threshold: number,
+): string {
+  return `${symbol.toUpperCase()} ${direction === 'above' ? '>' : '<'} ${ALERT_THRESHOLD_FORMATTER.format(threshold)}`;
+}
+
+/** Reply for a successful "/canhbao <coin> > <price>". */
+export function formatAlertCreatedReply(
+  alert: PriceAlert,
+  position: number,
+  currentPriceUsd: number,
+  usdToVndRate: number,
+): string {
+  return [
+    `🔔 Đã đặt cảnh báo #${position}: ${formatAlertCondition(alert.symbol, alert.direction, alert.threshold)}`,
+    `Giá hiện tại: ${formatUsd(currentPriceUsd)} (~${toVndDisplay(currentPriceUsd, usdToVndRate)})`,
+    'Bot kiểm tra giá khoảng mỗi phút. Gõ /canhbao để xem danh sách cảnh báo.',
+  ].join('\n');
+}
+
+/** Reply for "/canhbao" with no arguments. */
+export function formatAlertListReply(alerts: PriceAlert[]): string {
+  if (alerts.length === 0) {
+    return ['📭 Bạn chưa có cảnh báo giá nào.', ALERT_SYNTAX_EXAMPLE].join('\n');
+  }
+  const lines = alerts.map(
+    (alert, i) =>
+      `${i + 1}. ${formatAlertCondition(alert.symbol, alert.direction, alert.threshold)} — ${
+        alert.state === 'armed' ? 'đang canh' : 'đã báo, chờ giá quay lại'
+      }`,
+  );
+  return ['🔔 Cảnh báo giá của bạn:', ...lines, '', 'Gõ /canhbao xoa <số> để xoá.'].join('\n');
+}
+
+/** Reply for "/canhbao xoa <n>". */
+export function formatAlertDeletedReply(alert: PriceAlert, index: number): string {
+  return `🗑️ Đã xoá cảnh báo #${index}: ${formatAlertCondition(alert.symbol, alert.direction, alert.threshold)}`;
+}
+
+export function formatAlertNotFoundReply(index: number): string {
+  return `⚠️ Không tìm thấy cảnh báo #${index}. Gõ /canhbao để xem danh sách.`;
+}
+
+export function formatAlertLimitReply(limit: number): string {
+  return `⚠️ Bạn đã có tối đa ${limit} cảnh báo. Gõ /canhbao để xem và /canhbao xoa <số> để xoá bớt.`;
+}
+
+/** Reply when the requested condition is already true at the current price (spec EPIC-002-FR10). */
+export function formatAlertAlreadyMetReply(
+  symbol: string,
+  direction: AlertDirection,
+  currentPriceUsd: number,
+): string {
+  return [
+    `ℹ️ Giá ${symbol.toUpperCase()} hiện là ${formatUsd(currentPriceUsd)} — điều kiện ${
+      direction === 'above' ? 'vượt lên trên' : 'rơi xuống dưới'
+    } mức này đã đúng rồi, nên chưa đặt cảnh báo.`,
+    'Hãy chọn một mức giá khác.',
+  ].join('\n');
+}
+
+/** Reply for "/canhbao ..." with arguments that don't parse. */
+export function formatAlertInvalidReply(): string {
+  return [
+    '⚠️ Cú pháp cảnh báo chưa đúng.',
+    ALERT_SYNTAX_EXAMPLE,
+    'Mức giá tính bằng USD: dùng "." cho số lẻ, "," cho hàng nghìn (không hỗ trợ "100k").',
+    'Xem cảnh báo: /canhbao · Xoá: /canhbao xoa 1',
+  ].join('\n');
+}
+
+/** Push message sent when an alert fires (spec EPIC-002-FR11). */
+export function formatAlertTriggeredMessage(
+  alert: PriceAlert,
+  currentPriceUsd: number,
+  usdToVndRate: number,
+): string {
+  return [
+    `🚨 Cảnh báo giá: ${formatAlertCondition(alert.symbol, alert.direction, alert.threshold)}`,
+    `Giá hiện tại: ${formatUsd(currentPriceUsd)} (~${toVndDisplay(currentPriceUsd, usdToVndRate)})`,
+    'Cảnh báo sẽ tự bật lại khi giá quay về. Gõ /canhbao để xem hoặc xoá.',
+  ].join('\n');
 }
 
 export function formatGenericErrorReply(): string {

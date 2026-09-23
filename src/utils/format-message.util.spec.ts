@@ -1,5 +1,11 @@
 import { CoinMarketData } from '../coingecko/interfaces/coingecko-response.interface';
+import { PriceAlert } from '../price-alerts/interfaces/price-alert.interface';
 import {
+  formatAlertAlreadyMetReply,
+  formatAlertCreatedReply,
+  formatAlertInvalidReply,
+  formatAlertListReply,
+  formatAlertTriggeredMessage,
   formatCoinLine,
   formatCronTrackingLine,
   formatDailyDigestReply,
@@ -101,5 +107,60 @@ describe('format-message.util', () => {
     const line = formatCronTrackingLine(new Date('2026-09-17T01:55:00.000Z'));
     expect(line).toContain('08:55');
     expect(line).toContain('-5');
+  });
+
+  describe('price alerts', () => {
+    const alert: PriceAlert = {
+      id: 7,
+      chatId: 'chat-1',
+      symbol: 'btc',
+      direction: 'above',
+      threshold: 100000,
+      state: 'armed',
+      lastFiredAt: null,
+      createdAt: '2026-09-23T00:00:00.000Z',
+    };
+
+    it('includes coin, condition, level and current price (USD + VND) in the fired message (FR11)', () => {
+      const message = formatAlertTriggeredMessage(alert, 100200, 25400);
+      expect(message).toContain('BTC > $100,000.00');
+      expect(message).toContain('$100,200.00');
+      expect(message).toContain('₫');
+      expect(message).toContain('tự bật lại');
+    });
+
+    it('shows tiny thresholds with all 8 decimals instead of $0.00', () => {
+      const tiny: PriceAlert = { ...alert, symbol: 'pepe', threshold: 0.00000123 };
+      expect(formatAlertTriggeredMessage(tiny, 0.0000013, 25400)).toContain('PEPE > $0.00000123');
+    });
+
+    it('confirms a created alert with its position and the current price', () => {
+      const reply = formatAlertCreatedReply(alert, 3, 95000, 25400);
+      expect(reply).toContain('#3');
+      expect(reply).toContain('BTC > $100,000.00');
+      expect(reply).toContain('$95,000.00');
+    });
+
+    it('numbers the list from 1 and shows each state (FR08)', () => {
+      const reply = formatAlertListReply([
+        alert,
+        { ...alert, id: 9, symbol: 'eth', direction: 'below', threshold: 2000, state: 'fired' },
+      ]);
+      expect(reply).toContain('1. BTC > $100,000.00 — đang canh');
+      expect(reply).toContain('2. ETH < $2,000.00 — đã báo');
+    });
+
+    it('shows a syntax example for an empty list and for invalid input (FR08, AC08)', () => {
+      expect(formatAlertListReply([])).toContain('/canhbao btc > 100000');
+      expect(formatAlertInvalidReply()).toContain('/canhbao btc > 100000');
+    });
+
+    it('shows the current price when the condition is already met (FR10)', () => {
+      expect(formatAlertAlreadyMetReply('btc', 'above', 110000)).toContain('$110,000.00');
+    });
+
+    it('documents /canhbao in /help (FR13)', () => {
+      expect(formatHelpReply()).toContain('/canhbao');
+    });
   });
 });

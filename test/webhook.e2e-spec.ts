@@ -12,12 +12,22 @@ process.env.DIGEST_CHAT_ID = 'test-digest-chat-id';
 // is never actually connected to; it only has to satisfy env.validation.ts's
 // postgres/postgresql URI shape check.
 process.env.POSTGRES_URL = 'postgres://test:test@localhost:5432/test';
+// Same for Upstash Redis — PriceAlertsService is overridden below, so these
+// only have to pass env.validation.ts.
+process.env.KV_REST_API_URL = 'https://test-redis.upstash.io';
+process.env.KV_REST_API_TOKEN = 'test-redis-token';
+process.env.PRICE_ALERTS_CRON_SECRET = 'test-price-alerts-secret-1234';
 
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
-import { CoingeckoService } from '../src/coingecko/coingecko.service';
+import { CoingeckoService, UnknownCoinSymbolsError } from '../src/coingecko/coingecko.service';
+import {
+  AlertConditionAlreadyMetError,
+  AlertNotFoundError,
+  PriceAlertsService,
+} from '../src/price-alerts/price-alerts.service';
 import { SubscribersService } from '../src/subscribers/subscribers.service';
 import { ZaloService } from '../src/zalo/zalo.service';
 
@@ -30,6 +40,11 @@ describe('WebhookController (e2e)', () => {
   const unsubscribe = jest.fn().mockResolvedValue(undefined);
   const updateWatchlist = jest.fn();
   const findActiveByChatId = jest.fn();
+  const createAlert = jest.fn();
+  const listByChat = jest.fn();
+  const deleteByIndex = jest.fn();
+  const listAll = jest.fn();
+  const acquireRunLock = jest.fn();
 
   const SECRET = process.env.WEBHOOK_SECRET_TOKEN as string;
 
@@ -43,6 +58,8 @@ describe('WebhookController (e2e)', () => {
       .useValue({ getPricesBySymbols, getTopMarkets })
       .overrideProvider(SubscribersService)
       .useValue({ subscribe, unsubscribe, updateWatchlist, findActiveByChatId })
+      .overrideProvider(PriceAlertsService)
+      .useValue({ create: createAlert, listByChat, deleteByIndex, listAll, acquireRunLock })
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -240,5 +257,136 @@ describe('WebhookController (e2e)', () => {
 
     expect(updateWatchlist).toHaveBeenCalledWith('chat-7', ['sol']);
     expect(sendTextMessage).toHaveBeenCalledWith('chat-7', expect.stringContaining('chưa đăng ký'));
+  });
+
+  describe('/canhbao (price alerts)', () => {
+    const alert = {
+      id: 1,
+      chatId: 'chat-a1',
+      symbol: 'btc',
+      direction: 'above',
+      threshold: 100000,
+      state: 'armed',
+      lastFiredAt: null,
+      createdAt: '2026-09-23T00:00:00.000Z',
+    };
+
+    const sendText = (text: string, chatId: string) =>
+      request(app.getHttpServer())
+        .post('/webhook')
+        .set('x-bot-api-secret-token', SECRET)
+        .send({ event_name: 'message.text.received', message: { text, chat: { id: chatId } } })
+        .expect(200);
+
+    it('creates an alert and confirms with its position and current price (AC01)', async () => {
+      createAlert.mockResolvedValue({ alert, position: 1, currentPriceUsd: 95000 });
+
+      await sendText('/canhbao btc > 100000', 'chat-a1');
+
+      expect(createAlert).toHaveBeenCalledWith('chat-a1', 'btc', 'above', 100000);
+      expect(sendTextMessage).toHaveBeenCalledWith('chat-a1', expect.stringContaining('#1'));
+      expect(sendTextMessage).toHaveBeenCalledWith(
+        'chat-a1',
+        expect.stringContaining('$95,000.00'),
+      );
+    });
+
+    it('replies with the current price when the condition is already met (AC07)', async () => {
+      createAlert.mockRejectedValue(new AlertConditionAlreadyMetError('btc', 'above', 110000));
+
+      await sendText('/canhbao btc > 100000', 'chat-a2');
+
+      expect(sendTextMessage).toHaveBeenCalledWith(
+        'chat-a2',
+        expect.stringContaining('$110,000.00'),
+      );
+    });
+
+    it('rejects invalid syntax with an example, without creating anything (AC08)', async () => {
+      await sendText('/canhbao btc > 100k', 'chat-a3');
+
+      expect(createAlert).not.toHaveBeenCalled();
+      expect(sendTextMessage).toHaveBeenCalledWith(
+        'chat-a3',
+        expect.stringContaining('/canhbao btc > 100000'),
+      );
+    });
+
+    it('replies like /gia for an unknown coin (AC09)', async () => {
+      createAlert.mockRejectedValue(new UnknownCoinSymbolsError(['xyzabc']));
+
+      await sendText('/canhbao xyzabc > 1', 'chat-a4');
+
+      expect(sendTextMessage).toHaveBeenCalledWith('chat-a4', expect.stringContaining('XYZABC'));
+    });
+
+    it('lists and deletes the chat own alerts, and reports a missing position (AC11)', async () => {
+      listByChat.mockResolvedValue([alert]);
+      await sendText('/canhbao', 'chat-a5');
+      expect(listByChat).toHaveBeenCalledWith('chat-a5');
+      expect(sendTextMessage).toHaveBeenCalledWith('chat-a5', expect.stringContaining('1. BTC >'));
+
+      deleteByIndex.mockResolvedValue(alert);
+      await sendText('/canhbao xoa 1', 'chat-a5');
+      expect(deleteByIndex).toHaveBeenCalledWith('chat-a5', 1);
+
+      deleteByIndex.mockRejectedValue(new AlertNotFoundError(99));
+      await sendText('/canhbao xoa 99', 'chat-a5');
+      expect(sendTextMessage).toHaveBeenCalledWith('chat-a5', expect.stringContaining('#99'));
+    });
+
+    it('leaves alerts alone when the chat unsubscribes from the digest (AC19)', async () => {
+      await sendText('/huy', 'chat-a6');
+
+      expect(unsubscribe).toHaveBeenCalledWith('chat-a6');
+      expect(createAlert).not.toHaveBeenCalled();
+      expect(deleteByIndex).not.toHaveBeenCalled();
+      expect(listByChat).not.toHaveBeenCalled();
+    });
+
+    // DTO validation failures are the one documented non-2xx webhook answer
+    // (docs/API.md: malformed bodies -> 400, before the controller runs).
+    it('rejects a chat id longer than 64 chars with 400, persisting nothing (NFR06)', async () => {
+      await request(app.getHttpServer())
+        .post('/webhook')
+        .set('x-bot-api-secret-token', SECRET)
+        .send({
+          event_name: 'message.text.received',
+          message: { text: '/canhbao btc > 100000', chat: { id: 'x'.repeat(65) } },
+        })
+        .expect(400);
+
+      expect(createAlert).not.toHaveBeenCalled();
+      expect(sendTextMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /cron/price-alerts', () => {
+    it('rejects a call with no secret or a wrong secret, evaluating nothing (AC16)', async () => {
+      await request(app.getHttpServer()).get('/cron/price-alerts').expect(401);
+      await request(app.getHttpServer())
+        .get('/cron/price-alerts')
+        .set('x-cron-secret-token', 'wrong-secret-0000')
+        .expect(401);
+      // The digest secret must not open the price-alert endpoint (separate secrets).
+      await request(app.getHttpServer())
+        .get('/cron/price-alerts')
+        .set('x-cron-secret-token', process.env.CRON_SECRET_TOKEN as string)
+        .expect(401);
+
+      expect(acquireRunLock).not.toHaveBeenCalled();
+      expect(listAll).not.toHaveBeenCalled();
+    });
+
+    it('runs the check for the scheduler secret sent as a header', async () => {
+      acquireRunLock.mockResolvedValue(false);
+
+      await request(app.getHttpServer())
+        .get('/cron/price-alerts')
+        .set('x-cron-secret-token', process.env.PRICE_ALERTS_CRON_SECRET as string)
+        .expect(200, { ok: true });
+
+      expect(acquireRunLock).toHaveBeenCalled();
+    });
   });
 });

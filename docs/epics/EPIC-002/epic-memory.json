@@ -1,0 +1,74 @@
+{
+  "epic": "EPIC-002",
+  "summary": "Price alerts (/canhbao). intent/spec/plan approved 2026-09-23; implemented on feature/epic-002-price-alerts (pushed, PR to open manually - no gh CLI). implement.md awaiting review. Not deployed. Artifacts in Vietnamese.",
+  "entries": [
+    {
+      "at": "2026-09-23T03:57:13.774Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Latency target relaxed by originator: ~1-2 min end-to-end (check cadence <=60s), not <1 min."
+    },
+    {
+      "at": "2026-09-23T03:57:13.774Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Fire mode: re-arm (not one-shot). PO added 0.5% re-arm buffer + 15-min per-alert cooldown against spam."
+    },
+    {
+      "at": "2026-09-23T03:57:13.774Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Max 10 alerts per chat; any chat, any /gia-supported coin, no /dangky required."
+    },
+    {
+      "at": "2026-09-23T03:57:13.774Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "Vercel Hobby plan: Vercel Cron is daily-only -> per-minute trigger via cron-job.org (free, custom header secret). Approved by originator."
+    },
+    {
+      "at": "2026-09-23T03:57:13.774Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Alerts stored in Upstash Redis (Vercel Marketplace, KV_REST_API_URL/TOKEN), NOT Postgres: per-minute queries would keep Neon awake ~180 CU-h/month vs 100 CU-h free cap. Approved by originator."
+    },
+    {
+      "at": "2026-09-23T03:57:13.774Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "Least certain risk: Vercel Hobby 4h Active CPU/month (~330ms CPU per run budget). Must measure usage 48h after deploy."
+    },
+    {
+      "at": "2026-09-23T04:42:18.775Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Implemented in 7 commits (3e51687..44a0087). Unit 123 (was 63), e2e 20 + 5 opt-in real-Redis integration tests (pass locally via redis:7-alpine + hiett/serverless-redis-http)."
+    },
+    {
+      "at": "2026-09-23T04:42:18.775Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "Plan was wrong that AllExceptionsFilter always answers /webhook with 200: DTO validation errors stay 400 (documented contract). >64-char chat.id -> 400. ARCHITECTURE.md wording fixed."
+    },
+    {
+      "at": "2026-09-23T04:42:18.775Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "Still unproven until production: AC18 (run gap p95 <= 90s over 24h) and the Vercel Hobby 4h CPU/month budget. Use npm run alerts:report + Vercel Usage after re-enabling cron-job.org."
+    },
+    {
+      "at": "2026-09-23T04:42:18.775Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "context",
+      "text": "Git Bash curl on Windows mangles UTF-8 (/cảnhbáo looks like unknown command). Use a UTF-8 client (node fetch) for manual webhook tests."
+    }
+  ],
+  "reflections": [
+    {
+      "at": "2026-09-23T04:42:18.775Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "text": "Writing implement.md Known gaps surfaced a real double-send risk (delivery log written before fired state); fixed before handing off. Next time: walk the failure ordering of every multi-write step while coding, not only when documenting."
+    }
+  ],
+  "updatedAt": "2026-09-23T04:42:18.775Z"
+}
