@@ -1,6 +1,6 @@
 {
   "epic": "EPIC-002",
-  "summary": "Price alerts (/canhbao). intent/spec/plan approved 2026-09-23; implemented on feature/epic-002-price-alerts (pushed, PR to open manually - no gh CLI). implement.md awaiting review. Not deployed. Artifacts in Vietnamese.",
+  "summary": "Price alerts (/canhbao). All phases done through review; PR #3 merged (ec29a84) and deployed to production 2026-09-23. Pending: AC18 (24h run-gap), Vercel CPU budget, success metric. Artifacts in Vietnamese.",
   "entries": [
     {
       "at": "2026-09-23T03:57:13.774Z",
@@ -61,6 +61,30 @@
       "author": "Thach <vnsnake123@gmail.com>",
       "kind": "context",
       "text": "Git Bash curl on Windows mangles UTF-8 (/cảnhbáo looks like unknown command). Use a UTF-8 client (node fetch) for manual webhook tests."
+    },
+    {
+      "at": "2026-09-23T06:56:33.936Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "verify: rev1 18/19 + 8 defects; rev2 17/19 (5-min backoff broke AC13); rev3 18/19 pass 0 fail after backoff only from 3rd consecutive failure. AC18 needs 24h production."
+    },
+    {
+      "at": "2026-09-23T06:56:33.936Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "review: ship-with-follow-ups. Fixed before merge: separate PRICE_ALERTS_CRON_SECRET (lives at cron-job.org, must not unlock the digest); deploy-ordering doc."
+    },
+    {
+      "at": "2026-09-23T06:56:33.936Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "context",
+      "text": "Vercel project is NOT git-connected: merging to master does not deploy; owner runs `npx vercel deploy --prod` (Claude Code auto mode blocks prod deploys)."
+    },
+    {
+      "at": "2026-09-23T06:56:33.936Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Deployed 2026-09-23 (dpl_32gfamuSewdv3caw4ngipJeJCoJB). Smoke: /health ok; /cron/price-alerts 401 no/wrong secret, 200 with PRICE_ALERTS_CRON_SECRET; /cron/daily-digest and /webhook 401 without secret."
     }
   ],
   "reflections": [
@@ -68,7 +92,12 @@
       "at": "2026-09-23T04:42:18.775Z",
       "author": "Thach <vnsnake123@gmail.com>",
       "text": "Writing implement.md Known gaps surfaced a real double-send risk (delivery log written before fired state); fixed before handing off. Next time: walk the failure ordering of every multi-write step while coding, not only when documenting."
+    },
+    {
+      "at": "2026-09-23T06:56:33.936Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "text": "The independent verifier caught a regression introduced while fixing its own finding (backoff vs AC13). Next time: when a fix changes retry/timing semantics, re-read the exact AC wording before coding it."
     }
   ],
-  "updatedAt": "2026-09-23T04:42:18.775Z"
+  "updatedAt": "2026-09-23T06:56:33.936Z"
 }

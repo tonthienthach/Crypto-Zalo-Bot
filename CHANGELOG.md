@@ -8,7 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Price alerts (Initiative 2 / EPIC-002, see `docs/ROADMAP.md`): new
+- Price alerts (Initiative 2 / EPIC-002, deployed to production 2026-09-23;
+  see `docs/ROADMAP.md`): new
   `/canhbao <coin> > <price>` / `<` command, plus `/canhbao` (list) and
   `/canhbao xoa <n>` (delete); max 10 alerts per chat. A new
   `/cron/price-alerts` check, triggered every minute by cron-job.org, fires a
