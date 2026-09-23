@@ -13,7 +13,7 @@
     "aidlc-native-reviewer",
     "aidlc-native-operator"
   ],
-  "currentStep": 5,
+  "currentStep": 6,
   "status": "in_progress",
   "strict_mode": true,
   "createdAt": "2026-09-23T03:23:25.000Z",
@@ -116,13 +116,21 @@
     {
       "agent": "aidlc-native-reviewer",
       "name": "review",
-      "status": "in_progress",
+      "status": "approved",
       "revision": 1,
-      "runStatus": "awaiting_work",
+      "runStatus": "approved",
       "startedAt": "2026-09-23T05:15:31.424Z",
-      "finishedAt": null,
-      "history": [],
-      "artifactsProduced": []
+      "finishedAt": "2026-09-23T05:47:20.309Z",
+      "history": [
+        {
+          "at": "2026-09-23T05:47:20.309Z",
+          "action": "approved",
+          "note": "ship-with-follow-ups; should-fix #1 (separate scheduler secret) and #2 (deploy ordering doc) resolved in 8699422."
+        }
+      ],
+      "artifactsProduced": [
+        "docs/epics/EPIC-002/artifacts/review.md"
+      ]
     },
     {
       "agent": "aidlc-native-operator",
@@ -136,5 +144,5 @@
       "artifactsProduced": []
     }
   ],
-  "updatedAt": "2026-09-23T05:15:31.424Z"
+  "updatedAt": "2026-09-23T05:47:20.309Z"
 }
