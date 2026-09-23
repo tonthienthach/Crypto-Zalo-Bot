@@ -196,8 +196,10 @@ headers):
      -H "X-Cron-Secret-Token: <CRON_SECRET_TOKEN value>"
    # -> {"ok":true}; a missing/wrong secret -> 401
    ```
-4. After 24h, run the read-only report (after `vercel env pull .env`):
+4. After 24h, run the read-only report. Upstash is attached to Production +
+   Preview only, so pull the **production** values:
    ```bash
+   vercel env pull .env --environment=production
    npm run alerts:report
    ```
    It prints the gap between runs (p95 must be ≤ 90s), run duration, and

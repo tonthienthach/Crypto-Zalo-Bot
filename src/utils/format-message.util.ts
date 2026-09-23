@@ -166,13 +166,21 @@ export function formatServiceUnavailableReply(): string {
 
 const ALERT_SYNTAX_EXAMPLE = 'Ví dụ: /canhbao btc > 100000 hoặc /canhbao eth < 2000';
 
+/** Like USD_FORMATTER, but shows all 8 decimals /canhbao accepts, so tiny thresholds don't read as $0.00. */
+const ALERT_THRESHOLD_FORMATTER = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 8,
+});
+
 /** "BTC > $100,000.00" — the alert condition as shown to the user. */
 function formatAlertCondition(
   symbol: string,
   direction: AlertDirection,
   threshold: number,
 ): string {
-  return `${symbol.toUpperCase()} ${direction === 'above' ? '>' : '<'} ${formatUsd(threshold)}`;
+  return `${symbol.toUpperCase()} ${direction === 'above' ? '>' : '<'} ${ALERT_THRESHOLD_FORMATTER.format(threshold)}`;
 }
 
 /** Reply for a successful "/canhbao <coin> > <price>". */

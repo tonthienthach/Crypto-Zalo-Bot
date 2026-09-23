@@ -12,6 +12,7 @@ import {
 import { isConditionMet } from './price-alert-evaluator';
 import {
   MAX_ALERTS_PER_CHAT,
+  MAX_DELIVERY_FAILURE_LOG_ENTRIES,
   MAX_DELIVERY_LOG_ENTRIES,
   MAX_RUN_LOG_ENTRIES,
   REDIS_KEYS,
@@ -43,6 +44,14 @@ export class AlertNotFoundError extends Error {
   }
 }
 
+/** Deletes the run lock only if it still holds this run's token (compare-and-delete). */
+const RELEASE_LOCK_SCRIPT = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+end
+return 0
+`;
+
 export interface CreatedAlert {
   alert: PriceAlert;
   /** 1-based position in the chat's "/canhbao" list. */
@@ -61,7 +70,6 @@ export interface CreatedAlert {
 @Injectable()
 export class PriceAlertsService {
   private readonly redis: Redis;
-  private readonly runLockToken = randomUUID();
 
   constructor(
     private readonly configService: ConfigService,
@@ -158,9 +166,21 @@ export class PriceAlertsService {
     return result === 'OK';
   }
 
-  /** Appends to the capped delivery log (spec EPIC-002-FR12). */
+  /**
+   * Appends to the capped delivery log (spec EPIC-002-FR12). Successes and
+   * failures go to separate lists, so a chat whose sends keep failing can't
+   * push the successful deliveries the success metric needs out of the log.
+   */
   async recordDelivery(delivery: AlertDelivery): Promise<void> {
-    await this.pushCapped(REDIS_KEYS.deliveries, delivery, MAX_DELIVERY_LOG_ENTRIES);
+    if (delivery.delivered) {
+      await this.pushCapped(REDIS_KEYS.deliveries, delivery, MAX_DELIVERY_LOG_ENTRIES);
+    } else {
+      await this.pushCapped(
+        REDIS_KEYS.deliveryFailures,
+        delivery,
+        MAX_DELIVERY_FAILURE_LOG_ENTRIES,
+      );
+    }
   }
 
   /** Appends to the capped run log (spec EPIC-002-NFR08 / AC18). */
@@ -172,6 +192,10 @@ export class PriceAlertsService {
     return this.redis.lrange<AlertDelivery>(REDIS_KEYS.deliveries, 0, -1);
   }
 
+  async listDeliveryFailures(): Promise<AlertDelivery[]> {
+    return this.redis.lrange<AlertDelivery>(REDIS_KEYS.deliveryFailures, 0, -1);
+  }
+
   async listRuns(): Promise<AlertRunSummary[]> {
     return this.redis.lrange<AlertRunSummary>(REDIS_KEYS.runs, 0, -1);
   }
@@ -179,18 +203,22 @@ export class PriceAlertsService {
   /**
    * Takes the check's run lock, so two overlapping scheduler calls never
    * evaluate the same alert twice (spec EPIC-002-AC14). The TTL frees the
-   * lock if a run dies before releasing it.
+   * lock if a run dies before releasing it. Resolves this run's token, or
+   * null when another run holds the lock. The token is per call, not per
+   * instance, because one warm instance can serve overlapping requests.
    */
-  async acquireRunLock(): Promise<boolean> {
-    const result = await this.redis.set(REDIS_KEYS.runLock, this.runLockToken, {
+  async acquireRunLock(): Promise<string | null> {
+    const token = randomUUID();
+    const result = await this.redis.set(REDIS_KEYS.runLock, token, {
       nx: true,
       ex: RUN_LOCK_TTL_SECONDS,
     });
-    return result === 'OK';
+    return result === 'OK' ? token : null;
   }
 
-  async releaseRunLock(): Promise<void> {
-    await this.redis.del(REDIS_KEYS.runLock);
+  /** Releases the lock only if it is still ours — never another run's lock after our TTL expired. */
+  async releaseRunLock(token: string): Promise<void> {
+    await this.redis.eval(RELEASE_LOCK_SCRIPT, [REDIS_KEYS.runLock], [token]);
   }
 
   private async loadAlerts(ids: (string | number)[]): Promise<PriceAlert[]> {

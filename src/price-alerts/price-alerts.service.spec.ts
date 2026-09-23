@@ -25,6 +25,7 @@ const mockRedis = {
   mget: jest.fn(),
   set: jest.fn(),
   del: jest.fn(),
+  eval: jest.fn(),
   multi: jest.fn(() => mockTx),
 };
 
@@ -189,12 +190,49 @@ describe('PriceAlertsService', () => {
     it('acquireRunLock uses SET NX with a TTL (AC14)', async () => {
       mockRedis.set.mockResolvedValueOnce('OK').mockResolvedValueOnce(null);
 
-      await expect(service.acquireRunLock()).resolves.toBe(true);
-      await expect(service.acquireRunLock()).resolves.toBe(false);
+      const token = await service.acquireRunLock();
+      expect(typeof token).toBe('string');
+      await expect(service.acquireRunLock()).resolves.toBeNull();
       expect(mockRedis.set).toHaveBeenCalledWith('price-alerts:run-lock', expect.any(String), {
         nx: true,
         ex: 120,
       });
+    });
+
+    it('releases the run lock with a compare-and-delete on its own token (AC14)', async () => {
+      await service.releaseRunLock('tok-1');
+
+      expect(mockRedis.eval).toHaveBeenCalledWith(
+        expect.stringContaining('redis.call("GET", KEYS[1]) == ARGV[1]'),
+        ['price-alerts:run-lock'],
+        ['tok-1'],
+      );
+    });
+
+    it('logs failed deliveries separately so they cannot evict successful ones (FR12)', async () => {
+      const delivery = {
+        alertId: 1,
+        chatId: 'chat-1',
+        symbol: 'btc',
+        direction: 'above' as const,
+        threshold: 100000,
+        priceUsd: 100200,
+        attemptedAt: '2026-09-23T01:00:00.000Z',
+      };
+
+      await service.recordDelivery({ ...delivery, delivered: false });
+      await service.recordDelivery({ ...delivery, delivered: true });
+
+      expect(mockTx.lpush).toHaveBeenNthCalledWith(
+        1,
+        'price-alerts:delivery-failures',
+        expect.objectContaining({ delivered: false }),
+      );
+      expect(mockTx.lpush).toHaveBeenNthCalledWith(
+        2,
+        'price-alerts:deliveries',
+        expect.objectContaining({ delivered: true }),
+      );
     });
 
     it('caps the delivery and run logs with LTRIM (AC17)', async () => {
@@ -204,6 +242,7 @@ describe('PriceAlertsService', () => {
         fired: 1,
         failed: 0,
         rearmed: 0,
+        deferred: 0,
         durationMs: 420,
         driftMs: 800,
       });

@@ -37,7 +37,7 @@ Toàn bộ bộ kiểm tra được chạy lại lần cuối sau bước 7:
 
 ```
 $ npm run lint        -> exit 0
-$ npm test            -> Test Suites: 10 passed, 10 total / Tests: 123 passed, 123 total   (mốc trước epic: 63)
+$ npm test            -> Test Suites: 10 passed, 10 total / Tests: 129 passed, 129 total   (mốc trước epic: 63; rev 1: 123)
 $ npm run test:e2e    -> Test Suites: 1 skipped, 1 passed / Tests: 5 skipped, 20 passed, 25 total   (mốc: 11)
 $ REDIS_INT_URL=http://localhost:8079 REDIS_INT_TOKEN=local \
     npx jest --config ./test/jest-e2e.json price-alerts.redis
@@ -234,6 +234,17 @@ Webhook thật (client UTF-8) gửi `/cảnhbáo eth < 1,000.5` → `/canhbao` �
 5. **Bảng lệnh trong `docs/API.md` được bổ sung luôn `/dangky`, `/watchlist`, `/huy`.** Ba lệnh này thiếu từ EPIC-001, và cần có để ghi rõ AC19 ("`/huy` không ảnh hưởng cảnh báo").
 6. **Cập nhật state `fired` trước khi ghi delivery log.** Khi viết mục Known gaps, mình thấy thứ tự ban đầu (ghi log rồi mới cập nhật state) có thể gửi trùng một tin nếu ghi log lỗi sau khi đã gửi thành công. Đã đổi thứ tự và thêm test `marks a delivered alert fired even if the delivery log write then fails (no double send)`. Chạy lại: unit 123/123, e2e 20 pass + 5 skip, build và lint sạch.
 
+**Revision 2 (2026-09-23), sửa theo `verify.md` rev 1.** Verify độc lập ra 18/19 pass. AC18 untested vì cần 24 giờ production, và verify tìm thêm các lỗi sau. Mình sửa từng lỗi:
+
+7. **NFR02 (lượt chạy ≤ 15 giây) có nguy cơ vỡ, verify defect #1.** Các tin được gửi tuần tự, mỗi tin có timeout 8 giây, nên chỉ cần 2 lần gửi bị treo là quá 15 giây. Đã thêm `RUN_SEND_BUDGET_MS = 6_000`: khi lượt chạy đã quá 6 giây thì không bắt đầu gửi tin mới nữa, các cảnh báo còn lại vẫn đang canh và được gửi ở lượt sau. Số cảnh báo bị hoãn ghi vào trường mới `deferred`. Test: `defers remaining sends once the 6s send budget is spent...`.
+8. **Log gửi thất bại đẩy mất log thành công, verify defect #2.** Một chat chặn bot từng có thể sinh khoảng 1.440 bản ghi lỗi mỗi ngày trong một list chỉ giữ 1.000 mục. Đã sửa hai chỗ: tách thất bại sang list riêng `price-alerts:delivery-failures`, và thêm `ALERT_RETRY_BACKOFF_MS = 5 phút` qua trường mới `lastFailedAt` (sau một lần gửi lỗi thì 5 phút sau mới thử lại). Test: `backs off 5 minutes after a failed send...`, `logs failed deliveries separately...`, cùng integration với Redis thật.
+9. **Mở khoá không kiểm tra chủ sở hữu, verify defect #3.** Đây là amendment so với plan §7, vốn ghi "không dùng Lua". Khoá giờ dùng một token mới cho mỗi lượt chạy (không dùng chung theo instance, vì một instance ấm có thể xử lý nhiều request chồng nhau), và được mở bằng một script Lua compare-and-delete qua `EVAL`. Integration với Redis thật xác nhận: token cũ không xoá được khoá của lượt đang giữ, còn token đúng thì xoá được.
+10. **Mức giá nhỏ bị hiển thị thành `$0.00`, verify defect #6.** Đã thêm `ALERT_THRESHOLD_FORMATTER` hiển thị tối đa 8 chữ số thập phân.
+11. **`driftMs` không có dấu, verify defect #7.** Giờ tính theo mốc phút gần nhất: sớm 100 ms thì ghi `-100`. Test với đồng hồ giả.
+12. **Không sửa:** defect #4 (quota CoinGecko). Mình đã kiểm tra trên Vercel: production **không có** `COINGECKO_API_KEY`, tức là dùng API công khai, không có hạn mức theo tháng, nên con số 10k/tháng của gói Demo không áp dụng. Defect #5 (400 cho chat id quá dài) giữ nguyên theo §4 mục 1. Defect #8 (gửi trùng nếu gửi thành công rồi mà `updateState` lỗi) được chấp nhận: xem §6.
+
+Chạy lại sau revision 2: `npm test` 129/129, `npm run test:e2e` 20 pass + 5 skip, integration với Redis thật 5/5, lint 0 lỗi, build exit 0.
+
 ## 5. Discovered work
 
 | Item | Where it went |
@@ -246,6 +257,6 @@ Webhook thật (client UTF-8) gửi `/cảnhbáo eth < 1,000.5` → `/canhbao` �
 
 - **AC18 và ngân sách Vercel Hobby (4 giờ CPU/tháng) chưa được đo.** Đây là rủi ro plan đánh giá là ít chắc chắn nhất. Chỉ đo được sau deploy: bật lại job cron-job.org, chờ 24–48 giờ, rồi chạy `npm run alerts:report` và xem Vercel → Usage.
 - **Giới hạn 10 cảnh báo không atomic:** hai lệnh tạo đồng thời của cùng một chat có thể đẩy lên 11. Đây là rủi ro đã chấp nhận trong plan, và có ghi chú trong code.
-- **`releaseRunLock` xoá khoá mà không kiểm tra token.** Nếu một lượt chạy lâu hơn TTL 120 giây, nó có thể xoá khoá của lượt sau. Khả năng gần như bằng 0 (lượt thật chỉ khoảng 20–600 ms), nhưng reviewer nên biết.
+- **Gửi trùng hiếm gặp:** nếu Zalo đã nhận tin nhưng lệnh `updateState` (một lệnh Redis) lỗi ngay sau đó, cảnh báo vẫn đang canh và lượt sau có thể gửi lại một lần. Mình chấp nhận rủi ro này vì cần Redis lỗi đúng giữa hai lệnh, và cái giá là một tin thừa, không mất tin.
 - **`PriceAlertsService.create` gọi CoinGecko lúc tạo cảnh báo,** nên mỗi lệnh `/canhbao` tạo mới tốn thêm 1 request vào quota dùng chung với `/gia`.
 - Reviewer nên xem kỹ nhất `price-alerts.controller.ts`, đặc biệt thứ tự "gửi → cập nhật state `fired` → ghi delivery log". Thứ tự này là cố ý (xem §4 mục 6): nếu ghi log lỗi thì chỉ mất một dòng log, cảnh báo không bị gửi trùng.

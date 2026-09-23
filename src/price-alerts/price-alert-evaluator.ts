@@ -1,5 +1,9 @@
 import { AlertDirection, PriceAlert } from './interfaces/price-alert.interface';
-import { ALERT_COOLDOWN_MS, REARM_BUFFER_RATIO } from './price-alerts.constants';
+import {
+  ALERT_COOLDOWN_MS,
+  ALERT_RETRY_BACKOFF_MS,
+  REARM_BUFFER_RATIO,
+} from './price-alerts.constants';
 
 export type AlertAction = 'fire' | 'rearm' | 'none';
 
@@ -17,7 +21,8 @@ export function isConditionMet(
  * Pure — no I/O — so the fire / re-arm / cooldown rules (spec EPIC-002-FR05
  * to FR07) are unit-testable on their own:
  *
- * - `armed` + condition met + outside the cooldown -> `fire`
+ * - `armed` + condition met + outside the cooldown + outside the retry
+ *   backoff after a failed send -> `fire`
  * - `fired` + price back past the threshold by REARM_BUFFER_RATIO -> `rearm`
  *   (silently — no message)
  * - anything else -> `none`
@@ -27,8 +32,10 @@ export function evaluateAlert(alert: PriceAlert, priceUsd: number, now: Date): A
     if (!isConditionMet(alert.direction, alert.threshold, priceUsd)) {
       return 'none';
     }
-    const lastFiredMs = alert.lastFiredAt ? Date.parse(alert.lastFiredAt) : null;
-    if (lastFiredMs !== null && now.getTime() - lastFiredMs < ALERT_COOLDOWN_MS) {
+    if (
+      withinWindow(alert.lastFiredAt, now, ALERT_COOLDOWN_MS) ||
+      withinWindow(alert.lastFailedAt, now, ALERT_RETRY_BACKOFF_MS)
+    ) {
       return 'none';
     }
     return 'fire';
@@ -39,4 +46,8 @@ export function evaluateAlert(alert: PriceAlert, priceUsd: number, now: Date): A
       ? priceUsd <= alert.threshold * (1 - REARM_BUFFER_RATIO)
       : priceUsd >= alert.threshold * (1 + REARM_BUFFER_RATIO);
   return rearmed ? 'rearm' : 'none';
+}
+
+function withinWindow(isoTimestamp: string | null | undefined, now: Date, windowMs: number) {
+  return isoTimestamp ? now.getTime() - Date.parse(isoTimestamp) < windowMs : false;
 }

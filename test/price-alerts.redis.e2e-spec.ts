@@ -89,12 +89,17 @@ describeIfRedis('PriceAlertsService against a real Redis (integration)', () => {
   });
 
   it('lets only one run hold the lock at a time (AC14)', async () => {
-    await expect(service.acquireRunLock()).resolves.toBe(true);
-    await expect(service.acquireRunLock()).resolves.toBe(false);
+    const token = await service.acquireRunLock();
+    expect(token).toEqual(expect.any(String));
+    await expect(service.acquireRunLock()).resolves.toBeNull();
     expect(await redis.ttl('price-alerts:run-lock')).toBeGreaterThan(0);
 
-    await service.releaseRunLock();
-    await expect(service.acquireRunLock()).resolves.toBe(true);
+    // A stale token (a run that outlived its TTL) must not free the current holder lock.
+    await service.releaseRunLock('someone-elses-token');
+    expect(await redis.get('price-alerts:run-lock')).toBe(token);
+
+    await service.releaseRunLock(token!);
+    await expect(service.acquireRunLock()).resolves.toEqual(expect.any(String));
   });
 
   it('keeps delivery and run logs readable and capped (AC17)', async () => {
@@ -105,10 +110,21 @@ describeIfRedis('PriceAlertsService against a real Redis (integration)', () => {
         fired: 0,
         failed: 0,
         rearmed: 0,
+        deferred: 0,
         durationMs: 10,
         driftMs: 0,
       });
     }
+    await service.recordDelivery({
+      alertId: 2,
+      chatId: 'chat-blocked',
+      symbol: 'btc',
+      direction: 'above',
+      threshold: 100000,
+      priceUsd: 100200,
+      delivered: false,
+      attemptedAt: '2026-09-23T01:00:00.000Z',
+    });
     await service.recordDelivery({
       alertId: 1,
       chatId: 'chat-a',
@@ -125,6 +141,9 @@ describeIfRedis('PriceAlertsService against a real Redis (integration)', () => {
     expect(runs[0].evaluated).toBe(1444);
     expect(await service.listDeliveries()).toEqual([
       expect.objectContaining({ chatId: 'chat-a', delivered: true, priceUsd: 100200 }),
+    ]);
+    expect(await service.listDeliveryFailures()).toEqual([
+      expect.objectContaining({ chatId: 'chat-blocked', delivered: false }),
     ]);
   }, 60_000);
 });

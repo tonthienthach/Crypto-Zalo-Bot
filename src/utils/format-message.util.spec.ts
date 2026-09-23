@@ -129,6 +129,11 @@ describe('format-message.util', () => {
       expect(message).toContain('tự bật lại');
     });
 
+    it('shows tiny thresholds with all 8 decimals instead of $0.00', () => {
+      const tiny: PriceAlert = { ...alert, symbol: 'pepe', threshold: 0.00000123 };
+      expect(formatAlertTriggeredMessage(tiny, 0.0000013, 25400)).toContain('PEPE > $0.00000123');
+    });
+
     it('confirms a created alert with its position and the current price', () => {
       const reply = formatAlertCreatedReply(alert, 3, 95000, 25400);
       expect(reply).toContain('#3');

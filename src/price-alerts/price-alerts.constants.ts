@@ -32,6 +32,7 @@ export const REDIS_KEYS = {
   chatIds: (chatId: string) => `price-alerts:chat:${chatId}`,
   runLock: 'price-alerts:run-lock',
   deliveries: 'price-alerts:deliveries',
+  deliveryFailures: 'price-alerts:delivery-failures',
   runs: 'price-alerts:runs',
 } as const;
 
@@ -42,8 +43,26 @@ export const REDIS_KEYS = {
  */
 export const RUN_LOCK_TTL_SECONDS = 120;
 
-/** Delivery log kept in Redis, newest first — enough to cover the 30-day success metric. */
+/**
+ * After a failed send, an alert is not retried for this long. A chat that
+ * blocked the bot would otherwise cost an 8s-timeout Zalo call every minute.
+ */
+export const ALERT_RETRY_BACKOFF_MS = 5 * 60_000;
+
+/**
+ * No new sends are started once a run has been going this long; the
+ * remaining due alerts stay armed for the next run. With Zalo's 8s send
+ * timeout this keeps a run under the 15s target (spec EPIC-002-NFR02).
+ */
+export const RUN_SEND_BUDGET_MS = 6_000;
+
+/**
+ * Successful deliveries kept in Redis, newest first — enough to cover the
+ * 30-day success metric. Failures go to a separate capped list so a chat
+ * that keeps failing can't push successful deliveries out.
+ */
 export const MAX_DELIVERY_LOG_ENTRIES = 1000;
+export const MAX_DELIVERY_FAILURE_LOG_ENTRIES = 1000;
 
 /** Run summaries kept in Redis, newest first — 24h at one run per minute (spec EPIC-002-AC18). */
 export const MAX_RUN_LOG_ENTRIES = 1440;

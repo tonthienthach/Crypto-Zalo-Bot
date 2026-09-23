@@ -35,7 +35,7 @@ describe('PriceAlertsController', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    alerts.acquireRunLock.mockResolvedValue(true);
+    alerts.acquireRunLock.mockResolvedValue('lock-token');
     alerts.releaseRunLock.mockResolvedValue(undefined);
     alerts.updateState.mockResolvedValue(true);
     alerts.recordDelivery.mockResolvedValue(undefined);
@@ -83,7 +83,7 @@ describe('PriceAlertsController', () => {
         driftMs: expect.any(Number),
       }),
     );
-    expect(alerts.releaseRunLock).toHaveBeenCalled();
+    expect(alerts.releaseRunLock).toHaveBeenCalledWith('lock-token');
   });
 
   it('re-arms silently without sending (AC04)', async () => {
@@ -122,8 +122,12 @@ describe('PriceAlertsController', () => {
     await controller.checkPriceAlerts();
 
     expect(sendTextMessage).toHaveBeenCalledWith('chat-2', expect.any(String));
-    expect(alerts.updateState).toHaveBeenCalledTimes(1);
-    expect(alerts.updateState).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }));
+    expect(alerts.updateState).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 1, state: 'armed', lastFailedAt: expect.any(String) }),
+    );
+    expect(alerts.updateState).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 2, state: 'fired', lastFailedAt: null }),
+    );
     expect(alerts.recordDelivery).toHaveBeenCalledWith(
       expect.objectContaining({ alertId: 1, delivered: false }),
     );
@@ -151,8 +155,44 @@ describe('PriceAlertsController', () => {
     expect(alerts.updateState).toHaveBeenCalledWith(expect.objectContaining({ state: 'fired' }));
   });
 
+  describe('with a controlled clock', () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('defers remaining sends once the 6s send budget is spent, keeping the run under 15s (NFR02)', async () => {
+      jest.useFakeTimers({ now: new Date('2026-09-23T03:00:00.000Z'), doNotFake: ['nextTick'] });
+      alerts.listAll.mockResolvedValue([
+        alert({ id: 1, chatId: 'chat-1' }),
+        alert({ id: 2, chatId: 'chat-2' }),
+        alert({ id: 3, chatId: 'chat-3' }),
+      ]);
+      getPricesBySymbols.mockResolvedValue([{ symbol: 'btc', priceUsd: 100200 }]);
+      // The first send hangs for 7s (under Zalo's 8s timeout).
+      sendTextMessage.mockImplementationOnce(async () => {
+        jest.setSystemTime(Date.now() + 7_000);
+        return true;
+      });
+
+      await controller.checkPriceAlerts();
+
+      expect(sendTextMessage).toHaveBeenCalledTimes(1);
+      expect(alerts.updateState).toHaveBeenCalledTimes(1);
+      expect(alerts.recordRun).toHaveBeenCalledWith(
+        expect.objectContaining({ fired: 1, deferred: 2 }),
+      );
+    });
+
+    it('records drift signed from the nearest minute (100ms early -> -100)', async () => {
+      jest.useFakeTimers({ now: new Date('2026-09-23T03:00:59.900Z'), doNotFake: ['nextTick'] });
+      alerts.listAll.mockResolvedValue([]);
+
+      await controller.checkPriceAlerts();
+
+      expect(alerts.recordRun).toHaveBeenCalledWith(expect.objectContaining({ driftMs: -100 }));
+    });
+  });
+
   it('skips the whole run when another run holds the lock (AC14)', async () => {
-    alerts.acquireRunLock.mockResolvedValue(false);
+    alerts.acquireRunLock.mockResolvedValue(null);
 
     await expect(controller.checkPriceAlerts()).resolves.toEqual({ ok: true });
 

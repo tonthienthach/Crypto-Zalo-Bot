@@ -6,6 +6,7 @@ import { formatAlertTriggeredMessage } from '../utils/format-message.util';
 import { ZaloService } from '../zalo/zalo.service';
 import { AlertRunSummary, PriceAlert } from './interfaces/price-alert.interface';
 import { evaluateAlert } from './price-alert-evaluator';
+import { RUN_SEND_BUDGET_MS } from './price-alerts.constants';
 import { PriceAlertsService } from './price-alerts.service';
 
 /**
@@ -33,11 +34,11 @@ export class PriceAlertsController {
   @HttpCode(HttpStatus.OK)
   async checkPriceAlerts(): Promise<{ ok: true }> {
     const startedAt = new Date();
-    let locked = false;
+    let lockToken: string | null = null;
 
     try {
-      locked = await this.priceAlertsService.acquireRunLock();
-      if (!locked) {
+      lockToken = await this.priceAlertsService.acquireRunLock();
+      if (!lockToken) {
         this.logger.warn('Price-alert check skipped: a previous run still holds the lock');
         return { ok: true };
       }
@@ -50,8 +51,8 @@ export class PriceAlertsController {
         `Price-alert check failed: ${error instanceof Error ? error.stack : String(error)}`,
       );
     } finally {
-      if (locked) {
-        await this.priceAlertsService.releaseRunLock().catch((error: unknown) => {
+      if (lockToken) {
+        await this.priceAlertsService.releaseRunLock(lockToken).catch((error: unknown) => {
           this.logger.error(`Failed to release price-alert run lock: ${String(error)}`);
         });
       }
@@ -69,9 +70,9 @@ export class PriceAlertsController {
       fired: 0,
       failed: 0,
       rearmed: 0,
+      deferred: 0,
       durationMs: 0,
-      // How far past the minute boundary the scheduler actually called us.
-      driftMs: startedAt.getTime() % 60_000,
+      driftMs: signedMinuteDrift(startedAt),
     };
 
     const alerts = await this.priceAlertsService.listAll();
@@ -137,20 +138,24 @@ export class PriceAlertsController {
     if (action !== 'fire') {
       return;
     }
+    if (Date.now() - now.getTime() > RUN_SEND_BUDGET_MS) {
+      // Out of send budget (spec NFR02): stays armed, the next run sends it.
+      summary.deferred++;
+      return;
+    }
 
     const delivered = await this.zaloService.sendTextMessage(
       alert.chatId,
       formatAlertTriggeredMessage(alert, priceUsd, this.usdToVndRate),
     );
-    // Persist "fired" before the delivery log: if logging fails, we lose a
-    // log line rather than leaving a delivered alert armed to fire twice.
-    if (delivered) {
-      await this.priceAlertsService.updateState({
-        ...alert,
-        state: 'fired',
-        lastFiredAt: now.toISOString(),
-      });
-    }
+    // Persist the outcome before the delivery log: if logging fails, we lose
+    // a log line rather than leaving a delivered alert armed to fire twice.
+    // A failed send stays armed but backs off before retrying (spec AC13).
+    await this.priceAlertsService.updateState(
+      delivered
+        ? { ...alert, state: 'fired', lastFiredAt: now.toISOString(), lastFailedAt: null }
+        : { ...alert, lastFailedAt: now.toISOString() },
+    );
     await this.priceAlertsService.recordDelivery({
       alertId: alert.id,
       chatId: alert.chatId,
@@ -163,10 +168,15 @@ export class PriceAlertsController {
     });
 
     if (!delivered) {
-      // Left armed so the next run retries while the condition still holds (spec AC13).
       summary.failed++;
       return;
     }
     summary.fired++;
   }
+}
+
+/** Signed ms from the nearest minute boundary: 100ms early -> -100, not +59,900. */
+function signedMinuteDrift(at: Date): number {
+  const pastMinute = at.getTime() % 60_000;
+  return pastMinute > 30_000 ? pastMinute - 60_000 : pastMinute;
 }

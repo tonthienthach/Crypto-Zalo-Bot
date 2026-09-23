@@ -14,6 +14,8 @@ export interface PriceAlert {
   state: AlertState;
   /** ISO timestamp of the last successful notification, or null if never fired. */
   lastFiredAt: string | null;
+  /** ISO timestamp of the last failed send attempt; cleared on success. Absent on older records. */
+  lastFailedAt?: string | null;
   createdAt: string;
 }
 
@@ -36,7 +38,9 @@ export interface AlertRunSummary {
   fired: number;
   failed: number;
   rearmed: number;
+  /** Due alerts not sent this run because the send budget ran out; they stay armed for the next run. */
+  deferred: number;
   durationMs: number;
-  /** Milliseconds between this run's start and the scheduled minute boundary it belongs to. */
+  /** Signed ms from the nearest minute boundary: -100 means 100ms early, +2000 means 2s late. */
   driftMs: number;
 }

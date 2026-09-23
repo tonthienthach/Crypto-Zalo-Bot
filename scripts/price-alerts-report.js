@@ -58,9 +58,10 @@ async function main() {
   }
   const redis = new Redis({ url: env.KV_REST_API_URL, token: env.KV_REST_API_TOKEN });
 
-  const [runs, deliveries, alertCount] = await Promise.all([
+  const [runs, successes, failures, alertCount] = await Promise.all([
     redis.lrange('price-alerts:runs', 0, -1),
     redis.lrange('price-alerts:deliveries', 0, -1),
+    redis.lrange('price-alerts:delivery-failures', 0, -1),
     redis.scard('price-alerts:ids'),
   ]);
 
@@ -90,16 +91,19 @@ async function main() {
     `Totals over logged runs: fired ${runs.reduce((n, r) => n + r.fired, 0)}, failed ${runs.reduce(
       (n, r) => n + r.failed,
       0,
-    )}, rearmed ${runs.reduce((n, r) => n + r.rearmed, 0)}`,
+    )}, rearmed ${runs.reduce((n, r) => n + r.rearmed, 0)}, deferred ${runs.reduce(
+      (n, r) => n + (r.deferred ?? 0),
+      0,
+    )}`,
   );
 
   const byChat = new Map();
-  for (const delivery of deliveries) {
+  for (const delivery of [...successes, ...failures]) {
     const entry = byChat.get(delivery.chatId) ?? { delivered: 0, failed: 0 };
     entry[delivery.delivered ? 'delivered' : 'failed']++;
     byChat.set(delivery.chatId, entry);
   }
-  console.log(`\nDeliveries logged: ${deliveries.length}`);
+  console.log(`\nDeliveries logged: ${successes.length} delivered, ${failures.length} failed`);
   for (const [chatId, entry] of byChat) {
     console.log(`  ${chatId}: ${entry.delivered} delivered, ${entry.failed} failed`);
   }

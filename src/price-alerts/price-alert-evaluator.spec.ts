@@ -63,6 +63,13 @@ describe('evaluateAlert', () => {
     expect(evaluateAlert(rearmed, 100100, minutesAfter(15))).toBe('fire');
   });
 
+  it('backs off 5 minutes after a failed send before retrying (AC13)', () => {
+    const failed = alert({ lastFailedAt: T.toISOString() });
+    expect(evaluateAlert(failed, 100200, minutesAfter(1))).toBe('none');
+    expect(evaluateAlert(failed, 100200, minutesAfter(4.9))).toBe('none');
+    expect(evaluateAlert(failed, 100200, minutesAfter(5))).toBe('fire');
+  });
+
   it('handles "below" alerts symmetrically (AC06)', () => {
     const below = alert({ symbol: 'eth', direction: 'below', threshold: 2000 });
     expect(evaluateAlert(below, 1990, T)).toBe('fire');

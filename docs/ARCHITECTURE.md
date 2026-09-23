@@ -242,11 +242,19 @@ PriceAlertsController --> run lock (SET NX EX 120) -- already held? skip run
 - **Why cron-job.org, not Vercel Cron**: Vercel Hobby only allows daily cron
   jobs. GitHub Actions `schedule` was rejected for the same reasons the
   digest left it (5-minute minimum, observed firing hours late).
-- **Concurrency**: the run lock means two overlapping scheduler calls never
-  evaluate the same alert twice. Each alert is its own key and state writes
-  use `SET ... XX`, so an alert its chat deleted mid-run is never recreated.
+- **Concurrency**: the run lock (a fresh token per run) means two
+  overlapping scheduler calls never evaluate the same alert twice. It is
+  released with a compare-and-delete Lua script, so a run that outlived the
+  TTL can never free the next run's lock. Each alert is its own key and
+  state writes use `SET ... XX`, so an alert its chat deleted mid-run is
+  never recreated.
 - **Delivery**: an alert is only marked fired once Zalo accepted the
-  message; otherwise it stays armed and the next run retries.
+  message. A failed send stays armed but isn't retried for 5 minutes, and
+  failures go to a separate capped list — so a chat that blocked the bot
+  neither costs a Zalo call every minute nor evicts the successful
+  deliveries the success metric reads.
+- **Run time**: no new send starts once a run is 6s old; the rest stay armed
+  for the next run, so with Zalo's 8s send timeout a run stays under 15s.
 - **Budgets to watch**: every run `MGET`s all alerts, so Upstash's 10 GB/month
   bandwidth becomes the ceiling at roughly 1,000 alerts — revisit the data
   layout before then. Vercel Hobby's 4h Active CPU/month (~330 ms CPU per
