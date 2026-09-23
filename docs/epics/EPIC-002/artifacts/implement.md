@@ -249,6 +249,14 @@ Webhook thật (client UTF-8) gửi `/cảnhbáo eth < 1,000.5` → `/canhbao` �
 14. **Ngân sách gửi tính cả thời gian gọi CoinGecko:** nếu CoinGecko trả lời chậm hơn 6 giây thì mọi cảnh báo đến hạn đều bị hoãn ở mọi lượt. Giờ ngân sách chỉ bắt đầu tính sau khi đã có giá. Test: `does not count a slow price lookup against the send budget`.
 15. **CoinGecko Demo key:** thêm cảnh báo vào `docs/DEPLOYMENT.md` bước 8a.
 
+**Revision 4 (2026-09-23), sửa theo `review.md`:**
+
+16. **Should-fix #1: endpoint dùng chung secret với cron bản tin.** Secret này phải được cất ở cron-job.org (bên thứ ba); nếu lộ thì người khác có thể gửi lại bản tin cho mọi subscriber. Đã thêm `PriceAlertsCronSecretGuard` dùng secret riêng `PRICE_ALERTS_CRON_SECRET` (optional: không đặt thì endpoint trả 401, bot vẫn boot bình thường). `CronSecretGuard` giờ cũng từ chối khi secret cấu hình bị bỏ trống. e2e: gửi secret của digest vào `/cron/price-alerts` → 401.
+17. **Should-fix #2: phải gắn Upstash trước khi deploy.** Tiền đề của review ("merge vào master sẽ tự deploy") không đúng với project này: mình đã kiểm tra trên Vercel, project không nối với Git. Dù vậy `DEPLOYMENT.md` bước 3b giờ ghi rõ thứ tự bắt buộc. Upstash đã được gắn cho Production và Preview (đã kiểm tra trên Vercel).
+18. **Các ghi chú của review:** sửa chỗ mâu thuẫn Prod/Preview/Dev trong docs; sửa câu về độ dài `chat.id` trong ROADMAP; ghi log `No price this run for alert symbols` khi thiếu giá; `matic`/`pol` (hai symbol cùng một CoinGecko id) giờ đều có giá, nhờ tra thêm theo id; `alerts:report` đọc `.env.alerts` riêng để không đè lên `.env` của dev.
+
+Chạy lại sau revision 4: `npm test` 132/132, `npm run test:e2e` 20 pass + 5 skip.
+
 Chạy lại sau revision 2: `npm test` 129/129, `npm run test:e2e` 20 pass + 5 skip, integration với Redis thật 5/5, lint 0 lỗi, build exit 0.
 
 ## 5. Discovered work

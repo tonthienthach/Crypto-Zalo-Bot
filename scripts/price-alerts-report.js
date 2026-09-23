@@ -10,8 +10,9 @@
  *   - deliveries per chat — the intent.md success metric (>=1 alert from a
  *     chat other than the owner delivered within 30 days)
  *
- * Never writes anything. Reads KV_REST_API_URL / KV_REST_API_TOKEN from .env
- * (e.g. after `vercel env pull .env`) or the shell environment.
+ * Never writes anything. Reads KV_REST_API_URL / KV_REST_API_TOKEN from the
+ * shell environment, else `.env.alerts` (a throwaway
+ * `vercel env pull .env.alerts --environment=production`), else `.env`.
  *
  * Usage:
  *   npm run alerts:report
@@ -50,10 +51,16 @@ function seconds(ms) {
 }
 
 async function main() {
-  const envFromFile = loadEnvFile(path.resolve(__dirname, '..', '.env'));
-  const env = { ...envFromFile, ...process.env };
+  // `.env.alerts` (a throwaway `vercel env pull .env.alerts --environment=production`)
+  // wins over the dev `.env`; the shell environment wins over both.
+  const root = path.resolve(__dirname, '..');
+  const env = {
+    ...loadEnvFile(path.join(root, '.env')),
+    ...loadEnvFile(path.join(root, '.env.alerts')),
+    ...process.env,
+  };
   if (!env.KV_REST_API_URL || !env.KV_REST_API_TOKEN) {
-    console.error('KV_REST_API_URL / KV_REST_API_TOKEN missing. Run `vercel env pull .env` first.');
+    console.error('KV_REST_API_URL / KV_REST_API_TOKEN missing. Run `vercel env pull .env.alerts --environment=production` first.');
     process.exit(1);
   }
   const redis = new Redis({ url: env.KV_REST_API_URL, token: env.KV_REST_API_TOKEN });

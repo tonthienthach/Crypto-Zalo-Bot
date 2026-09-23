@@ -1,7 +1,7 @@
 import { All, Controller, HttpCode, HttpStatus, Logger, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CoingeckoService } from '../coingecko/coingecko.service';
-import { CronSecretGuard } from '../common/guards/cron-secret.guard';
+import { PriceAlertsCronSecretGuard } from '../common/guards/price-alerts-cron-secret.guard';
 import { formatAlertTriggeredMessage } from '../utils/format-message.util';
 import { ZaloService } from '../zalo/zalo.service';
 import { AlertRunSummary, PriceAlert } from './interfaces/price-alert.interface';
@@ -13,7 +13,8 @@ import { PriceAlertsService } from './price-alerts.service';
  * Machine-triggered endpoint for the price-alert check. Has no scheduler of
  * its own: Vercel Cron on the Hobby plan only runs daily, so an external
  * scheduler (cron-job.org, see docs/DEPLOYMENT.md) calls this once a minute,
- * authenticated via CronSecretGuard exactly like /cron/daily-digest.
+ * authenticated like /cron/daily-digest but with its own secret
+ * (PriceAlertsCronSecretGuard / PRICE_ALERTS_CRON_SECRET).
  */
 @Controller('cron')
 export class PriceAlertsController {
@@ -30,7 +31,7 @@ export class PriceAlertsController {
   }
 
   @All('price-alerts')
-  @UseGuards(CronSecretGuard)
+  @UseGuards(PriceAlertsCronSecretGuard)
   @HttpCode(HttpStatus.OK)
   async checkPriceAlerts(): Promise<{ ok: true }> {
     const startedAt = new Date();
@@ -83,9 +84,11 @@ export class PriceAlertsController {
 
     // Sequential, not Promise.all, and each alert in its own try/catch: one
     // failed send or bad row never blocks the rest of the run (spec NFR07).
+    const unpriced = new Set<string>();
     for (const alert of alerts) {
       const priceUsd = prices.get(alert.symbol);
       if (priceUsd === undefined) {
+        unpriced.add(alert.symbol);
         continue;
       }
       summary.evaluated++;
@@ -101,6 +104,11 @@ export class PriceAlertsController {
       }
     }
 
+    if (unpriced.size > 0 && prices.size > 0) {
+      // Only when the lookup itself worked — a failed lookup is logged in loadPrices.
+      this.logger.warn(`No price this run for alert symbols: ${[...unpriced].join(', ')}`);
+    }
+
     summary.durationMs = Date.now() - startedAt.getTime();
     return summary;
   }
@@ -109,12 +117,26 @@ export class PriceAlertsController {
    * One price lookup for every distinct coin across all alerts, however many
    * alerts there are (spec NFR03). If the price source is down, returns no
    * prices: nothing fires and no state changes this run (spec AC12).
+   *
+   * Keyed by each alert's own symbol. Two symbols can share one CoinGecko id
+   * (e.g. "matic" and "pol"), and the lookup then returns that coin under
+   * only one of them, so symbols are also matched through their resolved id.
    */
   private async loadPrices(alerts: PriceAlert[]): Promise<Map<string, number>> {
     const symbols = Array.from(new Set(alerts.map((alert) => alert.symbol)));
     try {
       const coins = await this.coingeckoService.getPricesBySymbols(symbols);
-      return new Map(coins.map((coin) => [coin.symbol, coin.priceUsd]));
+      const bySymbol = new Map(coins.map((coin) => [coin.symbol, coin.priceUsd]));
+      const byId = new Map(coins.map((coin) => [coin.id, coin.priceUsd]));
+      const prices = new Map<string, number>();
+      for (const symbol of symbols) {
+        const price =
+          bySymbol.get(symbol) ?? byId.get(this.coingeckoService.resolveSymbolToId(symbol));
+        if (price !== undefined) {
+          prices.set(symbol, price);
+        }
+      }
+      return prices;
     } catch (error) {
       this.logger.error(
         `Price lookup failed for alert check, skipping this run: ${

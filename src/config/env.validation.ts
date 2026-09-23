@@ -48,4 +48,9 @@ export const envValidationSchema = Joi.object({
   // exact names when the integration is attached. See docs/DEPLOYMENT.md.
   KV_REST_API_URL: Joi.string().uri().required(),
   KV_REST_API_TOKEN: Joi.string().required(),
+  // Secret for /cron/price-alerts, sent by the external per-minute scheduler
+  // (cron-job.org). Deliberately separate from CRON_SECRET_TOKEN so a leak
+  // from that third party can't trigger the daily digest. Optional: unset
+  // means the endpoint rejects every call (401), not a failed boot.
+  PRICE_ALERTS_CRON_SECRET: Joi.string().min(16).max(256).optional(),
 });

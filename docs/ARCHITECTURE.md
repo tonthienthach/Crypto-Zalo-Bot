@@ -45,13 +45,13 @@ the reply is never carried in the webhook's own response body.
 | `coingecko/` | Talks to the CoinGecko public REST API (`/simple/price`, `/coins/markets`), maps ticker symbols to CoinGecko coin ids, normalizes responses into `CoinMarketData`, and applies a best-effort cache. |
 | `command-parser/` | Pure text-parsing service: turns a raw chat message into a `ParsedCommand` (`PRICE`, `TOP_MARKETS`, `HELP`, `SUBSCRIBE`, `UNSUBSCRIBE`, `WATCHLIST`, `ALERT_CREATE`/`ALERT_LIST`/`ALERT_DELETE`/`ALERT_INVALID`, `UNKNOWN`). No I/O, fully unit-testable, handles accented/unaccented Vietnamese. |
 | `subscribers/` | `SubscribersService` — CRUD over the `subscribers` table (Vercel Postgres / Neon) backing `/dangky`, `/huy`, `/watchlist`, and the daily digest recipient list. See "Persistence" below. |
-| `price-alerts/` | `PriceAlertsService` — alert storage in Upstash Redis (`/canhbao`); `PriceAlertsController` — `/cron/price-alerts`, the per-minute check, guarded by `CronSecretGuard`; `evaluateAlert()` — the pure fire / re-arm / cooldown rules. See "Price alerts" below. |
+| `price-alerts/` | `PriceAlertsService` — alert storage in Upstash Redis (`/canhbao`); `PriceAlertsController` — `/cron/price-alerts`, the per-minute check, guarded by `PriceAlertsCronSecretGuard`; `evaluateAlert()` — the pure fire / re-arm / cooldown rules. See "Price alerts" below. |
 | `zalo/` | Talks to the Zalo Bot "send message" API. Never throws — a failed send is logged and swallowed so an outbound Zalo outage can't turn into an unhandled webhook exception. Resolves `true`/`false` so callers that care (the alert check) know whether the send landed. |
 | `webhook/` | `WebhookController` — the only place that wires parsing + CoinGecko + Zalo + Subscribers together. Guarded by `WebhookSecretGuard`, DTO-validated by `ZaloWebhookDto`. Always acknowledges 200 to Zalo. |
 | `digest/` | `DigestController` — `POST /cron/daily-digest`, a machine-triggered (not user-triggered) endpoint that loads active subscribers from `SubscribersService` and pushes each their own watchlist. Guarded by `CronSecretGuard`. Has no scheduler of its own — see "Daily digest" below for what calls it. |
 | `health/` | `GET /health` — liveness endpoint for uptime monitoring and Vercel health checks. |
 | `common/filters` | `AllExceptionsFilter` — global catch-all; never leaks a stack trace to the client, and answers webhook paths with 200 for any *unexpected* (non-`HttpException`) error to avoid retry storms. Guard and DTO-validation failures keep their `401`/`400` (see `docs/API.md`). |
-| `common/guards` | `WebhookSecretGuard` (shared-secret auth for `/webhook`), `CronSecretGuard` (shared-secret auth for `/cron/daily-digest` and `/cron/price-alerts`), and `UserThrottlerGuard` (per-chat-id rate limiting, not per-IP — see below). |
+| `common/guards` | `WebhookSecretGuard` (shared-secret auth for `/webhook`), `CronSecretGuard` (shared-secret auth for `/cron/daily-digest`), `PriceAlertsCronSecretGuard` (same mechanism, its own `PRICE_ALERTS_CRON_SECRET`, for `/cron/price-alerts` — that secret lives at cron-job.org, so it must not also unlock the digest), and `UserThrottlerGuard` (per-chat-id rate limiting, not per-IP — see below). |
 | `common/interceptors` | `LoggingInterceptor` — structured (JSON) request/response logging. |
 | `utils/format-message.util.ts` | Pure functions that turn `CoinMarketData[]` into the final chat message text (USD, VND estimate, 24h % with emoji). No side effects — fully unit-testable. |
 
@@ -222,7 +222,7 @@ price is back past the level by 0.5%, with at most one message per alert per
 
 ```
 cron-job.org (every minute)
-   |  GET /cron/price-alerts   X-Cron-Secret-Token: <CRON_SECRET_TOKEN>
+   |  GET /cron/price-alerts   X-Cron-Secret-Token: <PRICE_ALERTS_CRON_SECRET>
    v
 PriceAlertsController --> run lock (SET NX EX 120) -- already held? skip run
                       --> PriceAlertsService.listAll()           (SMEMBERS + MGET)

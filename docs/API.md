@@ -118,9 +118,10 @@ A fired alert re-arms (silently) once the price is back past the level by
 Machine-triggered price-alert check, called every minute by cron-job.org
 (see docs/DEPLOYMENT.md step 8a). Any HTTP method is accepted.
 
-**Authentication:** same as `/cron/daily-digest` — header
-`X-Cron-Secret-Token: <CRON_SECRET_TOKEN>` or
-`Authorization: Bearer <CRON_SECRET>`. Missing/incorrect → `401`.
+**Authentication:** its **own** secret, `PRICE_ALERTS_CRON_SECRET` (not the
+digest's `CRON_SECRET_TOKEN`), as header `X-Cron-Secret-Token: <secret>` or
+`Authorization: Bearer <secret>`. Missing/incorrect, or the env var unset →
+`401`.
 
 **Response:** always `200 { "ok": true }` once authenticated, even when
 CoinGecko, Zalo or Redis fail during the run (logged server-side). A call

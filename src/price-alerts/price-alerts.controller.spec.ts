@@ -47,7 +47,13 @@ describe('PriceAlertsController', () => {
       controllers: [PriceAlertsController],
       providers: [
         { provide: PriceAlertsService, useValue: alerts },
-        { provide: CoingeckoService, useValue: { getPricesBySymbols } },
+        {
+          provide: CoingeckoService,
+          useValue: {
+            getPricesBySymbols,
+            resolveSymbolToId: (symbol: string) => (symbol === 'pol' ? 'matic-network' : symbol),
+          },
+        },
         { provide: ZaloService, useValue: { sendTextMessage } },
         { provide: ConfigService, useValue: { get: () => 25400 } },
       ],
@@ -240,6 +246,21 @@ describe('PriceAlertsController', () => {
     expect(getPricesBySymbols).toHaveBeenCalledTimes(1);
     expect(getPricesBySymbols).toHaveBeenCalledWith(symbols);
     expect(alerts.recordRun).toHaveBeenCalledWith(expect.objectContaining({ evaluated: 50 }));
+  });
+
+  it('prices every symbol that shares a CoinGecko id (matic / pol)', async () => {
+    alerts.listAll.mockResolvedValue([
+      alert({ id: 1, symbol: 'matic', threshold: 1 }),
+      alert({ id: 2, symbol: 'pol', threshold: 1, chatId: 'chat-2' }),
+    ]);
+    // The lookup returns the shared coin under only one of the two symbols.
+    getPricesBySymbols.mockResolvedValue([{ id: 'matic-network', symbol: 'matic', priceUsd: 1.2 }]);
+
+    await controller.checkPriceAlerts();
+
+    expect(sendTextMessage).toHaveBeenCalledWith('chat-1', expect.any(String));
+    expect(sendTextMessage).toHaveBeenCalledWith('chat-2', expect.any(String));
+    expect(alerts.recordRun).toHaveBeenCalledWith(expect.objectContaining({ evaluated: 2 }));
   });
 
   it('makes no price call at all when there are no alerts', async () => {

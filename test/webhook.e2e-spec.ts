@@ -16,6 +16,7 @@ process.env.POSTGRES_URL = 'postgres://test:test@localhost:5432/test';
 // only have to pass env.validation.ts.
 process.env.KV_REST_API_URL = 'https://test-redis.upstash.io';
 process.env.KV_REST_API_TOKEN = 'test-redis-token';
+process.env.PRICE_ALERTS_CRON_SECRET = 'test-price-alerts-secret-1234';
 
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -367,6 +368,11 @@ describe('WebhookController (e2e)', () => {
         .get('/cron/price-alerts')
         .set('x-cron-secret-token', 'wrong-secret-0000')
         .expect(401);
+      // The digest secret must not open the price-alert endpoint (separate secrets).
+      await request(app.getHttpServer())
+        .get('/cron/price-alerts')
+        .set('x-cron-secret-token', process.env.CRON_SECRET_TOKEN as string)
+        .expect(401);
 
       expect(acquireRunLock).not.toHaveBeenCalled();
       expect(listAll).not.toHaveBeenCalled();
@@ -377,7 +383,7 @@ describe('WebhookController (e2e)', () => {
 
       await request(app.getHttpServer())
         .get('/cron/price-alerts')
-        .set('x-cron-secret-token', process.env.CRON_SECRET_TOKEN as string)
+        .set('x-cron-secret-token', process.env.PRICE_ALERTS_CRON_SECRET as string)
         .expect(200, { ok: true });
 
       expect(acquireRunLock).toHaveBeenCalled();

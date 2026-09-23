@@ -61,4 +61,8 @@ export default () => ({
     restUrl: process.env.KV_REST_API_URL,
     restToken: process.env.KV_REST_API_TOKEN,
   },
+
+  priceAlerts: {
+    cronSecretToken: process.env.PRICE_ALERTS_CRON_SECRET,
+  },
 });

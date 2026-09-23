@@ -48,8 +48,8 @@ Docker Postgres run proving the upsert/seed SQL for real. `review.md`:
 hold-retroactively / ship-at-`HEAD` — the one blocker (a commit that
 briefly broke the e2e suite) was fixed one commit later; 2 should-fix
 items remain open by owner decision (branching policy — since resolved,
-see docs/RULES.md; `chat.id` has no max length before being persisted —
-not yet fixed). The branching-policy and `.aidlc`-tracking follow-ups from
+see docs/RULES.md; `chat.id` max length — fixed in EPIC-002, capped at 64
+chars). The branching-policy and `.aidlc`-tracking follow-ups from
 `review.md` are done (PR #1); the migration-script multi-statement bug
 (scope item 7 below) was found and fixed via PR #2 during actual
 deployment.
