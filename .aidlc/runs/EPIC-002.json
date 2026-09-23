@@ -6,7 +6,7 @@
     "epic": "EPIC-002"
   },
   "startedAt": "2026-09-23T03:32:10.204Z",
-  "updatedAt": "2026-09-23T04:09:23.391Z",
+  "updatedAt": "2026-09-23T04:42:18.694Z",
   "currentStepIdx": 3,
   "status": "running",
   "steps": [
@@ -74,8 +74,10 @@
       "agent": "aidlc-native-engineer",
       "name": "implement",
       "revision": 1,
-      "status": "awaiting_work",
-      "artifactsProduced": [],
+      "status": "awaiting_review",
+      "artifactsProduced": [
+        "docs/epics/EPIC-002/artifacts/implement.md"
+      ],
       "startedAt": "2026-09-23T04:09:23.381Z"
     },
     {
