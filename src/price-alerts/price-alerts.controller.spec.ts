@@ -123,10 +123,20 @@ describe('PriceAlertsController', () => {
 
     expect(sendTextMessage).toHaveBeenCalledWith('chat-2', expect.any(String));
     expect(alerts.updateState).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 1, state: 'armed', lastFailedAt: expect.any(String) }),
+      expect.objectContaining({
+        id: 1,
+        state: 'armed',
+        lastFailedAt: expect.any(String),
+        consecutiveFailures: 1,
+      }),
     );
     expect(alerts.updateState).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 2, state: 'fired', lastFailedAt: null }),
+      expect.objectContaining({
+        id: 2,
+        state: 'fired',
+        lastFailedAt: null,
+        consecutiveFailures: 0,
+      }),
     );
     expect(alerts.recordDelivery).toHaveBeenCalledWith(
       expect.objectContaining({ alertId: 1, delivered: false }),
@@ -178,6 +188,23 @@ describe('PriceAlertsController', () => {
       expect(alerts.updateState).toHaveBeenCalledTimes(1);
       expect(alerts.recordRun).toHaveBeenCalledWith(
         expect.objectContaining({ fired: 1, deferred: 2 }),
+      );
+    });
+
+    it('does not count a slow price lookup against the send budget', async () => {
+      jest.useFakeTimers({ now: new Date('2026-09-23T03:00:00.000Z'), doNotFake: ['nextTick'] });
+      alerts.listAll.mockResolvedValue([alert({ id: 1 }), alert({ id: 2, chatId: 'chat-2' })]);
+      // CoinGecko takes 7s (over the 6s send budget) to answer.
+      getPricesBySymbols.mockImplementationOnce(async () => {
+        jest.setSystemTime(Date.now() + 7_000);
+        return [{ symbol: 'btc', priceUsd: 100200 }];
+      });
+
+      await controller.checkPriceAlerts();
+
+      expect(sendTextMessage).toHaveBeenCalledTimes(2);
+      expect(alerts.recordRun).toHaveBeenCalledWith(
+        expect.objectContaining({ fired: 2, deferred: 0 }),
       );
     });
 

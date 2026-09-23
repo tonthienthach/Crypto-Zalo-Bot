@@ -16,6 +16,8 @@ export interface PriceAlert {
   lastFiredAt: string | null;
   /** ISO timestamp of the last failed send attempt; cleared on success. Absent on older records. */
   lastFailedAt?: string | null;
+  /** Failed send attempts in a row; reset to 0 on success. Absent on older records. */
+  consecutiveFailures?: number;
   createdAt: string;
 }
 

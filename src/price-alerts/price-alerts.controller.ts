@@ -77,6 +77,9 @@ export class PriceAlertsController {
 
     const alerts = await this.priceAlertsService.listAll();
     const prices = alerts.length > 0 ? await this.loadPrices(alerts) : new Map<string, number>();
+    // The send budget starts after the price lookup, so a slow price source
+    // delays this run instead of deferring every due alert on every run.
+    const sendsStartedAt = Date.now();
 
     // Sequential, not Promise.all, and each alert in its own try/catch: one
     // failed send or bad row never blocks the rest of the run (spec NFR07).
@@ -87,7 +90,7 @@ export class PriceAlertsController {
       }
       summary.evaluated++;
       try {
-        await this.processAlert(alert, priceUsd, startedAt, summary);
+        await this.processAlert(alert, priceUsd, startedAt, sendsStartedAt, summary);
       } catch (error) {
         summary.failed++;
         this.logger.error(
@@ -126,6 +129,7 @@ export class PriceAlertsController {
     alert: PriceAlert,
     priceUsd: number,
     now: Date,
+    sendsStartedAt: number,
     summary: AlertRunSummary,
   ): Promise<void> {
     const action = evaluateAlert(alert, priceUsd, now);
@@ -138,7 +142,7 @@ export class PriceAlertsController {
     if (action !== 'fire') {
       return;
     }
-    if (Date.now() - now.getTime() > RUN_SEND_BUDGET_MS) {
+    if (Date.now() - sendsStartedAt > RUN_SEND_BUDGET_MS) {
       // Out of send budget (spec NFR02): stays armed, the next run sends it.
       summary.deferred++;
       return;
@@ -150,11 +154,22 @@ export class PriceAlertsController {
     );
     // Persist the outcome before the delivery log: if logging fails, we lose
     // a log line rather than leaving a delivered alert armed to fire twice.
-    // A failed send stays armed but backs off before retrying (spec AC13).
+    // A failed send stays armed and is retried next run (spec AC13); only
+    // repeated failures back off (see ALERT_FAILURES_BEFORE_BACKOFF).
     await this.priceAlertsService.updateState(
       delivered
-        ? { ...alert, state: 'fired', lastFiredAt: now.toISOString(), lastFailedAt: null }
-        : { ...alert, lastFailedAt: now.toISOString() },
+        ? {
+            ...alert,
+            state: 'fired',
+            lastFiredAt: now.toISOString(),
+            lastFailedAt: null,
+            consecutiveFailures: 0,
+          }
+        : {
+            ...alert,
+            lastFailedAt: now.toISOString(),
+            consecutiveFailures: (alert.consecutiveFailures ?? 0) + 1,
+          },
     );
     await this.priceAlertsService.recordDelivery({
       alertId: alert.id,

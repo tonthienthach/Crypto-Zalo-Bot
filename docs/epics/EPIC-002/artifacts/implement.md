@@ -243,6 +243,12 @@ Webhook thật (client UTF-8) gửi `/cảnhbáo eth < 1,000.5` → `/canhbao` �
 11. **`driftMs` không có dấu, verify defect #7.** Giờ tính theo mốc phút gần nhất: sớm 100 ms thì ghi `-100`. Test với đồng hồ giả.
 12. **Không sửa:** defect #4 (quota CoinGecko). Mình đã kiểm tra trên Vercel: production **không có** `COINGECKO_API_KEY`, tức là dùng API công khai, không có hạn mức theo tháng, nên con số 10k/tháng của gói Demo không áp dụng. Defect #5 (400 cho chat id quá dài) giữ nguyên theo §4 mục 1. Defect #8 (gửi trùng nếu gửi thành công rồi mà `updateState` lỗi) được chấp nhận: xem §6.
 
+**Revision 3 (2026-09-23), sửa theo `verify.md` rev 2:**
+
+13. **AC13 fail do backoff ở revision 2:** backoff 5 phút áp dụng ngay từ lần thất bại đầu tiên, nên lượt sau không thử lại, trái với AC13 và làm vỡ ngân sách trễ 2 phút. Giờ lần thất bại thứ 1 và thứ 2 được thử lại ngay ở lượt kế tiếp; chỉ từ lần thứ 3 liên tiếp mới backoff (`ALERT_FAILURES_BEFORE_BACKOFF = 3`, trường mới `consecutiveFailures`, về 0 khi gửi thành công). Không cần đổi spec. Test: `retries a failed send on the very next run (AC13)`, `backs off 5 minutes only after 3 failures in a row`.
+14. **Ngân sách gửi tính cả thời gian gọi CoinGecko:** nếu CoinGecko trả lời chậm hơn 6 giây thì mọi cảnh báo đến hạn đều bị hoãn ở mọi lượt. Giờ ngân sách chỉ bắt đầu tính sau khi đã có giá. Test: `does not count a slow price lookup against the send budget`.
+15. **CoinGecko Demo key:** thêm cảnh báo vào `docs/DEPLOYMENT.md` bước 8a.
+
 Chạy lại sau revision 2: `npm test` 129/129, `npm run test:e2e` 20 pass + 5 skip, integration với Redis thật 5/5, lint 0 lỗi, build exit 0.
 
 ## 5. Discovered work

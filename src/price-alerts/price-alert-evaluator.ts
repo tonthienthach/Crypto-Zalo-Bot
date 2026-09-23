@@ -1,6 +1,7 @@
 import { AlertDirection, PriceAlert } from './interfaces/price-alert.interface';
 import {
   ALERT_COOLDOWN_MS,
+  ALERT_FAILURES_BEFORE_BACKOFF,
   ALERT_RETRY_BACKOFF_MS,
   REARM_BUFFER_RATIO,
 } from './price-alerts.constants';
@@ -21,8 +22,9 @@ export function isConditionMet(
  * Pure — no I/O — so the fire / re-arm / cooldown rules (spec EPIC-002-FR05
  * to FR07) are unit-testable on their own:
  *
- * - `armed` + condition met + outside the cooldown + outside the retry
- *   backoff after a failed send -> `fire`
+ * - `armed` + condition met + outside the cooldown -> `fire`; a failed send
+ *   is retried on the next runs, and only after
+ *   ALERT_FAILURES_BEFORE_BACKOFF failures in a row waits out the backoff
  * - `fired` + price back past the threshold by REARM_BUFFER_RATIO -> `rearm`
  *   (silently — no message)
  * - anything else -> `none`
@@ -32,10 +34,10 @@ export function evaluateAlert(alert: PriceAlert, priceUsd: number, now: Date): A
     if (!isConditionMet(alert.direction, alert.threshold, priceUsd)) {
       return 'none';
     }
-    if (
-      withinWindow(alert.lastFiredAt, now, ALERT_COOLDOWN_MS) ||
-      withinWindow(alert.lastFailedAt, now, ALERT_RETRY_BACKOFF_MS)
-    ) {
+    const backingOff =
+      (alert.consecutiveFailures ?? 0) >= ALERT_FAILURES_BEFORE_BACKOFF &&
+      withinWindow(alert.lastFailedAt, now, ALERT_RETRY_BACKOFF_MS);
+    if (withinWindow(alert.lastFiredAt, now, ALERT_COOLDOWN_MS) || backingOff) {
       return 'none';
     }
     return 'fire';

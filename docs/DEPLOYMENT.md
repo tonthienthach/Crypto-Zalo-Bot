@@ -213,6 +213,13 @@ headers):
 To stop alerts quickly, disable the cron-job.org job — nothing else runs
 the check.
 
+> **CoinGecko quota:** the check makes up to one CoinGecko call per minute
+> (~43k/month) whenever alerts exist. Production currently has no
+> `COINGECKO_API_KEY`, i.e. the keyless public API (per-minute limit only).
+> If you ever add a CoinGecko **Demo** key, check its monthly call cap first
+> — it can be lower than the check's usage, and `/gia` shares the same
+> quota.
+
 ## 9. Ongoing deploys
 
 Once the GitHub repo is connected to the Vercel project (Vercel dashboard →

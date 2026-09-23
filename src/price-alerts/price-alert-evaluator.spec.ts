@@ -63,11 +63,19 @@ describe('evaluateAlert', () => {
     expect(evaluateAlert(rearmed, 100100, minutesAfter(15))).toBe('fire');
   });
 
-  it('backs off 5 minutes after a failed send before retrying (AC13)', () => {
-    const failed = alert({ lastFailedAt: T.toISOString() });
-    expect(evaluateAlert(failed, 100200, minutesAfter(1))).toBe('none');
-    expect(evaluateAlert(failed, 100200, minutesAfter(4.9))).toBe('none');
-    expect(evaluateAlert(failed, 100200, minutesAfter(5))).toBe('fire');
+  it('retries a failed send on the very next run (AC13)', () => {
+    const failedOnce = alert({ lastFailedAt: T.toISOString(), consecutiveFailures: 1 });
+    expect(evaluateAlert(failedOnce, 100200, minutesAfter(1))).toBe('fire');
+
+    const failedTwice = alert({ lastFailedAt: T.toISOString(), consecutiveFailures: 2 });
+    expect(evaluateAlert(failedTwice, 100200, minutesAfter(1))).toBe('fire');
+  });
+
+  it('backs off 5 minutes only after 3 failures in a row', () => {
+    const failing = alert({ lastFailedAt: T.toISOString(), consecutiveFailures: 3 });
+    expect(evaluateAlert(failing, 100200, minutesAfter(1))).toBe('none');
+    expect(evaluateAlert(failing, 100200, minutesAfter(4.9))).toBe('none');
+    expect(evaluateAlert(failing, 100200, minutesAfter(5))).toBe('fire');
   });
 
   it('handles "below" alerts symmetrically (AC06)', () => {

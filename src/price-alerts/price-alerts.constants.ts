@@ -44,15 +44,20 @@ export const REDIS_KEYS = {
 export const RUN_LOCK_TTL_SECONDS = 120;
 
 /**
- * After a failed send, an alert is not retried for this long. A chat that
- * blocked the bot would otherwise cost an 8s-timeout Zalo call every minute.
+ * A failed send is retried on the very next runs (spec EPIC-002-AC13), but
+ * after this many consecutive failures the alert backs off to one attempt
+ * per ALERT_RETRY_BACKOFF_MS. A brief Zalo blip is retried within the
+ * latency target, while a chat that blocked the bot doesn't cost an
+ * 8s-timeout Zalo call every minute forever.
  */
+export const ALERT_FAILURES_BEFORE_BACKOFF = 3;
 export const ALERT_RETRY_BACKOFF_MS = 5 * 60_000;
 
 /**
- * No new sends are started once a run has been going this long; the
- * remaining due alerts stay armed for the next run. With Zalo's 8s send
- * timeout this keeps a run under the 15s target (spec EPIC-002-NFR02).
+ * No new sends are started once a run's send phase (after the price lookup)
+ * has been going this long; the remaining due alerts stay armed for the next
+ * run. With Zalo's 8s send timeout this bounds the send phase at ~14s (spec
+ * EPIC-002-NFR02) however many alerts are due.
  */
 export const RUN_SEND_BUDGET_MS = 6_000;
 

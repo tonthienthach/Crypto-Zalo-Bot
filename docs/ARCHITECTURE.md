@@ -249,12 +249,14 @@ PriceAlertsController --> run lock (SET NX EX 120) -- already held? skip run
   state writes use `SET ... XX`, so an alert its chat deleted mid-run is
   never recreated.
 - **Delivery**: an alert is only marked fired once Zalo accepted the
-  message. A failed send stays armed but isn't retried for 5 minutes, and
-  failures go to a separate capped list — so a chat that blocked the bot
-  neither costs a Zalo call every minute nor evicts the successful
+  message. A failed send stays armed and is retried on the next runs; only
+  after 3 failures in a row does it back off to one attempt per 5 minutes.
+  Failures go to a separate capped list — so a chat that blocked the bot
+  neither costs a Zalo call every minute forever nor evicts the successful
   deliveries the success metric reads.
-- **Run time**: no new send starts once a run is 6s old; the rest stay armed
-  for the next run, so with Zalo's 8s send timeout a run stays under 15s.
+- **Run time**: no new send starts once the send phase (after the price
+  lookup) is 6s old; the rest stay armed for the next run, so with Zalo's 8s
+  send timeout the send phase stays around 14s at most.
 - **Budgets to watch**: every run `MGET`s all alerts, so Upstash's 10 GB/month
   bandwidth becomes the ceiling at roughly 1,000 alerts — revisit the data
   layout before then. Vercel Hobby's 4h Active CPU/month (~330 ms CPU per
