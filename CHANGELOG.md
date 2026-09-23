@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Price alerts (Initiative 2 / EPIC-002, see `docs/ROADMAP.md`): new
+  `/canhbao <coin> > <price>` / `<` command, plus `/canhbao` (list) and
+  `/canhbao xoa <n>` (delete); max 10 alerts per chat. A new
+  `/cron/price-alerts` check, triggered every minute by cron-job.org, fires a
+  Zalo message on crossing, then re-arms after a 0.5% move back (at most one
+  message per alert per 15 minutes). Alerts are stored in Upstash Redis
+  (`KV_REST_API_URL`/`KV_REST_API_TOKEN`), not Postgres. New
+  `npm run alerts:report` read-only report. See `docs/DEPLOYMENT.md` steps
+  3b and 8a.
+
+### Changed
+- `ZaloService.sendTextMessage` now resolves `true`/`false` (still never
+  throws), and `chat.id` in webhook payloads is capped at 64 characters
+  (EPIC-001 review finding #3).
+
+### Added
 - Multi-tenant digest subscriptions (Initiative 1, see `docs/ROADMAP.md`):
   new `/dangky [symbols...]`, `/huy`, and `/watchlist [symbols...]` commands,
   backed by a new `subscribers` table in Vercel Postgres (`src/subscribers`).

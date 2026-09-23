@@ -94,7 +94,12 @@ a way to know *who* the users are and *what* they each want.
 
 ## Initiative 2: Price alerts (threshold notifications)
 
-**Status:** In progress (started 2026-09-23) — intent phase.
+**Status:** In progress (started 2026-09-23) — implemented on
+`feature/epic-002-price-alerts`, not yet deployed. Decided 2026-09-23:
+alerts stored in **Upstash Redis** (not Postgres — a per-minute check would
+exhaust Neon's free compute quota), checked every minute by **cron-job.org**
+(Vercel Hobby cron is daily-only); latency target ~1–2 min; alerts re-arm
+(0.5% buffer, 15-min cooldown); max 10 per chat.
 **Tracked as:** [`EPIC-002`](../docs/epics/EPIC-002/EPIC-002.md).
 **Why:** Highest-retention feature for crypto users — depends on
 Initiative 1's persistence layer existing first.

@@ -142,6 +142,15 @@ export class PriceAlertsController {
       alert.chatId,
       formatAlertTriggeredMessage(alert, priceUsd, this.usdToVndRate),
     );
+    // Persist "fired" before the delivery log: if logging fails, we lose a
+    // log line rather than leaving a delivered alert armed to fire twice.
+    if (delivered) {
+      await this.priceAlertsService.updateState({
+        ...alert,
+        state: 'fired',
+        lastFiredAt: now.toISOString(),
+      });
+    }
     await this.priceAlertsService.recordDelivery({
       alertId: alert.id,
       chatId: alert.chatId,
@@ -158,11 +167,6 @@ export class PriceAlertsController {
       summary.failed++;
       return;
     }
-    await this.priceAlertsService.updateState({
-      ...alert,
-      state: 'fired',
-      lastFiredAt: now.toISOString(),
-    });
     summary.fired++;
   }
 }

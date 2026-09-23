@@ -95,7 +95,16 @@ path — it just means fewer symbols get filled in.
 | `/gia btc eth sol` | Prices for multiple coins in one reply |
 | `/gia` (no symbols) | Top 5 coins by market capitalization |
 | `/help` or `/start` | Usage instructions |
+| `/dangky btc eth` | Subscribe to the 9am ICT daily digest with this watchlist (default `btc eth`) |
+| `/watchlist` / `/watchlist sol ada` | View / replace the digest watchlist |
+| `/huy` | Unsubscribe from the daily digest (price alerts are unaffected) |
+| `/canhbao btc > 100000` or `/cảnhbáo`, `/alert` | Alert when BTC rises to ≥ $100,000 (`<` for "falls to ≤"). USD; `.` decimal, `,` thousands (`100,000`); no `100k`. Max 10 per chat; rejected if already true at the current price |
+| `/canhbao` | List this chat's alerts, numbered, with state (watching / fired) |
+| `/canhbao xoa 2` (or `xóa`, `delete`) | Delete alert #2 of this chat's list |
 | anything else | "I don't understand this command" reply |
+
+A fired alert re-arms (silently) once the price is back past the level by
+0.5%, and never sends more than one message per 15 minutes.
 
 ### Example reply text
 
@@ -103,6 +112,19 @@ path — it just means fewer symbols get filled in.
 💰 Giá thị trường:
 🔺 BTC (BTC): $65,000.00 (~1,651,000,000₫) | +2.50% (24h)
 ```
+
+## `GET /cron/price-alerts`
+
+Machine-triggered price-alert check, called every minute by cron-job.org
+(see docs/DEPLOYMENT.md step 8a). Any HTTP method is accepted.
+
+**Authentication:** same as `/cron/daily-digest` — header
+`X-Cron-Secret-Token: <CRON_SECRET_TOKEN>` or
+`Authorization: Bearer <CRON_SECRET>`. Missing/incorrect → `401`.
+
+**Response:** always `200 { "ok": true }` once authenticated, even when
+CoinGecko, Zalo or Redis fail during the run (logged server-side). A call
+that arrives while a previous run still holds the run lock is skipped.
 
 ## Errors
 

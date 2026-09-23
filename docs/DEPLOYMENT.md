@@ -69,6 +69,21 @@ Digest subscribers (`/dangky`, `/huy`, `/watchlist`) are stored in Postgres
 
 `vercel env add <name> production` prompts you to paste the value.
 
+## 3b. Attach Upstash Redis (price alerts)
+
+Price alerts (`/canhbao`) are stored in Upstash Redis, **not** Postgres — see
+`docs/ARCHITECTURE.md` → "Price alerts" for why (a per-minute check would
+keep Neon's compute awake and exhaust its free quota).
+
+1. Dashboard → Project → Storage → **Create Database** → **Upstash for
+   Redis** (Marketplace) → Free plan. Pick the region closest to your
+   functions (default functions region is `iad1` → `us-east-1`).
+2. Connect it to the project for **Production, Preview and Development** —
+   Vercel then sets `KV_REST_API_URL` and `KV_REST_API_TOKEN` (the exact
+   names `env.validation.ts` requires). A preview deployment without them
+   fails config validation at boot.
+3. No migration: keys are created on first use.
+
 ## 4. Deploy
 
 Preview deployment (safe, generates a unique preview URL, does not affect
@@ -161,6 +176,40 @@ arrival time and drift from 09:00 — watch this over the next few days to
 confirm Vercel Cron's timing is acceptable, then set
 `DIGEST_CRON_TRACKING=false` and redeploy to remove it. See
 `.aidlc/runs/2026-09-17-cron-digest-drift/` for the tracking plan.
+
+## 8a. Enable the price-alert check (cron-job.org)
+
+The alert check (`/cron/price-alerts`) must run **every minute**, which
+Vercel Cron can't do on the Hobby plan (daily only). It is triggered by
+[cron-job.org](https://cron-job.org) instead (free, per-minute, custom
+headers):
+
+1. Deploy first (step 4) — before that the endpoint returns `404`, and a
+   per-minute job hitting a 404 still costs a function invocation each time.
+2. Create a cron job: URL `https://zalo-crypto-bot.vercel.app/cron/price-alerts`,
+   method **GET**, schedule **every minute**, header
+   `X-Cron-Secret-Token: <CRON_SECRET_TOKEN value>` (same secret as the
+   digest cron).
+3. Check one manual run:
+   ```bash
+   curl "https://zalo-crypto-bot.vercel.app/cron/price-alerts" \
+     -H "X-Cron-Secret-Token: <CRON_SECRET_TOKEN value>"
+   # -> {"ok":true}; a missing/wrong secret -> 401
+   ```
+4. After 24h, run the read-only report (after `vercel env pull .env`):
+   ```bash
+   npm run alerts:report
+   ```
+   It prints the gap between runs (p95 must be ≤ 90s), run duration, and
+   deliveries per chat (the success metric in
+   `docs/epics/EPIC-002/artifacts/intent.md`).
+5. Watch **Vercel → Usage** (Active CPU, Provisioned Memory — Hobby includes
+   4h CPU/month) and the Upstash dashboard (commands/month, free tier 500k)
+   for 48h, then multiply out to a month. This is the least certain part of
+   the design (see `docs/epics/EPIC-002/artifacts/plan.md` §4).
+
+To stop alerts quickly, disable the cron-job.org job — nothing else runs
+the check.
 
 ## 9. Ongoing deploys
 

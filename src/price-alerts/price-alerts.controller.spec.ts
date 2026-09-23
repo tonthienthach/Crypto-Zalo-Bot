@@ -141,6 +141,16 @@ describe('PriceAlertsController', () => {
     expect(alerts.recordRun).toHaveBeenCalledWith(expect.objectContaining({ fired: 1, failed: 1 }));
   });
 
+  it('marks a delivered alert fired even if the delivery log write then fails (no double send)', async () => {
+    alerts.listAll.mockResolvedValue([alert()]);
+    getPricesBySymbols.mockResolvedValue([{ symbol: 'btc', priceUsd: 100200 }]);
+    alerts.recordDelivery.mockRejectedValueOnce(new Error('redis blip'));
+
+    await controller.checkPriceAlerts();
+
+    expect(alerts.updateState).toHaveBeenCalledWith(expect.objectContaining({ state: 'fired' }));
+  });
+
   it('skips the whole run when another run holds the lock (AC14)', async () => {
     alerts.acquireRunLock.mockResolvedValue(false);
 

@@ -25,7 +25,8 @@
     "webhook:register": "node scripts/register-webhook.js",
     "db:migrate": "node scripts/db-migrate.js",
     "db:seed-digest-subscriber": "node scripts/db-seed-digest-subscriber.js",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "alerts:report": "node scripts/price-alerts-report.js"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
