@@ -53,4 +53,12 @@ export default () => ({
     // dev. See docs/DEPLOYMENT.md.
     connectionString: process.env.POSTGRES_URL,
   },
+
+  redis: {
+    // Upstash Redis REST endpoint + token (Vercel Marketplace integration)
+    // backing price alerts. Kept off Postgres so the per-minute alert check
+    // doesn't keep the Neon compute awake — see docs/ARCHITECTURE.md.
+    restUrl: process.env.KV_REST_API_URL,
+    restToken: process.env.KV_REST_API_TOKEN,
+  },
 });

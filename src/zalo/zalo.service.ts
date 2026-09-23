@@ -23,21 +23,34 @@ export class ZaloService {
    * a failed outbound send is logged and swallowed so a Zalo API outage
    * never turns into an unhandled exception for the webhook request that
    * triggered it (the webhook must always ack quickly regardless).
+   *
+   * Resolves `true` when Zalo accepted the message and `false` otherwise,
+   * for callers that need to know — the price-alert check only marks an
+   * alert as fired once delivery actually succeeded. Other callers can keep
+   * ignoring the result.
    */
-  async sendTextMessage(chatId: string, text: string): Promise<void> {
+  async sendTextMessage(chatId: string, text: string): Promise<boolean> {
     const url = `${this.apiBaseUrl}${this.botToken}/sendMessage`;
     try {
-      await firstValueFrom(
+      const response = await firstValueFrom(
         this.httpService.post<ZaloSendMessageResponse>(
           url,
           { chat_id: chatId, text },
           { timeout: 8000 },
         ),
       );
+      if (response.data?.ok === false) {
+        this.logger.error(
+          `Zalo rejected message to chat ${chatId}: ${response.data.description ?? 'no description'}`,
+        );
+        return false;
+      }
+      return true;
     } catch (error) {
       this.logger.error(
         `Failed to send Zalo message to chat ${chatId}: ${(error as Error).message}`,
       );
+      return false;
     }
   }
 }

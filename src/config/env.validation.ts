@@ -42,4 +42,10 @@ export const envValidationSchema = Joi.object({
   POSTGRES_URL: Joi.string()
     .uri({ scheme: ['postgres', 'postgresql'] })
     .required(),
+
+  // Upstash Redis (Vercel Marketplace integration) REST credentials for
+  // price alerts (src/price-alerts) — auto-populated by Vercel under these
+  // exact names when the integration is attached. See docs/DEPLOYMENT.md.
+  KV_REST_API_URL: Joi.string().uri().required(),
+  KV_REST_API_TOKEN: Joi.string().required(),
 });

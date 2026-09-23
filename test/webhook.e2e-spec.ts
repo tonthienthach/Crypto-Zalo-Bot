@@ -12,6 +12,10 @@ process.env.DIGEST_CHAT_ID = 'test-digest-chat-id';
 // is never actually connected to; it only has to satisfy env.validation.ts's
 // postgres/postgresql URI shape check.
 process.env.POSTGRES_URL = 'postgres://test:test@localhost:5432/test';
+// Same for Upstash Redis — PriceAlertsService is overridden below, so these
+// only have to pass env.validation.ts.
+process.env.KV_REST_API_URL = 'https://test-redis.upstash.io';
+process.env.KV_REST_API_TOKEN = 'test-redis-token';
 
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
