@@ -13,7 +13,7 @@
 | | |
 |---|---|
 | Branch | `feature/epic-002-price-alerts` (tách từ `docs/mark-epic-001-deployed`, vì branch đó chưa merge vào `master`) |
-| PR | Máy này không có `gh` CLI nên chưa tạo PR bằng lệnh; branch đã push, PR mở từ link compare trên GitHub (xem tóm tắt cuối phase) |
+| PR | [#3](https://github.com/tonthienthach/Crypto-Zalo-Bot/pull/3) (mở qua trình duyệt, vì máy không có `gh` CLI) |
 
 ## 2. What was built
 
