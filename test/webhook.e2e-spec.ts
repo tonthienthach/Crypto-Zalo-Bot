@@ -359,4 +359,28 @@ describe('WebhookController (e2e)', () => {
       expect(sendTextMessage).not.toHaveBeenCalled();
     });
   });
+
+  describe('GET /cron/price-alerts', () => {
+    it('rejects a call with no secret or a wrong secret, evaluating nothing (AC16)', async () => {
+      await request(app.getHttpServer()).get('/cron/price-alerts').expect(401);
+      await request(app.getHttpServer())
+        .get('/cron/price-alerts')
+        .set('x-cron-secret-token', 'wrong-secret-0000')
+        .expect(401);
+
+      expect(acquireRunLock).not.toHaveBeenCalled();
+      expect(listAll).not.toHaveBeenCalled();
+    });
+
+    it('runs the check for the scheduler secret sent as a header', async () => {
+      acquireRunLock.mockResolvedValue(false);
+
+      await request(app.getHttpServer())
+        .get('/cron/price-alerts')
+        .set('x-cron-secret-token', process.env.CRON_SECRET_TOKEN as string)
+        .expect(200, { ok: true });
+
+      expect(acquireRunLock).toHaveBeenCalled();
+    });
+  });
 });
