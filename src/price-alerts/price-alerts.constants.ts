@@ -28,7 +28,7 @@ export const MAX_ALERT_SYMBOL_LENGTH = 20;
 export const REDIS_KEYS = {
   nextId: 'price-alerts:next-id',
   allIds: 'price-alerts:ids',
-  alert: (id: number) => `price-alerts:alert:${id}`,
+  alert: (id: number | string) => `price-alerts:alert:${id}`,
   chatIds: (chatId: string) => `price-alerts:chat:${chatId}`,
   runLock: 'price-alerts:run-lock',
   deliveries: 'price-alerts:deliveries',
