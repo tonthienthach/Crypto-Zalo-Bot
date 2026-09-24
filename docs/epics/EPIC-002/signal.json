@@ -1,0 +1,7 @@
+{
+  "source": "manual",
+  "observedAt": "2026-09-24T15:10:00Z",
+  "symptom": "Kiểm tra cảnh báo giá chỉ ghi nhận 2 lượt chạy trong ~32 giờ sau deploy, thay vì ~1 lượt/phút; khoảng cách p95 giữa các lượt là 115574.4s so với yêu cầu AC18 ≤ 90s.",
+  "scope": "Toàn bộ tính năng cảnh báo giá trên production: 2 cảnh báo đang active, 0 lần gửi được ghi nhận, kể từ deploy 2026-09-23.",
+  "evidence": "npm run alerts:report (owner chạy 2026-09-24): \"Active alerts: 2\" / \"Runs logged: 2 (2026-09-23T06:55:42.247Z -> 2026-09-24T15:01:56.664Z)\" / \"Gap between runs: p50 115574.4s, p95 115574.4s, max 115574.4s  [AC18: p95 <= 90s]\" / \"Run duration: p95 1.0s, max 1.0s  [NFR02: <= 15s]\" / \"Totals over logged runs: fired 0, failed 0, rearmed 0, deferred 0\" / \"Deliveries logged: 0 delivered, 0 failed\""
+}

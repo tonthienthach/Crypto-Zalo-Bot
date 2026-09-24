@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 2,
+  "runId": "EPIC-003",
+  "pipelineId": "ai-native-full",
+  "context": {},
+  "startedAt": "2026-09-24T15:26:14.637Z",
+  "updatedAt": "2026-09-24T15:26:14.640Z",
+  "currentStepIdx": 0,
+  "status": "running",
+  "steps": [
+    {
+      "stepIdx": 0,
+      "agent": "aidlc-native-originator",
+      "name": "intent",
+      "revision": 1,
+      "status": "awaiting_work",
+      "startedAt": "2026-09-24T15:26:14.637Z",
+      "artifactsProduced": []
+    },
+    {
+      "stepIdx": 1,
+      "agent": "aidlc-native-product-owner",
+      "name": "spec",
+      "revision": 1,
+      "status": "pending",
+      "artifactsProduced": []
+    },
+    {
+      "stepIdx": 2,
+      "agent": "aidlc-native-engineer",
+      "name": "build-plan",
+      "revision": 1,
+      "status": "pending",
+      "artifactsProduced": []
+    },
+    {
+      "stepIdx": 3,
+      "agent": "aidlc-native-engineer",
+      "name": "implement",
+      "revision": 1,
+      "status": "pending",
+      "artifactsProduced": []
+    },
+    {
+      "stepIdx": 4,
+      "agent": "aidlc-native-verifier",
+      "name": "verify",
+      "revision": 1,
+      "status": "pending",
+      "artifactsProduced": []
+    },
+    {
+      "stepIdx": 5,
+      "agent": "aidlc-native-reviewer",
+      "name": "review",
+      "revision": 1,
+      "status": "pending",
+      "artifactsProduced": []
+    },
+    {
+      "stepIdx": 6,
+      "agent": "aidlc-native-operator",
+      "name": "maintain",
+      "revision": 1,
+      "status": "pending",
+      "artifactsProduced": []
+    }
+  ]
+}

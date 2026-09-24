@@ -1,0 +1,79 @@
+# Pipeline for EPIC-002-FIX, owned by this epic.
+# Kept out of .aidlc/workspace.yaml on purpose: that file is shared team
+# config, and one append point per epic is one merge conflict per epic.
+# Referenced by state.json ("pipeline"). Commit it with the epic.
+id: EPIC-002-FIX
+derived_from: ai-native-full
+steps:
+  - agent: aidlc-native-originator
+    name: intent
+    enabled: true
+    produces:
+      - docs/epics/{epic}/artifacts/intent.md
+    requires: []
+    depends_on: []
+    auto_review: false
+    human_review: true
+    skills:
+      - aidlc-native-intent
+  - agent: aidlc-native-product-owner
+    name: spec
+    enabled: true
+    produces:
+      - docs/epics/{epic}/artifacts/spec.md
+    requires: []
+    depends_on:
+      - intent
+    auto_review: false
+    human_review: true
+    skills:
+      - aidlc-native-spec
+  - agent: aidlc-native-engineer
+    name: build-plan
+    enabled: true
+    produces:
+      - docs/epics/{epic}/artifacts/plan.md
+    requires: []
+    depends_on:
+      - spec
+    auto_review: false
+    human_review: true
+    skills:
+      - aidlc-native-build-plan
+  - agent: aidlc-native-engineer
+    name: implement
+    enabled: true
+    produces:
+      - docs/epics/{epic}/artifacts/implement.md
+    requires: []
+    depends_on:
+      - build-plan
+    auto_review: false
+    human_review: true
+    skills:
+      - aidlc-native-implement
+  - agent: aidlc-native-verifier
+    name: verify
+    enabled: true
+    produces:
+      - docs/epics/{epic}/artifacts/verify.md
+    requires: []
+    depends_on:
+      - implement
+    auto_review: false
+    human_review: true
+    skills:
+      - aidlc-native-verify
+  - agent: aidlc-native-reviewer
+    name: review
+    enabled: true
+    produces:
+      - docs/epics/{epic}/artifacts/review.md
+    requires: []
+    depends_on:
+      - verify
+    auto_review: false
+    human_review: true
+    skills:
+      - aidlc-native-review
+on_failure: stop

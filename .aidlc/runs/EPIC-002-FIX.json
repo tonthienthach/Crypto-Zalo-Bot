@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "runId": "EPIC-002-FIX",
+  "pipelineId": "EPIC-002-FIX",
+  "context": {
+    "epic": "EPIC-002-FIX",
+    "signal_source": "manual",
+    "signal_observed_at": "2026-09-24T15:10:00Z",
+    "signal_symptom": "Kiểm tra cảnh báo giá chỉ ghi nhận 2 lượt chạy trong ~32 giờ sau deploy, thay vì ~1 lượt/phút; khoảng cách p95 giữa các lượt là 115574.4s so với yêu cầu AC18 ≤ 90s.",
+    "signal_scope": "Toàn bộ tính năng cảnh báo giá trên production: 2 cảnh báo đang active, 0 lần gửi được ghi nhận, kể từ deploy 2026-09-23.",
+    "from_epic": "EPIC-002"
+  },
+  "startedAt": "2026-09-24T15:18:56.128Z",
+  "updatedAt": "2026-09-24T15:18:56.128Z",
+  "currentStepIdx": 0,
+  "status": "running",
+  "steps": [
+    {
+      "stepIdx": 0,
+      "agent": "aidlc-native-originator",
+      "name": "intent",
+      "revision": 1,
+      "status": "awaiting_work",
+      "startedAt": "2026-09-24T15:18:56.128Z",
+      "artifactsProduced": []
+    },
+    {
+      "stepIdx": 1,
+      "agent": "aidlc-native-product-owner",
+      "name": "spec",
+      "revision": 1,
+      "status": "pending",
+      "artifactsProduced": []
+    },
+    {
+      "stepIdx": 2,
+      "agent": "aidlc-native-engineer",
+      "name": "build-plan",
+      "revision": 1,
+      "status": "pending",
+      "artifactsProduced": []
+    },
+    {
+      "stepIdx": 3,
+      "agent": "aidlc-native-engineer",
+      "name": "implement",
+      "revision": 1,
+      "status": "pending",
+      "artifactsProduced": []
+    },
+    {
+      "stepIdx": 4,
+      "agent": "aidlc-native-verifier",
+      "name": "verify",
+      "revision": 1,
+      "status": "pending",
+      "artifactsProduced": []
+    },
+    {
+      "stepIdx": 5,
+      "agent": "aidlc-native-reviewer",
+      "name": "review",
+      "revision": 1,
+      "status": "pending",
+      "artifactsProduced": []
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "epic": "EPIC-003",
+  "summary": "Portfolio tracking (Initiative 3). Intent phase started 2026-09-24. Artifacts in Vietnamese.",
+  "entries": [
+    {
+      "at": "2026-09-24T15:32:29.322Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Originator is the owner (own need): <20 coins across 2-3 exchanges/wallets, checks each app by hand. No other user has asked yet."
+    },
+    {
+      "at": "2026-09-24T15:32:29.322Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Pain: no total value, no PnL vs cost, no day-over-day change, has to open several apps. Success metric: >=1 non-owner chat records a portfolio within 30 days."
+    },
+    {
+      "at": "2026-09-24T15:32:29.322Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Out of scope (owner): paid tiers, non-Zalo channels. Manual entry vs exchange/wallet sync + trade history: owner delegated to spec."
+    }
+  ],
+  "reflections": [],
+  "updatedAt": "2026-09-24T15:32:29.322Z"
+}

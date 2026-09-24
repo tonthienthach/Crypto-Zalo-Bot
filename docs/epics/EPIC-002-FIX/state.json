@@ -1,0 +1,88 @@
+{
+  "id": "EPIC-002-FIX",
+  "title": "Kiểm tra cảnh báo giá chỉ ghi nhận 2 lượt chạy trong ~32 giờ sau deploy, thay vì ~1 lượt/phút; khoảng cách p95 giữa các lượt là 115574.4s so với yêu cầu AC18 ≤ 90s.",
+  "description": "Opened by stage 6 from a `manual` signal observed 2026-09-24T15:10:00Z.",
+  "pipeline": "EPIC-002-FIX",
+  "agent": null,
+  "agents": [
+    "aidlc-native-originator",
+    "aidlc-native-product-owner",
+    "aidlc-native-engineer",
+    "aidlc-native-engineer",
+    "aidlc-native-verifier",
+    "aidlc-native-reviewer"
+  ],
+  "currentStep": 0,
+  "status": "in_progress",
+  "strict_mode": true,
+  "createdAt": "2026-09-24T15:18:56.116Z",
+  "stepStates": [
+    {
+      "agent": "aidlc-native-originator",
+      "name": "intent",
+      "status": "in_progress",
+      "revision": 1,
+      "runStatus": "awaiting_work",
+      "startedAt": "2026-09-24T15:18:56.128Z",
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-product-owner",
+      "name": "spec",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-engineer",
+      "name": "build-plan",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-engineer",
+      "name": "implement",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-verifier",
+      "name": "verify",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-reviewer",
+      "name": "review",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    }
+  ],
+  "updatedAt": "2026-09-24T15:18:56.128Z"
+}

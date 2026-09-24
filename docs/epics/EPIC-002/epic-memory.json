@@ -1,6 +1,6 @@
 {
   "epic": "EPIC-002",
-  "summary": "Price alerts (/canhbao). All phases done through review; PR #3 merged (ec29a84) and deployed to production 2026-09-23. Pending: AC18 (24h run-gap), Vercel CPU budget, success metric. Artifacts in Vietnamese.",
+  "summary": "Price alerts (/canhbao). Deployed 2026-09-23. maintain (2026-09-24): AC18 FAILED - only 2 runs in ~32h; incident.md written, follow-up epic EPIC-002-FIX opened (silent stoppage). Root cause pending owner check of cron-job.org/Vercel logs. Artifacts in Vietnamese.",
   "entries": [
     {
       "at": "2026-09-23T03:57:13.774Z",
@@ -85,6 +85,24 @@
       "author": "Thach <vnsnake123@gmail.com>",
       "kind": "decision",
       "text": "Deployed 2026-09-23 (dpl_32gfamuSewdv3caw4ngipJeJCoJB). Smoke: /health ok; /cron/price-alerts 401 no/wrong secret, 200 with PRICE_ALERTS_CRON_SECRET; /cron/daily-digest and /webhook 401 without secret."
+    },
+    {
+      "at": "2026-09-24T15:19:33.624Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "maintain: alerts:report 2026-09-24 -> 2 runs logged (06:55Z 09-23, 15:01Z 09-24), p95 gap 115574s, 2 active alerts, 0 deliveries. AC18 fail. Opened EPIC-002-FIX (owner not told when the check stops). Root cause H1 job off / H2 wrong secret / H3 runs throw - unconfirmed."
+    },
+    {
+      "at": "2026-09-24T15:19:33.624Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "Run log only records runs that pass the guard, get the lock and do not throw (price-alerts.controller.ts:40-50): 401s, lock-skips and thrown runs are invisible to alerts:report."
+    },
+    {
+      "at": "2026-09-24T15:19:33.624Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "context",
+      "text": "vercel env pull cannot fetch Sensitive vars (writes [SENSITIVE]); KV_REST_API_URL/TOKEN must be copied from Upstash Console (read-only token is enough for alerts:report). DEPLOYMENT.md 8a step 4 is wrong. Claude auto mode also blocks env pull."
     }
   ],
   "reflections": [
@@ -97,7 +115,12 @@
       "at": "2026-09-23T06:56:33.936Z",
       "author": "Thach <vnsnake123@gmail.com>",
       "text": "The independent verifier caught a regression introduced while fixing its own finding (backoff vs AC13). Next time: when a fix changes retry/timing semantics, re-read the exact AC wording before coding it."
+    },
+    {
+      "at": "2026-09-24T15:19:33.624Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "text": "The post-deploy check was scheduled for +24h with no immediate liveness check, so a scheduler misconfig cost a day. Next time: every external trigger gets a verify-within-minutes step in the deploy checklist, and run logs record failures, not just successes."
     }
   ],
-  "updatedAt": "2026-09-23T06:56:33.936Z"
+  "updatedAt": "2026-09-24T15:19:33.624Z"
 }
