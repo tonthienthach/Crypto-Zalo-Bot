@@ -272,6 +272,80 @@ describe('PriceAlertsController', () => {
     expect(alerts.recordRun).toHaveBeenCalledWith(expect.objectContaining({ evaluated: 0 }));
   });
 
+  describe('run outcome (EPIC-002-FIX)', () => {
+    it('logs a priced run as healthy (FIX-AC01)', async () => {
+      alerts.listAll.mockResolvedValue([
+        alert(),
+        alert({ id: 2, symbol: 'eth', chatId: 'chat-2' }),
+      ]);
+      getPricesBySymbols.mockResolvedValue([
+        { symbol: 'btc', priceUsd: 90000 },
+        { symbol: 'eth', priceUsd: 3000 },
+      ]);
+
+      await controller.checkPriceAlerts();
+
+      expect(alerts.recordRun).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: 'healthy', evaluated: 2 }),
+      );
+    });
+
+    it('logs a run whose price lookup failed as no-price (FIX-AC02)', async () => {
+      alerts.listAll.mockResolvedValue([alert()]);
+      getPricesBySymbols.mockRejectedValue(new CoingeckoUnavailableError('down'));
+
+      await controller.checkPriceAlerts();
+
+      expect(alerts.recordRun).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: 'no-price', evaluated: 0 }),
+      );
+    });
+
+    it('logs a run with no alerts as healthy without pricing anything (FIX-AC02)', async () => {
+      alerts.listAll.mockResolvedValue([]);
+
+      await controller.checkPriceAlerts();
+
+      expect(getPricesBySymbols).not.toHaveBeenCalled();
+      expect(alerts.recordRun).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: 'healthy' }),
+      );
+    });
+
+    it('logs a lock-skipped call as skipped and still answers 200 (FIX-AC03)', async () => {
+      alerts.acquireRunLock.mockResolvedValue(null);
+
+      await expect(controller.checkPriceAlerts()).resolves.toEqual({ ok: true });
+
+      expect(alerts.recordRun).toHaveBeenCalledTimes(1);
+      expect(alerts.recordRun).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: 'skipped' }),
+      );
+    });
+
+    it('logs a run ended by an unhandled error as failed and still answers 200 (FIX-AC03)', async () => {
+      alerts.listAll.mockRejectedValue(new Error('redis down'));
+
+      await expect(controller.checkPriceAlerts()).resolves.toEqual({ ok: true });
+
+      expect(alerts.recordRun).toHaveBeenCalledTimes(1);
+      expect(alerts.recordRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed' }));
+    });
+
+    it('still processes alerts and answers 200 when the run-log write fails (FIX-AC19)', async () => {
+      alerts.listAll.mockResolvedValue([alert()]);
+      getPricesBySymbols.mockResolvedValue([{ symbol: 'btc', priceUsd: 100200 }]);
+      alerts.recordRun.mockRejectedValue(new Error('redis blip'));
+
+      await expect(controller.checkPriceAlerts()).resolves.toEqual({ ok: true });
+
+      expect(sendTextMessage).toHaveBeenCalledTimes(1);
+      expect(alerts.updateState).toHaveBeenCalledWith(expect.objectContaining({ state: 'fired' }));
+      // One attempt only: a failed log write is not retried as a "failed" run.
+      expect(alerts.recordRun).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('still releases the lock and acks 200 when Redis fails mid-run', async () => {
     alerts.listAll.mockRejectedValue(new Error('redis down'));
 

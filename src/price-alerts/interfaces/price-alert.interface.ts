@@ -33,9 +33,22 @@ export interface AlertDelivery {
   attemptedAt: string;
 }
 
+/**
+ * How one authenticated call to the alert check ended (spec EPIC-002-FIX-FR02):
+ * - `healthy`: ran to completion and, when alerts exist, priced at least one of them
+ * - `no-price`: ran to completion, but the price source returned nothing for any alert
+ * - `failed`: an unhandled error ended the run
+ * - `skipped`: another run still held the lock
+ * Calls rejected by the secret guard never reach the handler; they are counted
+ * separately (see PriceAlertsService.recordRejections).
+ */
+export type RunOutcome = 'healthy' | 'no-price' | 'failed' | 'skipped';
+
 /** Per-run metrics for the alert check (spec EPIC-002-NFR08). */
 export interface AlertRunSummary {
   startedAt: string;
+  /** Absent on runs logged before EPIC-002-FIX, which only logged completed runs: read those as `healthy`. */
+  outcome?: RunOutcome;
   evaluated: number;
   fired: number;
   failed: number;

@@ -4,7 +4,7 @@ import { CoingeckoService } from '../coingecko/coingecko.service';
 import { PriceAlertsCronSecretGuard } from '../common/guards/price-alerts-cron-secret.guard';
 import { formatAlertTriggeredMessage } from '../utils/format-message.util';
 import { ZaloService } from '../zalo/zalo.service';
-import { AlertRunSummary, PriceAlert } from './interfaces/price-alert.interface';
+import { AlertRunSummary, PriceAlert, RunOutcome } from './interfaces/price-alert.interface';
 import { evaluateAlert } from './price-alert-evaluator';
 import { RUN_SEND_BUDGET_MS } from './price-alerts.constants';
 import { PriceAlertsService } from './price-alerts.service';
@@ -37,20 +37,23 @@ export class PriceAlertsController {
     const startedAt = new Date();
     let lockToken: string | null = null;
 
+    // Every call that gets past the guard is logged with its outcome — skipped
+    // and failed runs too — so a gap in healthy runs can be explained later
+    // (spec EPIC-002-FIX-FR02). Only the lock-holding run touches alerts.
+    let summary: AlertRunSummary;
     try {
       lockToken = await this.priceAlertsService.acquireRunLock();
       if (!lockToken) {
         this.logger.warn('Price-alert check skipped: a previous run still holds the lock');
-        return { ok: true };
+        summary = emptyRunSummary(startedAt, 'skipped');
+      } else {
+        summary = await this.runCheck(startedAt);
       }
-
-      const summary = await this.runCheck(startedAt);
-      this.logger.log(JSON.stringify({ event: 'price-alert-run', ...summary }));
-      await this.priceAlertsService.recordRun(summary);
     } catch (error) {
       this.logger.error(
         `Price-alert check failed: ${error instanceof Error ? error.stack : String(error)}`,
       );
+      summary = emptyRunSummary(startedAt, 'failed');
     } finally {
       if (lockToken) {
         await this.priceAlertsService.releaseRunLock(lockToken).catch((error: unknown) => {
@@ -59,25 +62,38 @@ export class PriceAlertsController {
       }
     }
 
+    this.logger.log(JSON.stringify({ event: 'price-alert-run', ...summary }));
+    await this.recordRunSafely(summary);
+
     // Always 200, like /cron/daily-digest: a CoinGecko/Zalo/Redis outage is
     // logged above, and the scheduler shouldn't retry-storm on it.
     return { ok: true };
   }
 
+  /**
+   * Best-effort: a failed run-log write loses that log line, never the run
+   * (spec EPIC-002-FIX-NFR09). The alerts were already processed by now.
+   */
+  private async recordRunSafely(summary: AlertRunSummary): Promise<void> {
+    try {
+      await this.priceAlertsService.recordRun(summary);
+    } catch (error) {
+      this.logger.error(
+        `Failed to record price-alert run: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   private async runCheck(startedAt: Date): Promise<AlertRunSummary> {
-    const summary: AlertRunSummary = {
-      startedAt: startedAt.toISOString(),
-      evaluated: 0,
-      fired: 0,
-      failed: 0,
-      rearmed: 0,
-      deferred: 0,
-      durationMs: 0,
-      driftMs: signedMinuteDrift(startedAt),
-    };
+    const summary = emptyRunSummary(startedAt, 'healthy');
 
     const alerts = await this.priceAlertsService.listAll();
     const prices = alerts.length > 0 ? await this.loadPrices(alerts) : new Map<string, number>();
+    // A run that watches alerts but priced none of them isn't watching
+    // anything (spec EPIC-002-FIX-FR01). With no alerts, there is nothing to price.
+    if (alerts.length > 0 && prices.size === 0) {
+      summary.outcome = 'no-price';
+    }
     // The send budget starts after the price lookup, so a slow price source
     // delays this run instead of deferring every due alert on every run.
     const sendsStartedAt = Date.now();
@@ -210,6 +226,20 @@ export class PriceAlertsController {
     }
     summary.fired++;
   }
+}
+
+function emptyRunSummary(startedAt: Date, outcome: RunOutcome): AlertRunSummary {
+  return {
+    startedAt: startedAt.toISOString(),
+    outcome,
+    evaluated: 0,
+    fired: 0,
+    failed: 0,
+    rearmed: 0,
+    deferred: 0,
+    durationMs: Date.now() - startedAt.getTime(),
+    driftMs: signedMinuteDrift(startedAt),
+  };
 }
 
 /** Signed ms from the nearest minute boundary: 100ms early -> -100, not +59,900. */
