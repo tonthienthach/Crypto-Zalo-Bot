@@ -1,18 +1,25 @@
 #!/usr/bin/env node
 /**
- * Read-only admin report for price alerts (EPIC-002): reads the capped run
- * and delivery logs the /cron/price-alerts check writes to Upstash Redis and
- * prints what docs/epics/EPIC-002 needs to be checked after deploy:
+ * Read-only admin report for price alerts (EPIC-002, EPIC-002-FIX): reads
+ * what the /cron/price-alerts check and the /cron/price-alerts-watch watcher
+ * write to Upstash Redis, and prints:
  *
- *   - gap between consecutive check runs (p50/p95/max) — spec AC18 wants
- *     p95 <= 90s over 24h
- *   - run duration p95 — spec NFR02 wants <= 15s
- *   - deliveries per chat — the intent.md success metric (>=1 alert from a
- *     chat other than the owner delivered within 30 days)
+ *   - runs by outcome (healthy / no-price / failed / skipped) and rejected
+ *     calls, over the logged window (~24h)
+ *   - every stretch of >= 15 min without a healthy run, with what was seen
+ *     in it ("not called", rejected, no price, failed, skipped)
+ *   - last healthy run, last watcher run, whether OWNER_CHAT_ID is set, and
+ *     the last monitoring messages
+ *   - gap between healthy runs (EPIC-002 AC18: p95 <= 90s) and healthy run
+ *     duration (NFR02: <= 15s)
+ *   - deliveries per chat — the EPIC-002 intent success metric
  *
- * Never writes anything. Reads KV_REST_API_URL / KV_REST_API_TOKEN from the
- * shell environment, else `.env.alerts` (a throwaway
- * `vercel env pull .env.alerts --environment=production`), else `.env`.
+ * Never writes anything, and only uses read commands, so an Upstash
+ * read-only token is enough (EPIC-002-FIX-NFR11). Reads KV_REST_API_URL /
+ * KV_REST_API_TOKEN from the shell environment, else `.env.alerts`, else
+ * `.env`. The production values are Sensitive on Vercel, so `vercel env
+ * pull` can't fetch them: copy them from Upstash Console (see
+ * docs/DEPLOYMENT.md §8a).
  *
  * Usage:
  *   npm run alerts:report
@@ -20,6 +27,12 @@
 const fs = require('fs');
 const path = require('path');
 const { Redis } = require('@upstash/redis');
+const {
+  countOutcomes,
+  flattenRejections,
+  buildOutages,
+  healthyStats,
+} = require('./price-alerts-report.lib');
 
 function loadEnvFile(filePath) {
   const result = {};
@@ -40,62 +53,68 @@ function loadEnvFile(filePath) {
   return result;
 }
 
-function percentile(sorted, p) {
-  if (sorted.length === 0) return null;
-  const index = Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1);
-  return sorted[Math.max(0, index)];
-}
-
 function seconds(ms) {
-  return ms === null ? 'n/a' : `${(ms / 1000).toFixed(1)}s`;
+  return ms === null || ms === undefined ? 'n/a' : `${(ms / 1000).toFixed(1)}s`;
 }
 
-async function main() {
-  // `.env.alerts` (a throwaway `vercel env pull .env.alerts --environment=production`)
-  // wins over the dev `.env`; the shell environment wins over both.
-  const root = path.resolve(__dirname, '..');
-  const env = {
-    ...loadEnvFile(path.join(root, '.env')),
-    ...loadEnvFile(path.join(root, '.env.alerts')),
-    ...process.env,
-  };
-  if (!env.KV_REST_API_URL || !env.KV_REST_API_TOKEN) {
-    console.error('KV_REST_API_URL / KV_REST_API_TOKEN missing. Run `vercel env pull .env.alerts --environment=production` first.');
-    process.exit(1);
-  }
-  const redis = new Redis({ url: env.KV_REST_API_URL, token: env.KV_REST_API_TOKEN });
+function minutes(ms) {
+  return `${Math.round(ms / 60_000)} min`;
+}
 
-  const [runs, successes, failures, alertCount] = await Promise.all([
-    redis.lrange('price-alerts:runs', 0, -1),
-    redis.lrange('price-alerts:deliveries', 0, -1),
-    redis.lrange('price-alerts:delivery-failures', 0, -1),
-    redis.scard('price-alerts:ids'),
-  ]);
+function time(ms) {
+  return ms === null || ms === undefined ? 'never' : new Date(ms).toISOString();
+}
 
-  // Logs are newest-first; sort oldest-first by start time to measure gaps.
+/** Every read the report makes, in one place — read-only commands only. */
+async function readAll(redis, now) {
+  const days = [0, 1].map((i) => new Date(now - i * 86_400_000).toISOString().slice(0, 10));
+  const [runs, successes, failures, alertCount, monitor, notices, ...rejectedHashes] =
+    await Promise.all([
+      redis.lrange('price-alerts:runs', 0, -1),
+      redis.lrange('price-alerts:deliveries', 0, -1),
+      redis.lrange('price-alerts:delivery-failures', 0, -1),
+      redis.scard('price-alerts:ids'),
+      redis.get('price-alerts:monitor'),
+      redis.lrange('price-alerts:monitor-notices', 0, 4),
+      ...days.map((day) => redis.hgetall(`price-alerts:rejected:${day}`)),
+    ]);
+  const hashesByDay = Object.fromEntries(days.map((day, i) => [day, rejectedHashes[i]]));
+  return { runs, successes, failures, alertCount, monitor, notices, hashesByDay };
+}
+
+function printReport(data, now) {
+  const { runs, successes, failures, alertCount, monitor, notices, hashesByDay } = data;
+  const rejected = flattenRejections(hashesByDay);
   const starts = runs.map((run) => Date.parse(run.startedAt)).sort((a, b) => a - b);
-  const gaps = starts.slice(1).map((start, i) => start - starts[i]).sort((a, b) => a - b);
-  const durations = runs.map((run) => run.durationMs).sort((a, b) => a - b);
+  const windowStart = starts.length ? starts[0] : now;
 
   console.log(`Active alerts: ${alertCount}`);
   console.log(
     `Runs logged: ${runs.length}` +
-      (starts.length > 0
-        ? ` (${new Date(starts[0]).toISOString()} -> ${new Date(starts[starts.length - 1]).toISOString()})`
-        : ''),
+      (starts.length ? ` (${time(starts[0])} -> ${time(starts[starts.length - 1])})` : ''),
+  );
+  const counts = countOutcomes(runs, rejected);
+  console.log(
+    `By outcome: healthy ${counts.healthy}, no-price ${counts['no-price']}, failed ${counts.failed}, ` +
+      `skipped ${counts.skipped}; rejected calls (last 2 UTC days, lower bound) ${counts.rejected}`,
+  );
+
+  const stats = healthyStats(runs);
+  const lastHealthy = Math.max(
+    stats.lastHealthyAt ?? -Infinity,
+    monitor?.lastHealthyAt ? Date.parse(monitor.lastHealthyAt) : -Infinity,
+  );
+  console.log(`Last healthy run: ${time(Number.isFinite(lastHealthy) ? lastHealthy : null)}`);
+  console.log(
+    `Gap between healthy runs: p50 ${seconds(stats.gapP50)}, p95 ${seconds(stats.gapP95)}, ` +
+      `max ${seconds(stats.gapMax)}  [AC18: p95 <= 90s]`,
   );
   console.log(
-    `Gap between runs: p50 ${seconds(percentile(gaps, 50))}, p95 ${seconds(
-      percentile(gaps, 95),
-    )}, max ${seconds(gaps.length ? gaps[gaps.length - 1] : null)}  [AC18: p95 <= 90s]`,
+    `Healthy run duration: p95 ${seconds(stats.durationP95)}, max ${seconds(stats.durationMax)}  ` +
+      `[NFR02: <= 15s]`,
   );
   console.log(
-    `Run duration: p95 ${seconds(percentile(durations, 95))}, max ${seconds(
-      durations.length ? durations[durations.length - 1] : null,
-    )}  [NFR02: <= 15s]`,
-  );
-  console.log(
-    `Totals over logged runs: fired ${runs.reduce((n, r) => n + r.fired, 0)}, failed ${runs.reduce(
+    `Totals over logged runs: fired ${runs.reduce((n, r) => n + r.fired, 0)}, failed sends ${runs.reduce(
       (n, r) => n + r.failed,
       0,
     )}, rearmed ${runs.reduce((n, r) => n + r.rearmed, 0)}, deferred ${runs.reduce(
@@ -103,6 +122,47 @@ async function main() {
       0,
     )}`,
   );
+
+  const outages = buildOutages(runs, rejected, windowStart, now);
+  console.log(`\nOutages (>= 15 min without a healthy run): ${outages.length}`);
+  for (const outage of outages) {
+    const seen = [];
+    if (outage.notCalled) seen.push('not called');
+    for (const kind of ['rejected', 'no-price', 'failed', 'skipped']) {
+      if (outage.counts[kind] > 0) seen.push(`${kind} x${outage.counts[kind]}`);
+    }
+    console.log(
+      `  ${time(outage.start)} -> ${outage.ongoing ? 'ongoing' : time(outage.end)} ` +
+        `(${minutes(outage.durationMs)}): ${seen.join(', ') || 'not called'}`,
+    );
+  }
+
+  console.log('\nMonitoring:');
+  console.log(
+    monitor
+      ? `  Watcher last ran: ${monitor.lastWatcherRunAt} (started ${monitor.watcherStartedAt})`
+      : '  Watcher last ran: never (not set up yet?)',
+  );
+  console.log(
+    `  Owner chat: ${
+      monitor
+        ? monitor.ownerChatConfigured
+          ? 'configured'
+          : 'NOT configured (OWNER_CHAT_ID)'
+        : 'unknown'
+    }`,
+  );
+  if (monitor?.outage) {
+    console.log(
+      `  Open outage since ${monitor.outage.since}, owner told: ${monitor.outage.notifiedAt ?? 'not yet'}`,
+    );
+  }
+  console.log(`  Last monitoring messages: ${notices.length ? '' : 'none'}`);
+  for (const notice of notices) {
+    console.log(
+      `    ${notice.at} ${notice.kind} ${notice.delivered ? 'delivered' : 'NOT delivered'}`,
+    );
+  }
 
   const byChat = new Map();
   for (const delivery of [...successes, ...failures]) {
@@ -116,7 +176,33 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+async function main() {
+  // `.env.alerts` (a throwaway file holding the production KV values) wins
+  // over the dev `.env`; the shell environment wins over both.
+  const root = path.resolve(__dirname, '..');
+  const env = {
+    ...loadEnvFile(path.join(root, '.env')),
+    ...loadEnvFile(path.join(root, '.env.alerts')),
+    ...process.env,
+  };
+  if (!env.KV_REST_API_URL || !env.KV_REST_API_TOKEN || env.KV_REST_API_URL.includes('SENSITIVE')) {
+    console.error(
+      'KV_REST_API_URL / KV_REST_API_TOKEN missing. Copy them from Upstash Console -> your database ' +
+        '-> REST API (the read-only token is enough) into .env.alerts. `vercel env pull` cannot fetch ' +
+        'them: they are Sensitive on Vercel.',
+    );
+    process.exit(1);
+  }
+  const redis = new Redis({ url: env.KV_REST_API_URL, token: env.KV_REST_API_TOKEN });
+  const now = Date.now();
+  printReport(await readAll(redis, now), now);
+}
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = { readAll, printReport };

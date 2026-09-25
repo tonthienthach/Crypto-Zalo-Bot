@@ -26,6 +26,24 @@ import {
   PriceAlertsService,
 } from '../src/price-alerts/price-alerts.service';
 
+// The report is a plain Node script; exercised here against the real driver (EPIC-002-FIX-AC15).
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+const report = require('../scripts/price-alerts-report');
+
+/** Only the commands an Upstash read-only token allows; anything else throws. */
+const READ_COMMANDS = new Set(['lrange', 'hgetall', 'get', 'mget', 'scard', 'smembers']);
+function readOnly(client: Redis): Redis {
+  return new Proxy(client, {
+    get(target, prop, receiver) {
+      if (typeof prop === 'string' && !READ_COMMANDS.has(prop)) {
+        throw new Error(`write-capable command used by the report: ${prop}`);
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 const url = process.env.REDIS_INT_URL;
 const token = process.env.REDIS_INT_TOKEN ?? 'local';
 const describeIfRedis = url ? describe : describe.skip;
@@ -146,4 +164,67 @@ describeIfRedis('PriceAlertsService against a real Redis (integration)', () => {
       expect.objectContaining({ chatId: 'chat-blocked', delivered: false }),
     ]);
   }, 60_000);
+
+  describe('EPIC-002-FIX monitoring storage', () => {
+    it('adds rejected counts into one minute field with a TTL, and sums them since a time (FIX-AC04)', async () => {
+      const at = new Date('2026-09-25T03:07:30.000Z');
+      await service.recordRejections(1, at);
+      await service.recordRejections(41, at);
+
+      expect(await redis.hgetall('price-alerts:rejected:2026-09-25')).toEqual({ '03:07': 42 });
+      const ttl = await redis.ttl('price-alerts:rejected:2026-09-25');
+      expect(ttl).toBeGreaterThan(2 * 24 * 60 * 60);
+      expect(await service.countRejectionsSince('2026-09-25T03:00:00.000Z', at)).toBe(42);
+      expect(await service.countRejectionsSince('2026-09-25T03:08:00.000Z', at)).toBe(0);
+    });
+
+    it('round-trips monitor and watchdog state', async () => {
+      const monitor = {
+        watcherStartedAt: '2026-09-25T03:00:00.000Z',
+        lastWatcherRunAt: '2026-09-25T03:05:00.000Z',
+        lastHealthyAt: '2026-09-25T03:04:00.000Z',
+        outage: null,
+        ownerChatConfigured: true,
+      };
+      await service.setMonitorState(monitor);
+      await service.setWatchdogState({ outage: null });
+
+      expect(await service.getMonitorState()).toEqual(monitor);
+      expect(await service.getMonitorAndWatchdogState()).toEqual([monitor, { outage: null }]);
+    });
+
+    it('runs the report with read commands only and writes nothing (FIX-AC15)', async () => {
+      const now = Date.parse('2026-09-25T03:30:00.000Z');
+      await service.recordRun({
+        startedAt: '2026-09-25T03:00:00.000Z',
+        outcome: 'healthy',
+        evaluated: 1,
+        fired: 0,
+        failed: 0,
+        rearmed: 0,
+        deferred: 0,
+        durationMs: 400,
+        driftMs: 0,
+      });
+      await service.recordRejections(5, new Date('2026-09-25T03:20:00.000Z'));
+      await service.recordMonitorNotice({
+        kind: 'down',
+        at: '2026-09-25T03:16:00.000Z',
+        delivered: true,
+      });
+      const keysBefore = (await redis.keys('*')).sort();
+
+      const data = await report.readAll(readOnly(redis), now);
+      const lines: string[] = [];
+      const log = jest.spyOn(console, 'log').mockImplementation((line: string) => lines.push(line));
+      report.printReport(data, now);
+      log.mockRestore();
+
+      expect((await redis.keys('*')).sort()).toEqual(keysBefore);
+      const output = lines.join('\n');
+      expect(output).toContain('Outages (>= 15 min without a healthy run): 1');
+      expect(output).toContain('rejected x5');
+      expect(output).toContain('down delivered');
+    });
+  });
 });
