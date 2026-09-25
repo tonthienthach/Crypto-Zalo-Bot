@@ -1,6 +1,6 @@
 {
   "epic": "EPIC-002-FIX",
-  "summary": "Follow-up of EPIC-002 incident: owner told via Zalo when the price-alert check stops. Artifacts in Vietnamese.",
+  "summary": "Owner told via Zalo when the price-alert check stops. Implemented 2026-09-25 on feature/epic-002-fix-alert-monitoring (12deea3..6434eef), not pushed/deployed. Artifacts in Vietnamese.",
   "entries": [
     {
       "at": "2026-09-25T02:19:38.881Z",
@@ -13,8 +13,44 @@
       "author": "Thach <vnsnake123@gmail.com>",
       "kind": "decision",
       "text": "Scope: owner only, price-alerts only (9am digest monitoring = separate epic). Reminder every 6h; watcher silent 30 min -> check notifies owner. Defaults accepted."
+    },
+    {
+      "at": "2026-09-25T09:14:36.427Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Implemented in 8 commits (12deea3..6434eef): run outcomes, rejected-call counting (1 EVAL/min/instance, per-minute fields in a per-UTC-day hash), pure evaluateMonitor/evaluateWatchdog, /cron/price-alerts-watch + PriceAlertsMonitorService, watchdog in the check every 5th minute, outage-aware report, DEPLOYMENT 8a/8b. Unit 132->185, e2e 20->23 (+3 opt-in Redis)."
+    },
+    {
+      "at": "2026-09-25T09:14:36.427Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "Upstash budget still an estimate (~295k/339k per month): owner skipped the pre-step-4 dashboard baseline. Check Upstash Usage after deploy; >320k -> watchdog every 10 min, MONITOR_RUNS_WINDOW 20."
+    },
+    {
+      "at": "2026-09-25T09:14:36.427Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "Opt-in real-Redis tests (AC04 real, AC15 read-only report) written but NOT run: Docker daemon was down. Run before merge."
+    },
+    {
+      "at": "2026-09-25T09:14:36.427Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "context",
+      "text": "npm run lint (eslint --fix) rewrites CRLF working copies (core.autocrlf=true) to LF, making many unrelated files look modified. Stage only epic files; consider a .gitattributes chore."
+    },
+    {
+      "at": "2026-09-25T09:14:36.427Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "context",
+      "text": "Deploy order: env PRICE_ALERTS_WATCH_SECRET + OWNER_CHAT_ID -> vercel deploy --prod -> curl watch endpoint -> create QStash schedule */5 with Upstash-Forward-X-Cron-Secret-Token -> report within 5 min -> disable cron-job.org ~20 min to test AC17."
     }
   ],
-  "reflections": [],
-  "updatedAt": "2026-09-25T02:19:38.881Z"
+  "reflections": [
+    {
+      "at": "2026-09-25T09:14:36.427Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "text": "Walking the failure order after writing the watcher found the same class of bug in the watchdog path (delivered but unsaved -> repeats every 5 min). Next time: when two code paths share a send-then-persist pattern, factor the anti-spam rule once instead of re-deriving it per path."
+    }
+  ],
+  "updatedAt": "2026-09-25T09:14:36.427Z"
 }
