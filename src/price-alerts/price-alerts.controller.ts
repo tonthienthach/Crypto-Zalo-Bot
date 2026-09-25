@@ -6,7 +6,8 @@ import { formatAlertTriggeredMessage } from '../utils/format-message.util';
 import { ZaloService } from '../zalo/zalo.service';
 import { AlertRunSummary, PriceAlert, RunOutcome } from './interfaces/price-alert.interface';
 import { evaluateAlert } from './price-alert-evaluator';
-import { RUN_SEND_BUDGET_MS } from './price-alerts.constants';
+import { RUN_SEND_BUDGET_MS, WATCHDOG_CHECK_EVERY_MINUTES } from './price-alerts.constants';
+import { PriceAlertsMonitorService } from './price-alerts-monitor.service';
 import { PriceAlertsService } from './price-alerts.service';
 
 /**
@@ -26,6 +27,7 @@ export class PriceAlertsController {
     private readonly coingeckoService: CoingeckoService,
     private readonly zaloService: ZaloService,
     private readonly configService: ConfigService,
+    private readonly monitorService: PriceAlertsMonitorService,
   ) {
     this.usdToVndRate = this.configService.get<number>('currency.usdToVndRate')!;
   }
@@ -64,6 +66,9 @@ export class PriceAlertsController {
 
     this.logger.log(JSON.stringify({ event: 'price-alert-run', ...summary }));
     await this.recordRunSafely(summary);
+    if (summary.outcome !== 'skipped' && isWatchdogMinute(startedAt)) {
+      await this.checkWatcherSafely();
+    }
 
     // Always 200, like /cron/daily-digest: a CoinGecko/Zalo/Redis outage is
     // logged above, and the scheduler shouldn't retry-storm on it.
@@ -80,6 +85,20 @@ export class PriceAlertsController {
     } catch (error) {
       this.logger.error(
         `Failed to record price-alert run: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Watches the watcher (spec EPIC-002-FIX-FR07), after the lock is released
+   * so it never lengthens a run's hold on it. Best-effort, like the run log.
+   */
+  private async checkWatcherSafely(): Promise<void> {
+    try {
+      await this.monitorService.checkWatcher();
+    } catch (error) {
+      this.logger.error(
+        `Price-alert watchdog check failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -240,6 +259,14 @@ function emptyRunSummary(startedAt: Date, outcome: RunOutcome): AlertRunSummary 
     durationMs: Date.now() - startedAt.getTime(),
     driftMs: signedMinuteDrift(startedAt),
   };
+}
+
+/**
+ * Every WATCHDOG_CHECK_EVERY_MINUTES-th minute, by the nearest minute so a
+ * run a few seconds early or late still lands on its slot.
+ */
+function isWatchdogMinute(at: Date): boolean {
+  return Math.round(at.getTime() / 60_000) % WATCHDOG_CHECK_EVERY_MINUTES === 0;
 }
 
 /** Signed ms from the nearest minute boundary: 100ms early -> -100, not +59,900. */

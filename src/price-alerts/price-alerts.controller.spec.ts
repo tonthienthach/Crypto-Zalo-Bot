@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { CoingeckoService, CoingeckoUnavailableError } from '../coingecko/coingecko.service';
 import { ZaloService } from '../zalo/zalo.service';
 import { PriceAlert } from './interfaces/price-alert.interface';
+import { PriceAlertsMonitorService } from './price-alerts-monitor.service';
 import { PriceAlertsController } from './price-alerts.controller';
 import { PriceAlertsService } from './price-alerts.service';
 
@@ -24,6 +25,7 @@ describe('PriceAlertsController', () => {
   let controller: PriceAlertsController;
   let getPricesBySymbols: jest.Mock;
   let sendTextMessage: jest.Mock;
+  const checkWatcher = jest.fn();
   const alerts = {
     acquireRunLock: jest.fn(),
     releaseRunLock: jest.fn(),
@@ -42,6 +44,7 @@ describe('PriceAlertsController', () => {
     alerts.recordRun.mockResolvedValue(undefined);
     getPricesBySymbols = jest.fn();
     sendTextMessage = jest.fn().mockResolvedValue(true);
+    checkWatcher.mockResolvedValue(undefined);
 
     const moduleRef = await Test.createTestingModule({
       controllers: [PriceAlertsController],
@@ -56,6 +59,7 @@ describe('PriceAlertsController', () => {
         },
         { provide: ZaloService, useValue: { sendTextMessage } },
         { provide: ConfigService, useValue: { get: () => 25400 } },
+        { provide: PriceAlertsMonitorService, useValue: { checkWatcher } },
       ],
     }).compile();
 
@@ -343,6 +347,43 @@ describe('PriceAlertsController', () => {
       expect(alerts.updateState).toHaveBeenCalledWith(expect.objectContaining({ state: 'fired' }));
       // One attempt only: a failed log write is not retried as a "failed" run.
       expect(alerts.recordRun).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('watchdog (EPIC-002-FIX-FR07)', () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('checks the watcher on minutes divisible by 5, after releasing the lock (FIX-AC13)', async () => {
+      jest.useFakeTimers({ now: new Date('2026-09-25T03:04:58.000Z'), doNotFake: ['nextTick'] });
+      alerts.listAll.mockResolvedValue([]);
+      const order: string[] = [];
+      alerts.releaseRunLock.mockImplementation(async () => order.push('release'));
+      checkWatcher.mockImplementation(async () => order.push('watchdog'));
+
+      await controller.checkPriceAlerts();
+
+      expect(checkWatcher).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(['release', 'watchdog']);
+    });
+
+    it('does not check the watcher on other minutes, or on a skipped run', async () => {
+      jest.useFakeTimers({ now: new Date('2026-09-25T03:06:00.000Z'), doNotFake: ['nextTick'] });
+      alerts.listAll.mockResolvedValue([]);
+      await controller.checkPriceAlerts();
+
+      jest.setSystemTime(new Date('2026-09-25T03:10:00.000Z'));
+      alerts.acquireRunLock.mockResolvedValue(null);
+      await controller.checkPriceAlerts();
+
+      expect(checkWatcher).not.toHaveBeenCalled();
+    });
+
+    it('answers 200 when the watchdog check fails', async () => {
+      jest.useFakeTimers({ now: new Date('2026-09-25T03:05:00.000Z'), doNotFake: ['nextTick'] });
+      alerts.listAll.mockResolvedValue([]);
+      checkWatcher.mockRejectedValue(new Error('redis down'));
+
+      await expect(controller.checkPriceAlerts()).resolves.toEqual({ ok: true });
     });
   });
 
