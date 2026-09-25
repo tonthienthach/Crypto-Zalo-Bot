@@ -19,8 +19,14 @@
       "author": "Thach <vnsnake123@gmail.com>",
       "kind": "decision",
       "text": "Out of scope (owner): paid tiers, non-Zalo channels. Manual entry vs exchange/wallet sync + trade history: owner delegated to spec."
+    },
+    {
+      "at": "2026-09-25T02:19:38.881Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Spec approved 2026-09-25 with all 7 PO decisions: manual entry (sync later), weighted-average cost, private chats only (groups refused, no financial data in logs), rolling 24h change, VND at fixed rate, only /gia-priceable coins, 200 trades / 20 held coins per chat. AC20 (tolerance = price-source spread) accepted."
     }
   ],
   "reflections": [],
-  "updatedAt": "2026-09-24T15:32:29.322Z"
+  "updatedAt": "2026-09-25T02:19:38.881Z"
 }

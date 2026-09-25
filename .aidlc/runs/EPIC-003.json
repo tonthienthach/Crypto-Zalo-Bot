@@ -2,10 +2,12 @@
   "schemaVersion": 2,
   "runId": "EPIC-003",
   "pipelineId": "ai-native-full",
-  "context": {},
-  "startedAt": "2026-09-24T15:26:14.637Z",
-  "updatedAt": "2026-09-24T15:26:14.640Z",
-  "currentStepIdx": 0,
+  "context": {
+    "epic": "EPIC-003"
+  },
+  "startedAt": "2026-09-25T02:08:02.527Z",
+  "updatedAt": "2026-09-25T08:39:06.291Z",
+  "currentStepIdx": 3,
   "status": "running",
   "steps": [
     {
@@ -13,33 +15,66 @@
       "agent": "aidlc-native-originator",
       "name": "intent",
       "revision": 1,
-      "status": "awaiting_work",
-      "startedAt": "2026-09-24T15:26:14.637Z",
-      "artifactsProduced": []
+      "status": "approved",
+      "startedAt": "2026-09-25T02:08:02.527Z",
+      "artifactsProduced": [
+        "docs/epics/EPIC-003/artifacts/intent.md"
+      ],
+      "finishedAt": "2026-09-25T02:08:06.032Z",
+      "history": [
+        {
+          "kind": "approve",
+          "at": "2026-09-25T02:08:06.032Z",
+          "revision": 1
+        }
+      ]
     },
     {
       "stepIdx": 1,
       "agent": "aidlc-native-product-owner",
       "name": "spec",
       "revision": 1,
-      "status": "pending",
-      "artifactsProduced": []
+      "status": "approved",
+      "artifactsProduced": [
+        "docs/epics/EPIC-003/artifacts/spec.md"
+      ],
+      "startedAt": "2026-09-25T02:08:06.032Z",
+      "finishedAt": "2026-09-25T02:19:41.118Z",
+      "history": [
+        {
+          "kind": "approve",
+          "at": "2026-09-25T02:19:41.118Z",
+          "revision": 1
+        }
+      ]
     },
     {
       "stepIdx": 2,
       "agent": "aidlc-native-engineer",
       "name": "build-plan",
       "revision": 1,
-      "status": "pending",
-      "artifactsProduced": []
+      "status": "approved",
+      "artifactsProduced": [
+        "docs/epics/EPIC-003/artifacts/plan.md"
+      ],
+      "startedAt": "2026-09-25T02:19:41.118Z",
+      "finishedAt": "2026-09-25T08:39:06.287Z",
+      "history": [
+        {
+          "kind": "approve",
+          "at": "2026-09-25T08:39:06.287Z",
+          "revision": 1
+        }
+      ]
     },
     {
       "stepIdx": 3,
       "agent": "aidlc-native-engineer",
       "name": "implement",
       "revision": 1,
-      "status": "pending",
-      "artifactsProduced": []
+      "status": "awaiting_work",
+      "artifactsProduced": [],
+      "startedAt": "2026-09-25T08:39:06.287Z"
     },
     {
       "stepIdx": 4,

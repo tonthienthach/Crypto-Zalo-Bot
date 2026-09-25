@@ -1,0 +1,20 @@
+{
+  "epic": "EPIC-002-FIX",
+  "summary": "Follow-up of EPIC-002 incident: owner told via Zalo when the price-alert check stops. Artifacts in Vietnamese.",
+  "entries": [
+    {
+      "at": "2026-09-25T02:19:38.881Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Spec approved 2026-09-25. Concern 1: option B - watcher runs on a different free scheduler than cron-job.org (<=5 min cadence)."
+    },
+    {
+      "at": "2026-09-25T02:19:38.881Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Scope: owner only, price-alerts only (9am digest monitoring = separate epic). Reminder every 6h; watcher silent 30 min -> check notifies owner. Defaults accepted."
+    }
+  ],
+  "reflections": [],
+  "updatedAt": "2026-09-25T02:19:38.881Z"
+}

@@ -13,7 +13,7 @@
     "aidlc-native-reviewer",
     "aidlc-native-operator"
   ],
-  "currentStep": 0,
+  "currentStep": 3,
   "status": "in_progress",
   "strict_mode": true,
   "createdAt": "2026-09-24T15:26:38.572Z",
@@ -21,42 +21,66 @@
     {
       "agent": "aidlc-native-originator",
       "name": "intent",
-      "status": "awaiting_work",
+      "status": "approved",
       "revision": 1,
-      "runStatus": "awaiting_work",
+      "runStatus": "approved",
       "startedAt": "2026-09-24T15:26:38.572Z",
-      "finishedAt": null,
-      "history": [],
-      "artifactsProduced": []
+      "finishedAt": "2026-09-24T15:41:17.844Z",
+      "history": [
+        {
+          "at": "2026-09-24T15:41:17.844Z",
+          "action": "approved",
+          "note": "Approved by originator (Thach) 2026-09-24; open questions answered in chat."
+        }
+      ],
+      "artifactsProduced": [
+        "docs/epics/EPIC-003/artifacts/intent.md"
+      ]
     },
     {
       "agent": "aidlc-native-product-owner",
       "name": "spec",
-      "status": "pending",
+      "status": "approved",
       "revision": 1,
-      "runStatus": "pending",
-      "startedAt": null,
-      "finishedAt": null,
-      "history": [],
-      "artifactsProduced": []
+      "runStatus": "approved",
+      "startedAt": "2026-09-24T15:41:17.844Z",
+      "finishedAt": "2026-09-25T02:19:38.881Z",
+      "history": [
+        {
+          "at": "2026-09-25T02:19:38.881Z",
+          "action": "approved",
+          "note": "Spec approved 2026-09-25 with all 7 PO decisions: manual entry (sync later), weighted-average cost, private chats only (groups refused, no financial data in logs), rolling 24h change, VND at fixed rate, only /gia-priceable coins, 200 trades / 20 held coins per chat. AC20 (tolerance = price-source spread) accepted."
+        }
+      ],
+      "artifactsProduced": [
+        "docs/epics/EPIC-003/artifacts/spec.md"
+      ]
     },
     {
       "agent": "aidlc-native-engineer",
       "name": "build-plan",
-      "status": "pending",
+      "status": "approved",
       "revision": 1,
-      "runStatus": "pending",
-      "startedAt": null,
-      "finishedAt": null,
-      "history": [],
-      "artifactsProduced": []
+      "runStatus": "approved",
+      "startedAt": "2026-09-25T02:19:38.881Z",
+      "finishedAt": "2026-09-25T08:39:03.979Z",
+      "history": [
+        {
+          "at": "2026-09-25T08:39:03.979Z",
+          "action": "approved",
+          "note": "Approved by originator (Thach) 2026-09-25. Implement sequentially: EPIC-002-FIX first, EPIC-003 rebases after."
+        }
+      ],
+      "artifactsProduced": [
+        "docs/epics/EPIC-003/artifacts/plan.md"
+      ]
     },
     {
       "agent": "aidlc-native-engineer",
       "name": "implement",
-      "status": "pending",
+      "status": "awaiting_work",
       "revision": 1,
-      "runStatus": "pending",
+      "runStatus": "awaiting_work",
       "startedAt": null,
       "finishedAt": null,
       "history": [],
@@ -96,5 +120,5 @@
       "artifactsProduced": []
     }
   ],
-  "updatedAt": "2026-09-24T15:26:38.572Z"
+  "updatedAt": "2026-09-25T08:39:03.979Z"
 }

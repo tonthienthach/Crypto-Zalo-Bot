@@ -103,6 +103,12 @@
       "author": "Thach <vnsnake123@gmail.com>",
       "kind": "context",
       "text": "vercel env pull cannot fetch Sensitive vars (writes [SENSITIVE]); KV_REST_API_URL/TOKEN must be copied from Upstash Console (read-only token is enough for alerts:report). DEPLOYMENT.md 8a step 4 is wrong. Claude auto mode also blocks env pull."
+    },
+    {
+      "at": "2026-09-25T02:07:07.818Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "context",
+      "text": "cron-job.org URL fixed + enabled by owner. AC18 24h window starts at first new run 2026-09-24T15:25:21.849Z (ends 2026-09-25T15:25Z). Check 2026-09-25T02:06Z: 644 runs total, p50 gap 61.4s, p95 81.2s, duration p95 0.8s / max 6.1s, 0 fired/failed."
     }
   ],
   "reflections": [
@@ -122,5 +128,5 @@
       "text": "The post-deploy check was scheduled for +24h with no immediate liveness check, so a scheduler misconfig cost a day. Next time: every external trigger gets a verify-within-minutes step in the deploy checklist, and run logs record failures, not just successes."
     }
   ],
-  "updatedAt": "2026-09-24T15:19:33.624Z"
+  "updatedAt": "2026-09-25T02:07:07.818Z"
 }

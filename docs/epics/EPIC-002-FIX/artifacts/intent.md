@@ -2,7 +2,7 @@
 
 **Epic ID:** `EPIC-002-FIX`
 **Originator:** Operator (stage 6), mở từ `docs/epics/EPIC-002/artifacts/incident.md`; chờ Thach (chủ dự án) duyệt ở stage 1
-**Status:** Draft
+**Status:** Approved (Thach, 2026-09-24)
 **Created:** 2026-09-24
 
 ---
@@ -49,8 +49,8 @@ Một chat đặt cảnh báo giá và từ đó tin rằng bot đang canh giá 
 
 | # | Question | Who can answer |
 |---|---|---|
-| 1 | Việc canh giá ngừng bao lâu thì owner phải được báo: 5 phút, 15 phút hay 1 giờ? | Thach |
-| 2 | Báo owner qua kênh nào để chắc chắn tới tay, kể cả khi chính kênh gửi tin của bot đang hỏng? | Thach |
+| 1 | ~~Ngừng bao lâu thì báo owner?~~ Đã trả lời 2026-09-24: **15 phút** | Thach |
+| 2 | ~~Báo qua kênh nào?~~ Đã trả lời 2026-09-24: **tin Zalo** tới owner. Owner chấp nhận rằng nếu chính kênh Zalo hỏng thì báo động cũng không tới | Thach |
 | 3 | Chat có cảnh báo có nên được biết khi việc canh giá tạm dừng không, hay chỉ owner? | Thach |
 | 4 | Có áp dụng cùng yêu cầu "biết khi ngừng chạy" cho bản tin 9h sáng không? (Initiative 1 cũng chưa xác nhận lần gửi đầu tiên) | Thach |
 | 5 | ~~Nguyên nhân lần này?~~ Đã trả lời 2026-09-24: lịch gọi bên ngoài được cấu hình sai địa chỉ | Thach |

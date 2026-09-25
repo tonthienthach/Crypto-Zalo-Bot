@@ -2,7 +2,7 @@
 
 **Epic ID:** `EPIC-003`
 **Originator:** Thach (chủ dự án), từ nhu cầu của chính mình; Initiative 3 trong `docs/ROADMAP.md`
-**Status:** Draft
+**Status:** Approved (Thach, 2026-09-24)
 **Created:** 2026-09-24
 
 ---
@@ -49,9 +49,9 @@ Owner giữ dưới 20 coin, nằm rải rác ở 2–3 nơi (sàn và ví). Mu�
 | # | Question | Who can answer |
 |---|---|---|
 | 1 | Danh mục được đưa vào bằng cách nào: người dùng tự khai số lượng và giá vốn, hay bot tự lấy số dư/lịch sử giao dịch từ sàn/ví? Owner giao việc này cho spec quyết. Lưu ý: chỉ tự lấy dữ liệu mới giải quyết triệt để vấn đề "phải mở nhiều nơi", nhưng cách đó đòi người dùng giao quyền truy cập tài khoản | Spec (product owner), Thach duyệt |
-| 2 | Lãi/lỗ tính theo cách nào khi mua cùng một coin nhiều lần ở nhiều giá? Có cần theo dõi từng lần mua/bán không? | Thach |
-| 3 | Owner muốn thấy số liệu danh mục khi nào: khi tự hỏi, trong bản tin 9h sáng, hay cả hai? | Thach |
-| 4 | Đơn vị hiển thị: VND, USD hay cả hai (bot hiện đổi giá theo tỷ giá cố định)? | Thach |
+| 2 | ~~Lãi/lỗ tính thế nào?~~ Đã trả lời 2026-09-24: **theo từng lần mua/bán**, người dùng ghi từng giao dịch; cách suy ra giá vốn để spec quyết | Thach |
+| 3 | ~~Xem khi nào?~~ Đã trả lời 2026-09-24: **cả hai**, khi tự hỏi và trong bản tin 9h sáng | Thach |
+| 4 | ~~Đơn vị?~~ Đã trả lời 2026-09-24: **VND và USD** | Thach |
 | 5 | Mỗi lần kiểm tra hôm nay mất bao nhiêu phút, bao nhiêu lần một ngày? Cần con số để đo xem tính năng có đỡ thời gian không | Thach |
 | 6 | Danh mục là dữ liệu tài chính cá nhân. Có yêu cầu gì về quyền riêng tư không, chẳng hạn trong nhóm chat thì ai được xem? | Thach |
 | 7 | Các coin không có trên nguồn giá hiện tại (token nhỏ, token trên chain khác) thì xử lý thế nào? | Spec |
