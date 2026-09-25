@@ -26,6 +26,7 @@ const mockRedis = {
   set: jest.fn(),
   del: jest.fn(),
   eval: jest.fn(),
+  hgetall: jest.fn(),
   multi: jest.fn(() => mockTx),
 };
 
@@ -268,6 +269,36 @@ describe('PriceAlertsService', () => {
       expect(keys).toEqual(['price-alerts:rejected:2026-09-25']);
       expect(args).toEqual(['23:59', '42', String(3 * 24 * 60 * 60)]);
       expect(mockTx.exec).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('countRejectionsSince (EPIC-002-FIX)', () => {
+    it('sums the minutes from the outage start, across midnight UTC', async () => {
+      mockRedis.hgetall.mockImplementation(async (key: string) =>
+        key === 'price-alerts:rejected:2026-09-26'
+          ? { '00:00': 3, '00:10': 4 }
+          : { '23:40': 100, '23:50': 5, '23:59': 1 },
+      );
+
+      const total = await service.countRejectionsSince(
+        '2026-09-25T23:50:30.000Z',
+        new Date('2026-09-26T00:20:00.000Z'),
+      );
+
+      expect(total).toBe(5 + 1 + 3 + 4);
+      expect(mockRedis.hgetall).toHaveBeenCalledTimes(2);
+    });
+
+    it('reads only today when the outage started today, tolerating a missing hash', async () => {
+      mockRedis.hgetall.mockResolvedValue(null);
+
+      await expect(
+        service.countRejectionsSince(
+          '2026-09-26T00:05:00.000Z',
+          new Date('2026-09-26T00:20:00.000Z'),
+        ),
+      ).resolves.toBe(0);
+      expect(mockRedis.hgetall).toHaveBeenCalledTimes(1);
     });
   });
 });

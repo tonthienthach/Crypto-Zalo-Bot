@@ -17,6 +17,9 @@ process.env.POSTGRES_URL = 'postgres://test:test@localhost:5432/test';
 process.env.KV_REST_API_URL = 'https://test-redis.upstash.io';
 process.env.KV_REST_API_TOKEN = 'test-redis-token';
 process.env.PRICE_ALERTS_CRON_SECRET = 'test-price-alerts-secret-1234';
+process.env.PRICE_ALERTS_WATCH_SECRET = 'test-price-alerts-watch-secret-1234';
+// OWNER_CHAT_ID deliberately unset: the app must boot without it (EPIC-002-FIX-AC11).
+delete process.env.OWNER_CHAT_ID;
 
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -47,6 +50,9 @@ describe('WebhookController (e2e)', () => {
   const acquireRunLock = jest.fn();
   const recordRun = jest.fn().mockResolvedValue(undefined);
   const recordRejections = jest.fn().mockResolvedValue(undefined);
+  const getMonitorState = jest.fn();
+  const setMonitorState = jest.fn().mockResolvedValue(undefined);
+  const listRecentRuns = jest.fn();
 
   const SECRET = process.env.WEBHOOK_SECRET_TOKEN as string;
 
@@ -69,6 +75,9 @@ describe('WebhookController (e2e)', () => {
         acquireRunLock,
         recordRun,
         recordRejections,
+        getMonitorState,
+        setMonitorState,
+        listRecentRuns,
       })
       .compile();
 
@@ -402,6 +411,52 @@ describe('WebhookController (e2e)', () => {
 
       expect(acquireRunLock).toHaveBeenCalled();
       expect(recordRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'skipped' }));
+    });
+  });
+
+  describe('GET /cron/price-alerts-watch (EPIC-002-FIX)', () => {
+    it('rejects the digest secret, the check secret and no secret, sending nothing (FIX-AC20)', async () => {
+      for (const secret of [
+        process.env.CRON_SECRET_TOKEN as string,
+        process.env.PRICE_ALERTS_CRON_SECRET as string,
+      ]) {
+        await request(app.getHttpServer())
+          .get('/cron/price-alerts-watch')
+          .set('x-cron-secret-token', secret)
+          .expect(401);
+      }
+      await request(app.getHttpServer()).get('/cron/price-alerts-watch').expect(401);
+
+      expect(getMonitorState).not.toHaveBeenCalled();
+      expect(sendTextMessage).not.toHaveBeenCalled();
+    });
+
+    it('runs the watcher for its own secret, as a header or bearer token, and answers 200', async () => {
+      getMonitorState.mockResolvedValue(null);
+      listRecentRuns.mockResolvedValue([]);
+
+      await request(app.getHttpServer())
+        .get('/cron/price-alerts-watch')
+        .set('x-cron-secret-token', process.env.PRICE_ALERTS_WATCH_SECRET as string)
+        .expect(200, { ok: true });
+      await request(app.getHttpServer())
+        .post('/cron/price-alerts-watch')
+        .set('authorization', `Bearer ${process.env.PRICE_ALERTS_WATCH_SECRET}`)
+        .expect(200, { ok: true });
+
+      expect(setMonitorState).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerChatConfigured: false, outage: null }),
+      );
+      expect(sendTextMessage).not.toHaveBeenCalled();
+    });
+
+    it('still answers 200 when Redis fails', async () => {
+      getMonitorState.mockRejectedValue(new Error('redis down'));
+
+      await request(app.getHttpServer())
+        .get('/cron/price-alerts-watch')
+        .set('x-cron-secret-token', process.env.PRICE_ALERTS_WATCH_SECRET as string)
+        .expect(200, { ok: true });
     });
   });
 });

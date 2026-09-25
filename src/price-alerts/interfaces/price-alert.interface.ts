@@ -83,6 +83,8 @@ export interface MonitorState {
   /** Newest healthy run seen so far, kept here because the run log window may no longer hold it. */
   lastHealthyAt: string | null;
   outage: OutageState | null;
+  /** Whether OWNER_CHAT_ID was set on the last watcher run, for the report (spec EPIC-002-FIX-AC11). */
+  ownerChatConfigured?: boolean;
 }
 
 /** The check's view of the watcher (spec EPIC-002-FIX-FR07): an outage of the watcher itself. */

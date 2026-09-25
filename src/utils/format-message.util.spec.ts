@@ -9,7 +9,10 @@ import {
   formatCoinLine,
   formatCronTrackingLine,
   formatDailyDigestReply,
+  formatDurationVi,
   formatHelpReply,
+  formatMonitorMessage,
+  formatMonitorStateUnreadableMessage,
   formatPriceReply,
   formatTopMarketsReply,
   formatUnknownCommandReply,
@@ -161,6 +164,71 @@ describe('format-message.util', () => {
 
     it('documents /canhbao in /help (FR13)', () => {
       expect(formatHelpReply()).toContain('/canhbao');
+    });
+  });
+
+  describe('price-alert monitoring (EPIC-002-FIX)', () => {
+    const down = {
+      kind: 'down' as const,
+      lastHealthyAt: '2026-09-25T03:00:00.000Z',
+      since: '2026-09-25T03:00:00.000Z',
+      downForMs: 16 * 60_000,
+      signal: {},
+    };
+
+    it('formats durations in Vietnamese', () => {
+      expect(formatDurationVi(15 * 60_000)).toBe('15 phút');
+      expect(formatDurationVi(125 * 60_000)).toBe('2 giờ 5 phút');
+      expect(formatDurationVi(6 * 60 * 60_000)).toBe('6 giờ');
+      expect(formatDurationVi((3 * 24 + 4) * 60 * 60_000)).toBe('3 ngày 4 giờ');
+    });
+
+    it('names the signal seen during an outage (FIX-AC09)', () => {
+      expect(formatMonitorMessage(down, 2)).toContain('không có lượt gọi nào tới bot');
+      expect(formatMonitorMessage({ ...down, signal: { 'no-price': 16 } }, 2)).toContain(
+        'không lấy được giá 16 lần',
+      );
+      expect(formatMonitorMessage({ ...down, signal: { rejected: 20 } }, 2)).toContain(
+        'bị từ chối (sai/thiếu secret) 20 lần',
+      );
+    });
+
+    it('carries every field FR04 asks for, in Vietnam time (FIX-AC05)', () => {
+      const text = formatMonitorMessage(down, 2);
+      expect(text).toContain('16 phút');
+      expect(text).toContain('Lượt khoẻ cuối: 10:00 25/09 (giờ VN)');
+      expect(text).toContain('Cảnh báo đang không được canh: 2');
+      expect(text).toContain('cron-job.org');
+    });
+
+    it('says "never" when there was no healthy run (FIX-AC06)', () => {
+      expect(formatMonitorMessage({ ...down, lastHealthyAt: null }, 0)).toContain('chưa từng');
+    });
+
+    it('formats recovery, reminder, watcher and state-unreadable messages', () => {
+      expect(
+        formatMonitorMessage(
+          {
+            kind: 'recovered',
+            since: '2026-09-25T03:00:00.000Z',
+            recoveredAt: '2026-09-25T03:40:00.000Z',
+            downForMs: 40 * 60_000,
+          },
+          0,
+        ),
+      ).toContain('tổng 40 phút');
+      expect(formatMonitorMessage({ ...down, kind: 'reminder' }, 1)).toContain('Vẫn đang ngừng');
+      expect(
+        formatMonitorMessage(
+          {
+            kind: 'watcher-down',
+            lastWatcherRunAt: '2026-09-25T03:00:00.000Z',
+            silentForMs: 35 * 60_000,
+          },
+          0,
+        ),
+      ).toContain('Upstash QStash');
+      expect(formatMonitorStateUnreadableMessage()).toContain('Upstash');
     });
   });
 });

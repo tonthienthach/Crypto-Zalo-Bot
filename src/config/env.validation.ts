@@ -53,4 +53,12 @@ export const envValidationSchema = Joi.object({
   // from that third party can't trigger the daily digest. Optional: unset
   // means the endpoint rejects every call (401), not a failed boot.
   PRICE_ALERTS_CRON_SECRET: Joi.string().min(16).max(256).optional(),
+  // Secret for /cron/price-alerts-watch, sent by the watcher's scheduler
+  // (Upstash QStash — a different provider than the check's). Its own secret,
+  // like PRICE_ALERTS_CRON_SECRET. Optional: unset rejects every call (401).
+  PRICE_ALERTS_WATCH_SECRET: Joi.string().min(16).max(256).optional(),
+  // Zalo chat that gets price-alert monitoring messages (EPIC-002-FIX).
+  // Its own setting, not the retired DIGEST_CHAT_ID. Optional: unset means
+  // monitoring still runs and records, it just can't message anyone.
+  OWNER_CHAT_ID: Joi.string().max(64).optional(),
 });

@@ -1,5 +1,10 @@
 import { CoinMarketData } from '../coingecko/interfaces/coingecko-response.interface';
-import { AlertDirection, PriceAlert } from '../price-alerts/interfaces/price-alert.interface';
+import {
+  AlertDirection,
+  MonitorAction,
+  OutageSignal,
+  PriceAlert,
+} from '../price-alerts/interfaces/price-alert.interface';
 
 const USD_FORMATTER = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -263,4 +268,81 @@ export function formatAlertTriggeredMessage(
 
 export function formatGenericErrorReply(): string {
   return '⚠️ Đã có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại sau.';
+}
+
+/** "14:05 25/09" in Vietnam time, for monitoring messages. */
+function formatIctDateTime(isoTimestamp: string): string {
+  const ict = new Date(Date.parse(isoTimestamp) + ICT_OFFSET_MS);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(ict.getUTCHours())}:${pad(ict.getUTCMinutes())} ${pad(ict.getUTCDate())}/${pad(
+    ict.getUTCMonth() + 1,
+  )}`;
+}
+
+/** "2 giờ 5 phút" / "15 phút" / "3 ngày 4 giờ". Rounded down to the minute. */
+export function formatDurationVi(durationMs: number): string {
+  const totalMinutes = Math.max(0, Math.floor(durationMs / 60_000));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return hours > 0 ? `${days} ngày ${hours} giờ` : `${days} ngày`;
+  if (hours > 0) return minutes > 0 ? `${hours} giờ ${minutes} phút` : `${hours} giờ`;
+  return `${minutes} phút`;
+}
+
+const OUTAGE_SIGNAL_LABELS: Record<keyof OutageSignal, string> = {
+  rejected: 'bị từ chối (sai/thiếu secret)',
+  'no-price': 'không lấy được giá',
+  failed: 'lỗi khi chạy',
+  skipped: 'bị bỏ qua (lượt trước còn giữ lock)',
+};
+
+/** What was seen during an outage (spec EPIC-002-FIX-FR04, AC09). */
+function formatOutageSignal(signal: OutageSignal): string {
+  const parts = (Object.keys(OUTAGE_SIGNAL_LABELS) as (keyof OutageSignal)[])
+    .filter((kind) => (signal[kind] ?? 0) > 0)
+    .map((kind) => `${OUTAGE_SIGNAL_LABELS[kind]} ${signal[kind]} lần`);
+  return parts.length > 0 ? parts.join(', ') : 'không có lượt gọi nào tới bot';
+}
+
+/**
+ * Owner-only monitoring messages (spec EPIC-002-FIX-FR04–FR07). `activeAlerts`
+ * is the number of alerts not being watched, for "down"/"reminder".
+ */
+export function formatMonitorMessage(action: MonitorAction, activeAlerts: number): string {
+  switch (action.kind) {
+    case 'down':
+    case 'reminder':
+      return [
+        action.kind === 'down'
+          ? `⚠️ Ngừng canh giá: ${formatDurationVi(action.downForMs)} không có lượt kiểm tra nào chạy khoẻ.`
+          : `⏰ Vẫn đang ngừng canh giá, đã ${formatDurationVi(action.downForMs)}.`,
+        action.lastHealthyAt === null
+          ? `Lượt khoẻ cuối: chưa từng (giám sát bắt đầu lúc ${formatIctDateTime(action.since)}, giờ VN)`
+          : `Lượt khoẻ cuối: ${formatIctDateTime(action.lastHealthyAt)} (giờ VN)`,
+        `Dấu hiệu gần nhất: ${formatOutageSignal(action.signal)}`,
+        `Cảnh báo đang không được canh: ${activeAlerts}`,
+        'Kiểm tra: job trên cron-job.org (đang bật, đúng URL, đúng secret) và log Vercel.',
+      ].join('\n');
+    case 'recovered':
+      return [
+        `✅ Canh giá đã chạy lại lúc ${formatIctDateTime(action.recoveredAt)} (giờ VN).`,
+        `Đã ngừng từ ${formatIctDateTime(action.since)}, tổng ${formatDurationVi(action.downForMs)}.`,
+      ].join('\n');
+    case 'watcher-down':
+      return [
+        `⚠️ Bên giám sát canh giá đã im lặng ${formatDurationVi(action.silentForMs)} (lần chạy cuối ${formatIctDateTime(action.lastWatcherRunAt)}, giờ VN).`,
+        'Trong lúc này, nếu việc canh giá ngừng sẽ không ai báo. Kiểm tra schedule trên Upstash QStash.',
+      ].join('\n');
+    case 'watcher-recovered':
+      return `✅ Bên giám sát canh giá đã chạy lại lúc ${formatIctDateTime(action.recoveredAt)} (giờ VN), sau ${formatDurationVi(action.silentForMs)} im lặng.`;
+  }
+}
+
+/** Sent when the watcher can't read its state from Redis (spec EPIC-002-FIX-NFR05). */
+export function formatMonitorStateUnreadableMessage(): string {
+  return [
+    '⚠️ Bên giám sát canh giá không đọc được trạng thái (Upstash Redis lỗi).',
+    'Không biết việc canh giá còn chạy không. Kiểm tra Upstash Console và log Vercel.',
+  ].join('\n');
 }

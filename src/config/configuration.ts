@@ -64,5 +64,11 @@ export default () => ({
 
   priceAlerts: {
     cronSecretToken: process.env.PRICE_ALERTS_CRON_SECRET,
+    watchSecretToken: process.env.PRICE_ALERTS_WATCH_SECRET,
+  },
+
+  monitoring: {
+    // Chat that gets price-alert outage/recovery messages (EPIC-002-FIX).
+    ownerChatId: process.env.OWNER_CHAT_ID,
   },
 });

@@ -7,13 +7,17 @@ import {
   AlertDelivery,
   AlertDirection,
   AlertRunSummary,
+  MonitorNotice,
+  MonitorState,
   PriceAlert,
+  WatchdogState,
 } from './interfaces/price-alert.interface';
 import { isConditionMet } from './price-alert-evaluator';
 import {
   MAX_ALERTS_PER_CHAT,
   MAX_DELIVERY_FAILURE_LOG_ENTRIES,
   MAX_DELIVERY_LOG_ENTRIES,
+  MAX_MONITOR_NOTICES,
   MAX_RUN_LOG_ENTRIES,
   REDIS_KEYS,
   REJECTION_LOG_TTL_SECONDS,
@@ -220,6 +224,65 @@ export class PriceAlertsService {
 
   async listDeliveryFailures(): Promise<AlertDelivery[]> {
     return this.redis.lrange<AlertDelivery>(REDIS_KEYS.deliveryFailures, 0, -1);
+  }
+
+  /** Newest `count` run summaries, newest first. */
+  async listRecentRuns(count: number): Promise<AlertRunSummary[]> {
+    return this.redis.lrange<AlertRunSummary>(REDIS_KEYS.runs, 0, count - 1);
+  }
+
+  /** Number of alerts currently stored, i.e. being watched. */
+  async countAlerts(): Promise<number> {
+    return this.redis.scard(REDIS_KEYS.allIds);
+  }
+
+  async getMonitorState(): Promise<MonitorState | null> {
+    return this.redis.get<MonitorState>(REDIS_KEYS.monitor);
+  }
+
+  async setMonitorState(state: MonitorState): Promise<void> {
+    await this.redis.set(REDIS_KEYS.monitor, state);
+  }
+
+  /** Watcher and watchdog state in one round-trip, for the check's look at the watcher. */
+  async getMonitorAndWatchdogState(): Promise<[MonitorState | null, WatchdogState | null]> {
+    const [monitor, watchdog] = await this.redis.mget<[MonitorState | null, WatchdogState | null]>(
+      REDIS_KEYS.monitor,
+      REDIS_KEYS.watchdog,
+    );
+    return [monitor, watchdog];
+  }
+
+  async setWatchdogState(state: WatchdogState): Promise<void> {
+    await this.redis.set(REDIS_KEYS.watchdog, state);
+  }
+
+  async recordMonitorNotice(notice: MonitorNotice): Promise<void> {
+    await this.pushCapped(REDIS_KEYS.monitorNotices, notice, MAX_MONITOR_NOTICES);
+  }
+
+  /**
+   * Rejected check calls counted from the minute `since` falls in up to now,
+   * reading one day hash per UTC day touched (at most the 3 days kept).
+   */
+  async countRejectionsSince(since: string, now: Date): Promise<number> {
+    const sinceMinute = since.slice(0, 16);
+    const days: string[] = [];
+    for (let i = 0; i < REJECTION_LOG_TTL_SECONDS / 86_400; i++) {
+      const day = new Date(now.getTime() - i * 86_400_000).toISOString().slice(0, 10);
+      if (day < since.slice(0, 10)) break;
+      days.push(day);
+    }
+    const hashes = await Promise.all(
+      days.map((day) => this.redis.hgetall<Record<string, number>>(REDIS_KEYS.rejected(day))),
+    );
+    let total = 0;
+    hashes.forEach((hash, i) => {
+      for (const [minute, count] of Object.entries(hash ?? {})) {
+        if (`${days[i]}T${minute}` >= sinceMinute) total += Number(count);
+      }
+    });
+    return total;
   }
 
   async listRuns(): Promise<AlertRunSummary[]> {
