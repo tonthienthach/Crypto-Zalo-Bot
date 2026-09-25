@@ -210,25 +210,44 @@ headers):
      -H "X-Cron-Secret-Token: <PRICE_ALERTS_CRON_SECRET value>"
    # -> {"ok":true}; a missing/wrong secret -> 401
    ```
-4. After 24h, run the read-only report. Pull the production values into a
-   **separate** file (the script reads `.env.alerts` before `.env`, so your
-   dev `.env` doesn't get overwritten with every production secret), then
-   delete it:
+4. **Within 5 minutes of enabling (or changing) the job, confirm it works** —
+   don't wait 24h to find out (the EPIC-002 launch lost ~32h to a wrong URL).
+   The report needs the production Upstash REST URL and a token. They are
+   **Sensitive** on Vercel, so `vercel env pull` can't fetch them (it writes
+   `[SENSITIVE]`). Instead, open **Upstash Console → your database → REST
+   API**, and copy `UPSTASH_REDIS_REST_URL` and the **read-only** token (the
+   report only reads) into a throwaway `.env.alerts` (gitignored; the script
+   reads it before `.env`):
    ```bash
-   vercel env pull .env.alerts --environment=production
-   npm run alerts:report
-   rm .env.alerts
+   # .env.alerts
+   KV_REST_API_URL="https://<your-db>.upstash.io"
+   KV_REST_API_TOKEN="<read-only token>"
    ```
-   It prints the gap between runs (p95 must be ≤ 90s), run duration, and
-   deliveries per chat (the success metric in
-   `docs/epics/EPIC-002/artifacts/intent.md`).
-5. Watch **Vercel → Usage** (Active CPU, Provisioned Memory — Hobby includes
+   ```bash
+   npm run alerts:report
+   ```
+   Wait 5 minutes and run it again: **"By outcome: healthy" must have grown
+   by at least 3**, and "Last healthy run" must be under 2 minutes old. If
+   not, the "Outages" lines say what was seen: `not called` (job off or
+   wrong URL), `rejected` (wrong secret), `no-price` (price source down),
+   `failed` (see Vercel logs for `Price-alert check failed`).
+5. After 24h, run the report again: the gap between healthy runs (p95 must be
+   ≤ 90s), healthy run duration, the outages, and deliveries per chat (the
+   success metric in `docs/epics/EPIC-002/artifacts/intent.md`). Delete
+   `.env.alerts` when done.
+6. Watch **Vercel → Usage** (Active CPU, Provisioned Memory — Hobby includes
    4h CPU/month) and the Upstash dashboard (commands/month, free tier 500k)
    for 48h, then multiply out to a month. This is the least certain part of
-   the design (see `docs/epics/EPIC-002/artifacts/plan.md` §4).
+   the design (see `docs/epics/EPIC-002/artifacts/plan.md` §4 and
+   `docs/epics/EPIC-002-FIX/artifacts/plan.md` §4 — target ≤ 400k/month).
 
-To stop alerts quickly, disable the cron-job.org job — nothing else runs
-the check.
+Then set up the watcher (step 8b), so a stopped check is reported instead
+of found by accident.
+
+**To stop alerts:** disable the cron-job.org job. With the watcher set up,
+you will then get a "check stopped" message after 15 minutes and a reminder
+every 6 hours — to silence it completely, also pause the QStash schedule
+(step 8b).
 
 > **CoinGecko quota:** the check makes up to one CoinGecko call per minute
 > (~43k/month) whenever alerts exist. Production currently has no
@@ -236,6 +255,59 @@ the check.
 > If you ever add a CoinGecko **Demo** key, check its monthly call cap first
 > — it can be lower than the check's usage, and `/gia` shares the same
 > quota.
+
+## 8b. Enable the price-alert watcher (Upstash QStash)
+
+The watcher (`/cron/price-alerts-watch`) tells you on Zalo when the check
+of step 8a has had no healthy run for 15 minutes, reminds you every 6 hours
+while it lasts, and tells you when it is back. It runs on a **different**
+scheduler than the check — if it ran on cron-job.org too, a broken
+cron-job.org account would silence both. The check in turn tells you if the
+watcher has been silent for 30 minutes.
+
+Order matters: env first, then deploy, then the schedule.
+
+1. Add two Production env vars on Vercel (both optional — without them the
+   bot still boots; the endpoint answers `401` / nothing can be sent):
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   vercel env add PRICE_ALERTS_WATCH_SECRET production   # mark it Sensitive
+   vercel env add OWNER_CHAT_ID production               # your own Zalo chat id
+   ```
+   `PRICE_ALERTS_WATCH_SECRET` is a **third** secret, different from
+   `CRON_SECRET_TOKEN` and `PRICE_ALERTS_CRON_SECRET` (it lives at QStash).
+   `OWNER_CHAT_ID` is the chat that gets monitoring messages; if you are the
+   original digest recipient, it is the value `DIGEST_CHAT_ID` used to hold.
+2. Deploy (`vercel deploy --prod`, step 4).
+3. Check the endpoint by hand:
+   ```bash
+   curl "https://zalo-crypto-bot.vercel.app/cron/price-alerts-watch"      -H "X-Cron-Secret-Token: <PRICE_ALERTS_WATCH_SECRET value>"
+   # -> {"ok":true}; no secret, or either of the other two secrets -> 401
+   ```
+4. **Only now** create the schedule, so QStash never calls a 404: Upstash
+   Console → **QStash → Schedules → Create**
+   - Destination: `https://zalo-crypto-bot.vercel.app/cron/price-alerts-watch`
+   - Method: `GET`, cron: `*/5 * * * *`
+   - Header: `Upstash-Forward-X-Cron-Secret-Token: <PRICE_ALERTS_WATCH_SECRET value>`
+     (QStash forwards `Upstash-Forward-*` headers without the prefix)
+
+   Free tier: 1,000 messages/day and 10 schedules; this uses 288/day.
+5. Within 5 minutes, `npm run alerts:report` (step 8a.4) must show
+   "Watcher last ran" under 5 minutes old and "Owner chat: configured".
+6. Test the alarm once for real: disable the cron-job.org job for ~20
+   minutes — you must get a "Ngừng canh giá" message within 20 minutes —
+   then re-enable it: a "Canh giá đã chạy lại" message must follow within 5
+   minutes.
+7. After 24h of normal operation you should have received **no** monitoring
+   message; check Upstash → Usage (commands/month) and Vercel → Usage (Active
+   CPU) again.
+
+**Fallback scheduler:** if QStash is ever unusable, a Cloudflare Workers
+cron trigger (free: 5 triggers, 100k requests/day) calling the same URL with
+the same `X-Cron-Secret-Token` header works without any code change.
+
+**Rollback:** pause the QStash schedule, then `vercel rollback` (step 7).
+The previous build ignores the new Redis keys and the `outcome` field.
 
 ## 9. Ongoing deploys
 

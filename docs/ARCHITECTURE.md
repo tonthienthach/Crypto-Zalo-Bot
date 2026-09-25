@@ -45,7 +45,7 @@ the reply is never carried in the webhook's own response body.
 | `coingecko/` | Talks to the CoinGecko public REST API (`/simple/price`, `/coins/markets`), maps ticker symbols to CoinGecko coin ids, normalizes responses into `CoinMarketData`, and applies a best-effort cache. |
 | `command-parser/` | Pure text-parsing service: turns a raw chat message into a `ParsedCommand` (`PRICE`, `TOP_MARKETS`, `HELP`, `SUBSCRIBE`, `UNSUBSCRIBE`, `WATCHLIST`, `ALERT_CREATE`/`ALERT_LIST`/`ALERT_DELETE`/`ALERT_INVALID`, `UNKNOWN`). No I/O, fully unit-testable, handles accented/unaccented Vietnamese. |
 | `subscribers/` | `SubscribersService` — CRUD over the `subscribers` table (Vercel Postgres / Neon) backing `/dangky`, `/huy`, `/watchlist`, and the daily digest recipient list. See "Persistence" below. |
-| `price-alerts/` | `PriceAlertsService` — alert storage in Upstash Redis (`/canhbao`); `PriceAlertsController` — `/cron/price-alerts`, the per-minute check, guarded by `PriceAlertsCronSecretGuard`; `evaluateAlert()` — the pure fire / re-arm / cooldown rules. See "Price alerts" below. |
+| `price-alerts/` | `PriceAlertsService` — alert storage in Upstash Redis (`/canhbao`); `PriceAlertsController` — `/cron/price-alerts`, the per-minute check, guarded by `PriceAlertsCronSecretGuard`; `evaluateAlert()` — the pure fire / re-arm / cooldown rules; `PriceAlertsWatchController` — `/cron/price-alerts-watch`, the watcher that tells the owner when the check stops, guarded by `PriceAlertsWatchSecretGuard`; `evaluateMonitor()` / `evaluateWatchdog()` — the pure monitoring rules. See "Price alerts" below. |
 | `zalo/` | Talks to the Zalo Bot "send message" API. Never throws — a failed send is logged and swallowed so an outbound Zalo outage can't turn into an unhandled webhook exception. Resolves `true`/`false` so callers that care (the alert check) know whether the send landed. |
 | `webhook/` | `WebhookController` — the only place that wires parsing + CoinGecko + Zalo + Subscribers together. Guarded by `WebhookSecretGuard`, DTO-validated by `ZaloWebhookDto`. Always acknowledges 200 to Zalo. |
 | `digest/` | `DigestController` — `POST /cron/daily-digest`, a machine-triggered (not user-triggered) endpoint that loads active subscribers from `SubscribersService` and pushes each their own watchlist. Guarded by `CronSecretGuard`. Has no scheduler of its own — see "Daily digest" below for what calls it. |
@@ -262,6 +262,42 @@ PriceAlertsController --> run lock (SET NX EX 120) -- already held? skip run
   layout before then. Vercel Hobby's 4h Active CPU/month (~330 ms CPU per
   run) is the other; `npm run alerts:report` and Vercel → Usage show where
   both stand.
+
+#### Monitoring the check (EPIC-002-FIX)
+
+The check is triggered from outside, so when nobody calls it no code runs at
+all — a missing run can't report itself. After the check silently didn't
+run for ~32h right after launch (`docs/epics/EPIC-002/artifacts/incident.md`),
+an independent watcher was added:
+
+```
+cron-job.org (every minute) --> /cron/price-alerts        logs every call: healthy | no-price | failed | skipped
+                                (guard)                    rejected calls: counted, <= 1 write/min (HINCRBY, EVAL)
+                                every 5th minute:          reads the watcher's heartbeat; silent 30 min -> owner
+Upstash QStash (every 5 min) --> /cron/price-alerts-watch  reads monitor state + last 30 runs (GET + LRANGE)
+                                evaluateMonitor()          15 min without a healthy run -> Zalo to OWNER_CHAT_ID
+                                                           then <= 1 message / 6h, one "recovered" message
+```
+
+- **Healthy run**: authenticated, got the lock, no unhandled error, and —
+  when alerts exist — priced at least one of them. A run whose price lookup
+  failed is logged `no-price` and doesn't count.
+- **Independent schedulers**: the watcher runs on Upstash QStash, not
+  cron-job.org, so a broken cron-job.org job or account is caught too. Each
+  side watches the other (the check looks at the watcher's heartbeat every
+  5 minutes). If both stop at once nobody can tell — accepted at this scale.
+  Fallback if QStash is ever unusable: a Cloudflare Workers cron trigger
+  calling the same endpoint (docs/DEPLOYMENT.md §8b); no code change.
+- **Delivery is the source of truth**: an outage is only marked "notified"
+  once Zalo accepted the message. When Redis itself can't be read (or the
+  state can't be saved after a send), repeats are held to one an hour using
+  instance memory.
+- **Budget**: ~26k Upstash commands/month for the watcher (3 per run ×
+  8,640), ~8.6k for the check's watchdog read, and at most 43.2k for
+  rejected-call counting under constant abuse — ~295k/month in total
+  normally, ~339k worst case, under the 400k target (80% of the free 500k).
+  These are estimates from the per-run command count, not dashboard figures:
+  check Upstash → Usage after deploy. Postgres is never touched.
 
 ### Error handling philosophy
 

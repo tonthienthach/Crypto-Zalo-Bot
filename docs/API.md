@@ -126,6 +126,25 @@ digest's `CRON_SECRET_TOKEN`), as header `X-Cron-Secret-Token: <secret>` or
 **Response:** always `200 { "ok": true }` once authenticated, even when
 CoinGecko, Zalo or Redis fail during the run (logged server-side). A call
 that arrives while a previous run still holds the run lock is skipped.
+Every authenticated call is logged with its outcome (`healthy`, `no-price`,
+`failed`, `skipped`); rejected calls are counted, at most one write a minute.
+
+## `GET /cron/price-alerts-watch`
+
+The watcher for the price-alert check (EPIC-002-FIX), called every 5
+minutes by Upstash QStash — a different scheduler than the check's (see
+docs/DEPLOYMENT.md step 8b). Any HTTP method is accepted. When the check
+has had no healthy run for 15 minutes it sends the owner (`OWNER_CHAT_ID`)
+a Zalo message, then at most one reminder per 6 hours, and one message when
+the check is back.
+
+**Authentication:** its **own** secret, `PRICE_ALERTS_WATCH_SECRET` (neither
+`CRON_SECRET_TOKEN` nor `PRICE_ALERTS_CRON_SECRET`), as header
+`X-Cron-Secret-Token: <secret>` or `Authorization: Bearer <secret>`.
+Missing/incorrect, or the env var unset → `401`, and nothing is sent.
+
+**Response:** always `200 { "ok": true }` once authenticated, even when Redis
+or Zalo fail (logged server-side).
 
 ## Errors
 
