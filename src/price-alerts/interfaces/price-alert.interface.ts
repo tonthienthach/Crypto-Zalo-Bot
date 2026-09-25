@@ -59,3 +59,65 @@ export interface AlertRunSummary {
   /** Signed ms from the nearest minute boundary: -100 means 100ms early, +2000 means 2s late. */
   driftMs: number;
 }
+
+/** Outcomes that can explain a stretch without healthy runs, as counted by the watcher (spec EPIC-002-FIX-FR04). */
+export type OutageSignalKind = 'rejected' | 'no-price' | 'failed' | 'skipped';
+
+/** What was seen during an outage: counts per kind. Empty means nothing called the check at all. */
+export type OutageSignal = Partial<Record<OutageSignalKind, number>>;
+
+/** An outage the watcher has noticed (≥ OUTAGE_THRESHOLD_MS without a healthy run). */
+export interface OutageState {
+  /** Start of the silence: the last healthy run, or the watcher's start if there never was one. */
+  since: string;
+  /** When the owner was last told about this outage; null until a message is actually delivered. */
+  notifiedAt: string | null;
+}
+
+/** The watcher's own state, written on every watcher run (spec EPIC-002-FIX-FR03). */
+export interface MonitorState {
+  /** First watcher run: the baseline when no healthy run has ever been seen (spec EPIC-002-FIX-AC06). */
+  watcherStartedAt: string;
+  /** Latest watcher run — the heartbeat the check itself watches (spec EPIC-002-FIX-FR07). */
+  lastWatcherRunAt: string;
+  /** Newest healthy run seen so far, kept here because the run log window may no longer hold it. */
+  lastHealthyAt: string | null;
+  outage: OutageState | null;
+}
+
+/** The check's view of the watcher (spec EPIC-002-FIX-FR07): an outage of the watcher itself. */
+export interface WatchdogState {
+  outage: OutageState | null;
+}
+
+/** A message the monitor sends the owner. */
+export type MonitorAction =
+  | {
+      kind: 'down' | 'reminder';
+      /** null: no healthy run since the watcher started (spec EPIC-002-FIX-AC06). */
+      lastHealthyAt: string | null;
+      since: string;
+      downForMs: number;
+      signal: OutageSignal;
+    }
+  | { kind: 'recovered'; since: string; recoveredAt: string; downForMs: number }
+  | { kind: 'watcher-down'; lastWatcherRunAt: string; silentForMs: number }
+  | { kind: 'watcher-recovered'; since: string; recoveredAt: string; silentForMs: number };
+
+/**
+ * Result of one evaluation. The state to persist depends on whether the
+ * owner actually got the message: "notified" is only ever stored after a
+ * delivered send (spec EPIC-002-FIX-AC10).
+ */
+export interface MonitorDecision<S> {
+  action: MonitorAction | null;
+  onSent: S;
+  onNotSent: S;
+}
+
+/** One owner notification attempt, kept for the report (spec EPIC-002-FIX-FR09d, NFR10). */
+export interface MonitorNotice {
+  kind: MonitorAction['kind'] | 'state-unreadable';
+  at: string;
+  delivered: boolean;
+}

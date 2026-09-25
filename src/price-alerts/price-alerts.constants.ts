@@ -34,6 +34,11 @@ export const REDIS_KEYS = {
   deliveries: 'price-alerts:deliveries',
   deliveryFailures: 'price-alerts:delivery-failures',
   runs: 'price-alerts:runs',
+  /** Watcher state (MonitorState), written on every watcher run. */
+  monitor: 'price-alerts:monitor',
+  /** The check's view of the watcher (WatchdogState). */
+  watchdog: 'price-alerts:watchdog',
+  monitorNotices: 'price-alerts:monitor-notices',
   /** Hash of rejected-call counts for one UTC day (YYYY-MM-DD), one field per UTC minute (HH:MM). */
   rejected: (day: string) => `price-alerts:rejected:${day}`,
 } as const;
@@ -87,3 +92,24 @@ export const REJECTION_FLUSH_INTERVAL_MS = 60_000;
  * 24h (spec EPIC-002-FIX-NFR10), and an outage can straddle midnight UTC.
  */
 export const REJECTION_LOG_TTL_SECONDS = 3 * 24 * 60 * 60;
+
+/** No healthy run for this long is an outage the owner is told about (spec EPIC-002-FIX-FR03, intent Q1). */
+export const OUTAGE_THRESHOLD_MS = 15 * 60_000;
+
+/** While an outage lasts, the owner gets at most one message per this window (spec EPIC-002-FIX-FR05). */
+export const OUTAGE_REMINDER_MS = 6 * 60 * 60_000;
+
+/** The check tells the owner when the watcher has been silent this long (spec EPIC-002-FIX-FR07). */
+export const WATCHER_SILENCE_MS = 30 * 60_000;
+
+/** The check only looks at the watcher's heartbeat on minutes divisible by this — enough for FR07 at a fifth of the reads. */
+export const WATCHDOG_CHECK_EVERY_MINUTES = 5;
+
+/** When the watcher can't read its state, at most one message per this window (spec EPIC-002-FIX-NFR05). */
+export const STATE_UNREADABLE_NOTICE_MS = 60 * 60_000;
+
+/** Newest run summaries the watcher reads each time: 30 minutes at one run per minute. */
+export const MONITOR_RUNS_WINDOW = 30;
+
+/** Owner notifications kept for the report — 30 days at well under one a day in normal operation (spec EPIC-002-FIX-NFR10). */
+export const MAX_MONITOR_NOTICES = 500;
