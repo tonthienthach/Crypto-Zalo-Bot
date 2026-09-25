@@ -85,8 +85,16 @@ export class PriceAlertsMonitorService {
     const decision = evaluateWatchdog(watchdog, monitor?.lastWatcherRunAt ?? null, now);
     const delivered = decision.action ? await this.notify(decision.action, now) : false;
     const next: WatchdogState = delivered ? decision.onSent : decision.onNotSent;
-    if (JSON.stringify(next) !== JSON.stringify(watchdog ?? { outage: null })) {
+    if (JSON.stringify(next) === JSON.stringify(watchdog ?? { outage: null })) {
+      return;
+    }
+    try {
       await this.priceAlertsService.setWatchdogState(next);
+    } catch (error) {
+      // Same rule as the watcher: a delivered message we couldn't record
+      // must not repeat every 5 minutes (spec EPIC-002-FIX-NFR05).
+      if (delivered) this.lastUnrecordedSendAt = now.getTime();
+      throw error;
     }
   }
 

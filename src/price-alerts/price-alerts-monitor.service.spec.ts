@@ -171,6 +171,18 @@ describe('PriceAlertsMonitorService', () => {
       expect(sendTextMessage).not.toHaveBeenCalled();
     });
 
+    it('does not repeat a delivered watcher alarm every 5 minutes when its state cannot be saved', async () => {
+      alerts.getMonitorAndWatchdogState.mockResolvedValue([watching, null]);
+      alerts.setWatchdogState.mockRejectedValue(new Error('redis write failed'));
+      const service = create();
+
+      for (let i = 0; i < 12; i++) {
+        await service.checkWatcher(at(min(30 + 5 * i))).catch(() => undefined);
+      }
+
+      expect(sendTextMessage).toHaveBeenCalledTimes(1);
+    });
+
     it('messages the owner once the watcher has been silent 30 minutes (FIX-AC13)', async () => {
       alerts.getMonitorAndWatchdogState.mockResolvedValue([watching, null]);
 
