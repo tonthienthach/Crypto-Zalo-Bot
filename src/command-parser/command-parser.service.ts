@@ -4,6 +4,11 @@ import {
   MAX_ALERT_THRESHOLD,
   MAX_THRESHOLD_DECIMALS,
 } from '../price-alerts/price-alerts.constants';
+import {
+  MAX_PORTFOLIO_SYMBOL_LENGTH,
+  MAX_QUANTITY,
+  MAX_QUANTITY_DECIMALS,
+} from '../portfolio/portfolio.constants';
 import { CommandType, ParsedCommand } from './interfaces/parsed-command.interface';
 
 const PRICE_COMMAND_ALIASES = new Set(['gia', 'gía', 'giá', 'price']);
@@ -13,11 +18,21 @@ const UNSUBSCRIBE_COMMAND_ALIASES = new Set(['huy', 'huydangky', 'unsubscribe'])
 const WATCHLIST_COMMAND_ALIASES = new Set(['watchlist', 'danhsach', 'ds']);
 const ALERT_COMMAND_ALIASES = new Set(['canhbao', 'alert']);
 const ALERT_DELETE_KEYWORDS = new Set(['xoa', 'delete']);
+const PORTFOLIO_COMMAND_ALIASES = new Set(['danhmuc', 'portfolio']);
+const PORTFOLIO_BUY_KEYWORDS = new Set(['mua', 'buy']);
+const PORTFOLIO_SELL_KEYWORDS = new Set(['ban', 'sell']);
+const PORTFOLIO_HISTORY_KEYWORDS = new Set(['lichsu', 'history']);
+const PORTFOLIO_DELETE_KEYWORDS = new Set(['xoa', 'delete']);
+const PORTFOLIO_CLEAR_KEYWORDS = new Set(['xoahet', 'clear']);
+const PORTFOLIO_CONFIRM_KEYWORDS = new Set(['xacnhan', 'confirm']);
+const PORTFOLIO_SYMBOL_PATTERN = /^[a-z0-9]+$/;
+/** A trade number or history page: 1-999. */
+const SMALL_POSITIVE_INTEGER_PATTERN = /^\d{1,3}$/;
 
 /** "btc > 100000", "btc>100000", "btc < 0.35" — symbol, operator, price token. */
 const ALERT_CREATE_PATTERN = /^([a-z0-9]+)\s*([<>])\s*(\S+)$/;
 /** Plain "100000" / "0.35", or comma-grouped thousands "100,000" / "1,234.5". */
-const ALERT_THRESHOLD_PATTERN = /^(\d+|\d{1,3}(,\d{3})+)(\.\d+)?$/;
+const POSITIVE_NUMBER_PATTERN = /^(\d+|\d{1,3}(,\d{3})+)(\.\d+)?$/;
 
 @Injectable()
 export class CommandParserService {
@@ -63,6 +78,10 @@ export class CommandParserService {
 
     if (ALERT_COMMAND_ALIASES.has(command)) {
       return this.parseAlert(rawSymbols);
+    }
+
+    if (PORTFOLIO_COMMAND_ALIASES.has(command)) {
+      return this.parsePortfolio(rawSymbols);
     }
 
     if (!PRICE_COMMAND_ALIASES.has(rawCommand.toLowerCase()) && command !== 'gia') {
@@ -111,7 +130,11 @@ export class CommandParserService {
       return invalid;
     }
     const [, symbol, operator, rawThreshold] = match;
-    const threshold = this.parseThreshold(rawThreshold);
+    const threshold = this.parsePositiveNumber(
+      rawThreshold,
+      MAX_THRESHOLD_DECIMALS,
+      MAX_ALERT_THRESHOLD,
+    );
     if (symbol.length > MAX_ALERT_SYMBOL_LENGTH || threshold === null) {
       return invalid;
     }
@@ -119,22 +142,112 @@ export class CommandParserService {
     return {
       type: CommandType.ALERT_CREATE,
       symbols: [symbol],
-      alert: { direction: operator === '>' ? 'above' : 'below', threshold },
+      alert: { direction: operator === '>' ? 'above' : 'below', threshold: threshold.value },
     };
   }
 
-  /** "100,000" -> 100000; null for anything non-numeric, <= 0, too large or too precise. */
-  private parseThreshold(raw: string): number | null {
-    if (!ALERT_THRESHOLD_PATTERN.test(raw)) {
+  /**
+   * Parses the arguments of "/danhmuc" (spec EPIC-003-FR01, FR09, FR10,
+   * FR14): none -> view, "mua|ban <coin> <quantity> <price>" -> trade,
+   * "lichsu [page]" -> history, "xoa <n>" -> delete, "xoahet [xacnhan]" ->
+   * clear. Numbers follow the "/canhbao" price rules (FR02); anything else,
+   * including out-of-range values (NFR05), is PORTFOLIO_INVALID so the reply
+   * can show the correct syntax.
+   */
+  private parsePortfolio(rawArgs: string[]): ParsedCommand {
+    const invalid: ParsedCommand = { type: CommandType.PORTFOLIO_INVALID, symbols: [] };
+    const args = rawArgs.map((arg) => this.stripDiacritics(arg.toLowerCase()));
+    const [keyword, ...rest] = args;
+
+    if (!keyword) {
+      return { type: CommandType.PORTFOLIO_VIEW, symbols: [] };
+    }
+
+    if (PORTFOLIO_BUY_KEYWORDS.has(keyword) || PORTFOLIO_SELL_KEYWORDS.has(keyword)) {
+      if (rest.length !== 3) {
+        return invalid;
+      }
+      const [symbol, rawQuantity, rawPrice] = rest;
+      const quantity = this.parsePositiveNumber(rawQuantity, MAX_QUANTITY_DECIMALS, MAX_QUANTITY);
+      const price = this.parsePositiveNumber(rawPrice, MAX_THRESHOLD_DECIMALS, MAX_ALERT_THRESHOLD);
+      if (
+        !PORTFOLIO_SYMBOL_PATTERN.test(symbol) ||
+        symbol.length > MAX_PORTFOLIO_SYMBOL_LENGTH ||
+        quantity === null ||
+        price === null
+      ) {
+        return invalid;
+      }
+      return {
+        type: CommandType.PORTFOLIO_TRADE,
+        symbols: [symbol],
+        portfolio: {
+          side: PORTFOLIO_BUY_KEYWORDS.has(keyword) ? 'buy' : 'sell',
+          quantity: quantity.plain,
+          priceUsd: price.value,
+        },
+      };
+    }
+
+    if (PORTFOLIO_HISTORY_KEYWORDS.has(keyword)) {
+      if (rest.length > 1) {
+        return invalid;
+      }
+      const page = rest.length === 0 ? 1 : this.parseSmallPositiveInteger(rest[0]);
+      return page === null
+        ? invalid
+        : { type: CommandType.PORTFOLIO_HISTORY, symbols: [], portfolio: { page } };
+    }
+
+    if (PORTFOLIO_DELETE_KEYWORDS.has(keyword)) {
+      const index = rest.length === 1 ? this.parseSmallPositiveInteger(rest[0]) : null;
+      return index === null
+        ? invalid
+        : { type: CommandType.PORTFOLIO_DELETE, symbols: [], portfolio: { index } };
+    }
+
+    if (PORTFOLIO_CLEAR_KEYWORDS.has(keyword)) {
+      if (rest.length > 1 || (rest.length === 1 && !PORTFOLIO_CONFIRM_KEYWORDS.has(rest[0]))) {
+        return invalid;
+      }
+      return {
+        type: CommandType.PORTFOLIO_CLEAR,
+        symbols: [],
+        portfolio: { confirmed: rest.length === 1 },
+      };
+    }
+
+    return invalid;
+  }
+
+  /**
+   * "100,000" -> { value: 100000, plain: "100000" }; null for anything
+   * non-numeric, <= 0, larger than `max` or with more than `maxDecimals`
+   * decimals. `plain` is the exact decimal text, for values stored exactly.
+   */
+  private parsePositiveNumber(
+    raw: string,
+    maxDecimals: number,
+    max: number,
+  ): { value: number; plain: string } | null {
+    if (!POSITIVE_NUMBER_PATTERN.test(raw)) {
       return null;
     }
     const plain = raw.replace(/,/g, '');
     const decimals = plain.includes('.') ? plain.split('.')[1].length : 0;
     const value = Number(plain);
-    if (decimals > MAX_THRESHOLD_DECIMALS || value <= 0 || value > MAX_ALERT_THRESHOLD) {
+    if (decimals > maxDecimals || value <= 0 || value > max) {
       return null;
     }
-    return value;
+    return { value, plain };
+  }
+
+  /** "3" -> 3; null for anything outside 1-999. */
+  private parseSmallPositiveInteger(raw: string): number | null {
+    if (!SMALL_POSITIVE_INTEGER_PATTERN.test(raw) || Number(raw) < 1) {
+      return null;
+    }
+    return Number(raw);
   }
 
   /** Removes Vietnamese diacritics so "/giá" and "/gia" resolve to the same command. */
