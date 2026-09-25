@@ -11,7 +11,7 @@
     "from_epic": "EPIC-002"
   },
   "startedAt": "2026-09-24T15:18:56.128Z",
-  "updatedAt": "2026-09-25T08:39:05.113Z",
+  "updatedAt": "2026-09-25T09:15:18.156Z",
   "currentStepIdx": 3,
   "status": "running",
   "steps": [
@@ -77,8 +77,10 @@
       "agent": "aidlc-native-engineer",
       "name": "implement",
       "revision": 1,
-      "status": "awaiting_work",
-      "artifactsProduced": [],
+      "status": "awaiting_review",
+      "artifactsProduced": [
+        "docs/epics/EPIC-002-FIX/artifacts/implement.md"
+      ],
       "startedAt": "2026-09-25T08:39:05.111Z"
     },
     {
