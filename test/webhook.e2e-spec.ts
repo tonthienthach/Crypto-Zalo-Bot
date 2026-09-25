@@ -45,6 +45,8 @@ describe('WebhookController (e2e)', () => {
   const deleteByIndex = jest.fn();
   const listAll = jest.fn();
   const acquireRunLock = jest.fn();
+  const recordRun = jest.fn().mockResolvedValue(undefined);
+  const recordRejections = jest.fn().mockResolvedValue(undefined);
 
   const SECRET = process.env.WEBHOOK_SECRET_TOKEN as string;
 
@@ -59,7 +61,15 @@ describe('WebhookController (e2e)', () => {
       .overrideProvider(SubscribersService)
       .useValue({ subscribe, unsubscribe, updateWatchlist, findActiveByChatId })
       .overrideProvider(PriceAlertsService)
-      .useValue({ create: createAlert, listByChat, deleteByIndex, listAll, acquireRunLock })
+      .useValue({
+        create: createAlert,
+        listByChat,
+        deleteByIndex,
+        listAll,
+        acquireRunLock,
+        recordRun,
+        recordRejections,
+      })
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -376,6 +386,10 @@ describe('WebhookController (e2e)', () => {
 
       expect(acquireRunLock).not.toHaveBeenCalled();
       expect(listAll).not.toHaveBeenCalled();
+      // Counted (at most one write a minute), never with the secret that was sent (FIX-AC03).
+      expect(recordRejections.mock.calls.length).toBeLessThanOrEqual(1);
+      expect(JSON.stringify(recordRejections.mock.calls)).not.toContain('wrong-secret');
+      expect(recordRun).not.toHaveBeenCalled();
     });
 
     it('runs the check for the scheduler secret sent as a header', async () => {
@@ -387,6 +401,7 @@ describe('WebhookController (e2e)', () => {
         .expect(200, { ok: true });
 
       expect(acquireRunLock).toHaveBeenCalled();
+      expect(recordRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'skipped' }));
     });
   });
 });

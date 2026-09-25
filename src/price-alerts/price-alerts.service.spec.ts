@@ -254,4 +254,20 @@ describe('PriceAlertsService', () => {
       expect(mockTx.ltrim).toHaveBeenCalledWith('price-alerts:runs', 0, 1439);
     });
   });
+
+  describe('recordRejections (EPIC-002-FIX)', () => {
+    it('adds the count to its UTC minute in the day hash with one EVAL, storing nothing else (FIX-AC04)', async () => {
+      mockRedis.eval.mockResolvedValue(1);
+
+      await service.recordRejections(42, new Date('2026-09-25T23:59:30.000Z'));
+
+      expect(mockRedis.eval).toHaveBeenCalledTimes(1);
+      const [script, keys, args] = mockRedis.eval.mock.calls[0];
+      expect(script).toContain('HINCRBY');
+      expect(script).toContain('EXPIRE');
+      expect(keys).toEqual(['price-alerts:rejected:2026-09-25']);
+      expect(args).toEqual(['23:59', '42', String(3 * 24 * 60 * 60)]);
+      expect(mockTx.exec).not.toHaveBeenCalled();
+    });
+  });
 });

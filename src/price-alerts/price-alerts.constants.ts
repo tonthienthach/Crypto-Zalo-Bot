@@ -34,6 +34,8 @@ export const REDIS_KEYS = {
   deliveries: 'price-alerts:deliveries',
   deliveryFailures: 'price-alerts:delivery-failures',
   runs: 'price-alerts:runs',
+  /** Hash of rejected-call counts for one UTC day (YYYY-MM-DD), one field per UTC minute (HH:MM). */
+  rejected: (day: string) => `price-alerts:rejected:${day}`,
 } as const;
 
 /**
@@ -71,3 +73,17 @@ export const MAX_DELIVERY_FAILURE_LOG_ENTRIES = 1000;
 
 /** Run summaries kept in Redis, newest first — 24h at one run per minute (spec EPIC-002-AC18). */
 export const MAX_RUN_LOG_ENTRIES = 1440;
+
+/**
+ * Rejected calls to the alert check (wrong/missing secret) are counted in
+ * memory and written at most this often per instance (spec
+ * EPIC-002-FIX-NFR03): one Redis command per minute however hard someone
+ * hammers the endpoint.
+ */
+export const REJECTION_FLUSH_INTERVAL_MS = 60_000;
+
+/**
+ * Per-day rejection hashes are kept this long — the report needs the last
+ * 24h (spec EPIC-002-FIX-NFR10), and an outage can straddle midnight UTC.
+ */
+export const REJECTION_LOG_TTL_SECONDS = 3 * 24 * 60 * 60;

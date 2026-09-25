@@ -16,6 +16,7 @@ import {
   MAX_DELIVERY_LOG_ENTRIES,
   MAX_RUN_LOG_ENTRIES,
   REDIS_KEYS,
+  REJECTION_LOG_TTL_SECONDS,
   RUN_LOCK_TTL_SECONDS,
 } from './price-alerts.constants';
 
@@ -50,6 +51,17 @@ if redis.call("GET", KEYS[1]) == ARGV[1] then
   return redis.call("DEL", KEYS[1])
 end
 return 0
+`;
+
+/**
+ * Adds a rejected-call count to its UTC minute's field and refreshes the
+ * day hash's TTL — one command, so a flush costs exactly one Redis op
+ * (spec EPIC-002-FIX-NFR03).
+ */
+const RECORD_REJECTIONS_SCRIPT = `
+redis.call("HINCRBY", KEYS[1], ARGV[1], ARGV[2])
+redis.call("EXPIRE", KEYS[1], ARGV[3])
+return 1
 `;
 
 export interface CreatedAlert {
@@ -186,6 +198,20 @@ export class PriceAlertsService {
   /** Appends to the capped run log (spec EPIC-002-NFR08 / AC18). */
   async recordRun(summary: AlertRunSummary): Promise<void> {
     await this.pushCapped(REDIS_KEYS.runs, summary, MAX_RUN_LOG_ENTRIES);
+  }
+
+  /**
+   * Adds `count` rejected check calls to the minute `at` falls in (spec
+   * EPIC-002-FIX-FR02). Stores a number only — never the secret, headers or
+   * body of the rejected request (spec EPIC-002-FIX-NFR03).
+   */
+  async recordRejections(count: number, at: Date): Promise<void> {
+    const iso = at.toISOString();
+    await this.redis.eval(
+      RECORD_REJECTIONS_SCRIPT,
+      [REDIS_KEYS.rejected(iso.slice(0, 10))],
+      [iso.slice(11, 16), String(count), String(REJECTION_LOG_TTL_SECONDS)],
+    );
   }
 
   async listDeliveries(): Promise<AlertDelivery[]> {

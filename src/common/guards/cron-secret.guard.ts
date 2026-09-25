@@ -36,11 +36,19 @@ export class CronSecretGuard implements CanActivate {
     // An unset expected secret rejects every call instead of matching nothing-vs-nothing.
     if (!expectedSecret || !providedSecret || providedSecret !== expectedSecret) {
       this.logger.warn(`Rejected cron call with invalid secret from ${request.ip}`);
+      this.onRejected();
       throw new UnauthorizedException('Invalid cron secret');
     }
 
     return true;
   }
+
+  /**
+   * Called for every rejected call, just before the 401. A no-op here, so
+   * /cron/daily-digest behaves exactly as before; subclasses that need to
+   * account for rejections override it. Must not throw or block.
+   */
+  protected onRejected(): void {}
 
   private extractProvidedSecret(request: Request): string | undefined {
     const customHeader = request.headers[SECRET_HEADER] as string | undefined;
