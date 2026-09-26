@@ -21,11 +21,21 @@ process.env.PRICE_ALERTS_WATCH_SECRET = 'test-price-alerts-watch-secret-1234';
 // OWNER_CHAT_ID deliberately unset: the app must boot without it (EPIC-002-FIX-AC11).
 delete process.env.OWNER_CHAT_ID;
 
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
-import { CoingeckoService, UnknownCoinSymbolsError } from '../src/coingecko/coingecko.service';
+import {
+  CoingeckoService,
+  CoingeckoUnavailableError,
+  UnknownCoinSymbolsError,
+} from '../src/coingecko/coingecko.service';
+import {
+  PortfolioLimitError,
+  PortfolioOversellError,
+  PortfolioService,
+  PortfolioUnavailableError,
+} from '../src/portfolio/portfolio.service';
 import {
   AlertConditionAlreadyMetError,
   AlertNotFoundError,
@@ -53,6 +63,13 @@ describe('WebhookController (e2e)', () => {
   const getMonitorState = jest.fn();
   const setMonitorState = jest.fn().mockResolvedValue(undefined);
   const listRecentRuns = jest.fn();
+  const recordTrade = jest.fn();
+  const listTrades = jest.fn();
+  const listTradesPage = jest.fn();
+  const deleteTrade = jest.fn();
+  const clearTrades = jest.fn();
+  const listTradesForChats = jest.fn();
+  const resolveSymbolToId = jest.fn((symbol: string) => symbol);
 
   const SECRET = process.env.WEBHOOK_SECRET_TOKEN as string;
 
@@ -63,7 +80,7 @@ describe('WebhookController (e2e)', () => {
       .overrideProvider(ZaloService)
       .useValue({ sendTextMessage })
       .overrideProvider(CoingeckoService)
-      .useValue({ getPricesBySymbols, getTopMarkets })
+      .useValue({ getPricesBySymbols, getTopMarkets, resolveSymbolToId })
       .overrideProvider(SubscribersService)
       .useValue({ subscribe, unsubscribe, updateWatchlist, findActiveByChatId })
       .overrideProvider(PriceAlertsService)
@@ -78,6 +95,15 @@ describe('WebhookController (e2e)', () => {
         getMonitorState,
         setMonitorState,
         listRecentRuns,
+      })
+      .overrideProvider(PortfolioService)
+      .useValue({
+        recordTrade,
+        listTrades,
+        listTradesPage,
+        deleteTrade,
+        clearTrades,
+        listTradesForChats,
       })
       .compile();
 
@@ -457,6 +483,221 @@ describe('WebhookController (e2e)', () => {
         .get('/cron/price-alerts-watch')
         .set('x-cron-secret-token', process.env.PRICE_ALERTS_WATCH_SECRET as string)
         .expect(200, { ok: true });
+    });
+  });
+
+  describe('/danhmuc (EPIC-003)', () => {
+    const PRIVATE_CHAT = { id: 'pf-chat', chat_type: 'PRIVATE' };
+    const at = new Date('2026-09-25T02:00:00.000Z');
+    const btcBuy = {
+      seq: 1,
+      side: 'buy',
+      symbol: 'btc',
+      quantity: '0.5',
+      priceUsd: 60000,
+      createdAt: at,
+    };
+
+    function send(text: string, chat: Record<string, unknown> = PRIVATE_CHAT) {
+      return request(app.getHttpServer())
+        .post('/webhook')
+        .set('x-bot-api-secret-token', SECRET)
+        .send({ event_name: 'message.text.received', message: { text, chat } })
+        .expect(200, { ok: true });
+    }
+
+    function reply(): string {
+      return sendTextMessage.mock.calls.map((call) => String(call[1])).join('\n');
+    }
+
+    const portfolioMocks = [
+      recordTrade,
+      listTrades,
+      listTradesPage,
+      deleteTrade,
+      clearTrades,
+      listTradesForChats,
+    ];
+
+    beforeEach(() => {
+      for (const mock of portfolioMocks) mock.mockReset();
+    });
+
+    it('AC01: records a buy after checking the coin, and confirms it', async () => {
+      getPricesBySymbols.mockResolvedValue([
+        { id: 'bitcoin', symbol: 'btc', name: 'BTC', priceUsd: 65000, changePercent24h: 1 },
+      ]);
+      recordTrade.mockResolvedValue({ trade: btcBuy, trades: [btcBuy] });
+
+      await send('/danhmuc mua btc 0.5 60000');
+
+      expect(getPricesBySymbols).toHaveBeenCalledWith(['btc']);
+      expect(recordTrade).toHaveBeenCalledWith('pf-chat', 'buy', 'btc', '0.5', 60000);
+      expect(reply()).toContain('#1 Mua 0.5 BTC × $60,000.00');
+      expect(reply()).toContain('Đang giữ: 0.5 BTC, giá vốn TB $60,000.00');
+    });
+
+    it('AC03: "/danhmuc" prices every held coin in one lookup', async () => {
+      listTrades.mockResolvedValue([
+        btcBuy,
+        { ...btcBuy, seq: 2, quantity: '0.5', priceUsd: 70000 },
+        { ...btcBuy, seq: 3, side: 'sell', quantity: '0.4', priceUsd: 80000 },
+        { ...btcBuy, seq: 4, symbol: 'eth', quantity: '10', priceUsd: 2000 },
+      ]);
+      getPricesBySymbols.mockResolvedValue([
+        { id: 'bitcoin', symbol: 'btc', name: 'BTC', priceUsd: 70000, changePercent24h: 2 },
+        { id: 'ethereum', symbol: 'eth', name: 'ETH', priceUsd: 2500, changePercent24h: -5 },
+      ]);
+
+      await send('/danhmuc');
+
+      expect(listTrades).toHaveBeenCalledWith('pf-chat');
+      expect(getPricesBySymbols).toHaveBeenCalledTimes(1);
+      expect(getPricesBySymbols).toHaveBeenCalledWith(['btc', 'eth']);
+      expect(reply()).toContain('Tổng giá trị: $67,000.00');
+      expect(reply()).toContain('Lãi/lỗ đã chốt: +$6,000.00');
+    });
+
+    it('AC04: an oversell is refused with the held quantity', async () => {
+      getPricesBySymbols.mockResolvedValue([
+        { id: 'bitcoin', symbol: 'btc', name: 'BTC', priceUsd: 65000, changePercent24h: 1 },
+      ]);
+      recordTrade.mockRejectedValue(new PortfolioOversellError('btc', '0.6'));
+
+      await send('/danhmuc ban btc 2 80000');
+
+      expect(reply()).toContain('đang giữ 0.6 BTC');
+    });
+
+    it('AC05: bad syntax shows the correct syntax and records nothing', async () => {
+      await send('/danhmuc mua btc 0.5 60k');
+
+      expect(recordTrade).not.toHaveBeenCalled();
+      expect(reply()).toContain('/danhmuc mua btc 0.5 60000');
+    });
+
+    it('AC06: an unknown coin gets the "/gia" unknown-coin reply and records nothing', async () => {
+      getPricesBySymbols.mockRejectedValue(new UnknownCoinSymbolsError(['xyzabc']));
+
+      await send('/danhmuc mua xyzabc 10 1');
+
+      expect(recordTrade).not.toHaveBeenCalled();
+      expect(reply()).toContain('Không tìm thấy đồng coin: XYZABC');
+    });
+
+    it('AC07: an empty portfolio shows an example and calls no price source', async () => {
+      listTrades.mockResolvedValue([]);
+
+      await send('/danhmuc');
+
+      expect(getPricesBySymbols).not.toHaveBeenCalled();
+      expect(reply()).toContain('/danhmuc mua btc 0.5 60000');
+    });
+
+    it('AC08/AC09: history and delete reach the store with the chat id', async () => {
+      listTradesPage.mockResolvedValue({ trades: [btcBuy], total: 1, page: 1, pageCount: 1 });
+      await send('/danhmuc lichsu');
+      expect(listTradesPage).toHaveBeenCalledWith('pf-chat', 1);
+      expect(reply()).toContain('#1 Mua 0.5 BTC');
+
+      sendTextMessage.mockClear();
+      deleteTrade.mockResolvedValue({ trade: btcBuy, trades: [] });
+      await send('/danhmuc xoa 1');
+      expect(deleteTrade).toHaveBeenCalledWith('pf-chat', 1);
+      expect(reply()).toContain('Đã xoá giao dịch #1');
+    });
+
+    it.each([
+      ['a group chat', { id: 'group-1', chat_type: 'GROUP' }],
+      ['a chat with no chat_type', { id: 'group-2' }],
+    ])('AC12: refuses every /danhmuc command in %s, touching no store', async (_label, chat) => {
+      await send('/danhmuc', chat);
+      await send('/danhmuc mua btc 1 60000', chat);
+
+      for (const mock of portfolioMocks) expect(mock).not.toHaveBeenCalled();
+      expect(getPricesBySymbols).not.toHaveBeenCalled();
+      expect(sendTextMessage).toHaveBeenCalledTimes(2);
+      expect(reply()).toContain('nhắn riêng');
+    });
+
+    it('AC13: a price source outage when viewing gets the outage reply and no numbers', async () => {
+      listTrades.mockResolvedValue([btcBuy]);
+      getPricesBySymbols.mockRejectedValue(new CoingeckoUnavailableError('down'));
+
+      await send('/danhmuc');
+
+      expect(reply()).toContain('Không thể lấy dữ liệu giá lúc này');
+      expect(reply()).not.toContain('Tổng giá trị');
+    });
+
+    it('AC14: the trade limit is explained', async () => {
+      getPricesBySymbols.mockResolvedValue([
+        { id: 'bitcoin', symbol: 'btc', name: 'BTC', priceUsd: 65000, changePercent24h: 1 },
+      ]);
+      recordTrade.mockRejectedValue(new PortfolioLimitError('trades', 200));
+
+      await send('/danhmuc mua btc 1 1');
+
+      expect(reply()).toContain('tối đa 200 giao dịch');
+    });
+
+    it('AC15: "xoahet" alone asks to confirm and deletes nothing; confirmed, it clears', async () => {
+      await send('/danhmuc xoahet');
+      expect(clearTrades).not.toHaveBeenCalled();
+      expect(reply()).toContain('/danhmuc xoahet xacnhan');
+
+      sendTextMessage.mockClear();
+      clearTrades.mockResolvedValue(3);
+      await send('/danhmuc xoahet xacnhan');
+      expect(clearTrades).toHaveBeenCalledWith('pf-chat');
+      expect(reply()).toContain('Đã xoá 3 giao dịch');
+    });
+
+    it('AC16: no amount the user sent reaches the logs', async () => {
+      const spies = (['log', 'warn', 'error', 'debug', 'verbose'] as const).map((level) =>
+        jest.spyOn(Logger.prototype, level).mockImplementation(),
+      );
+      getPricesBySymbols.mockResolvedValue([
+        { id: 'bitcoin', symbol: 'btc', name: 'BTC', priceUsd: 65000, changePercent24h: 1 },
+      ]);
+      recordTrade.mockResolvedValue({ trade: btcBuy, trades: [btcBuy] });
+      listTrades.mockResolvedValue([btcBuy]);
+      deleteTrade.mockResolvedValue({ trade: btcBuy, trades: [] });
+
+      await send('/danhmuc mua btc 0.5 60000');
+      await send('/danhmuc');
+      await send('/danhmuc xoa 1');
+      await send('/danhmuc mua btc 0.5 60000', { id: 'group-3', chat_type: 'GROUP' });
+
+      const logged = spies
+        .flatMap((spy) => spy.mock.calls)
+        .map((call) => call.map(String).join(' '))
+        .join('\n');
+      for (const spy of spies) spy.mockRestore();
+      expect(logged).toContain('portfolio-view');
+      for (const amount of ['0.5', '60000', '60,000', '65000']) {
+        expect(logged).not.toContain(amount);
+      }
+    });
+
+    it('AC18: "/huy" never touches the portfolio, which still answers afterwards', async () => {
+      await send('/huy');
+      for (const mock of portfolioMocks) expect(mock).not.toHaveBeenCalled();
+
+      listTrades.mockResolvedValue([]);
+      await send('/danhmuc');
+      expect(listTrades).toHaveBeenCalledWith('pf-chat');
+    });
+
+    it('AC19: a store failure gets a friendly reply and a 200', async () => {
+      getPricesBySymbols.mockResolvedValue([
+        { id: 'bitcoin', symbol: 'btc', name: 'BTC', priceUsd: 65000, changePercent24h: 1 },
+      ]);
+      recordTrade.mockRejectedValue(new PortfolioUnavailableError());
+
+      await send('/danhmuc mua btc 1 60000');
+
+      expect(reply()).toContain('Tạm thời không truy cập được dữ liệu danh mục');
     });
   });
 });

@@ -14,6 +14,22 @@ import {
   AlertNotFoundError,
   PriceAlertsService,
 } from '../price-alerts/price-alerts.service';
+import { CoinMarketData } from '../coingecko/interfaces/coingecko-response.interface';
+import { ParsedCommand } from '../command-parser/interfaces/parsed-command.interface';
+import { pricesBySymbol } from '../portfolio/portfolio-prices';
+import {
+  computeHoldings,
+  computePortfolio,
+  InconsistentTradesError,
+} from '../portfolio/portfolio-calculator';
+import {
+  PortfolioDeleteWouldOversellError,
+  PortfolioLimitError,
+  PortfolioOversellError,
+  PortfolioService,
+  PortfolioTradeNotFoundError,
+  PortfolioUnavailableError,
+} from '../portfolio/portfolio.service';
 import { InvalidWatchlistError, SubscribersService } from '../subscribers/subscribers.service';
 import { DEFAULT_WATCHLIST } from '../subscribers/subscribers.constants';
 import {
@@ -27,6 +43,20 @@ import {
   formatGenericErrorReply,
   formatHelpReply,
   formatInvalidWatchlistReply,
+  formatPortfolioClearConfirmReply,
+  formatPortfolioClearedReply,
+  formatPortfolioDeletedReply,
+  formatPortfolioDeleteRefusedReply,
+  formatPortfolioEmptyReply,
+  formatPortfolioGroupRefusedReply,
+  formatPortfolioHistoryReply,
+  formatPortfolioInvalidReply,
+  formatPortfolioLimitReply,
+  formatPortfolioNotFoundReply,
+  formatPortfolioOversellReply,
+  formatPortfolioReply,
+  formatPortfolioTradeRecordedReply,
+  formatPortfolioUnavailableReply,
   formatPriceReply,
   formatServiceUnavailableReply,
   formatSubscribeReply,
@@ -41,6 +71,16 @@ import {
 import { ZaloService } from '../zalo/zalo.service';
 import { ZaloWebhookDto } from './dto/zalo-webhook.dto';
 
+/** "/danhmuc" commands: private chats only (spec EPIC-003-FR12). */
+const PORTFOLIO_COMMANDS = new Set<CommandType>([
+  CommandType.PORTFOLIO_VIEW,
+  CommandType.PORTFOLIO_TRADE,
+  CommandType.PORTFOLIO_HISTORY,
+  CommandType.PORTFOLIO_DELETE,
+  CommandType.PORTFOLIO_CLEAR,
+  CommandType.PORTFOLIO_INVALID,
+]);
+
 @Controller('webhook')
 export class WebhookController {
   private readonly logger = new Logger(WebhookController.name);
@@ -53,6 +93,7 @@ export class WebhookController {
     private readonly configService: ConfigService,
     private readonly subscribersService: SubscribersService,
     private readonly priceAlertsService: PriceAlertsService,
+    private readonly portfolioService: PortfolioService,
   ) {
     this.usdToVndRate = this.configService.get<number>('currency.usdToVndRate')!;
   }
@@ -76,13 +117,18 @@ export class WebhookController {
       return { ok: true };
     }
 
-    await this.replyToMessage(chatId, text);
+    await this.replyToMessage(chatId, text, message.chat.chat_type);
     return { ok: true };
   }
 
-  private async replyToMessage(chatId: string, text: string): Promise<void> {
+  private async replyToMessage(chatId: string, text: string, chatType?: string): Promise<void> {
     try {
       const command = this.commandParserService.parse(text);
+
+      if (PORTFOLIO_COMMANDS.has(command.type)) {
+        await this.replyToPortfolioCommand(chatId, command, chatType);
+        return;
+      }
 
       switch (command.type) {
         case CommandType.HELP: {
@@ -182,6 +228,125 @@ export class WebhookController {
     }
   }
 
+  /**
+   * "/danhmuc" and its subcommands (spec EPIC-003). Only a chat whose
+   * `chat_type` is PRIVATE gets through: a group, and a payload without the
+   * field, are refused, so a member's amounts never show to a whole group.
+   * Logs carry the chat, command and outcome only — never an amount (NFR06).
+   */
+  private async replyToPortfolioCommand(
+    chatId: string,
+    command: ParsedCommand,
+    chatType?: string,
+  ): Promise<void> {
+    if ((chatType ?? '').toUpperCase() !== 'PRIVATE') {
+      this.logger.warn(
+        `Portfolio command refused outside a private chat: chat ${chatId}, chat_type=${
+          chatType ?? '(missing)'
+        }`,
+      );
+      await this.zaloService.sendTextMessage(chatId, formatPortfolioGroupRefusedReply());
+      return;
+    }
+
+    const args = command.portfolio ?? {};
+    switch (command.type) {
+      case CommandType.PORTFOLIO_VIEW: {
+        await this.replyWithPortfolio(chatId);
+        return;
+      }
+      case CommandType.PORTFOLIO_TRADE: {
+        const [symbol] = command.symbols;
+        // Only coins "/gia" can price are accepted (FR03): throws UnknownCoinSymbolsError otherwise.
+        await this.coingeckoService.getPricesBySymbols([symbol]);
+        const recorded = await this.portfolioService.recordTrade(
+          chatId,
+          args.side!,
+          symbol,
+          args.quantity!,
+          args.priceUsd!,
+        );
+        await this.zaloService.sendTextMessage(
+          chatId,
+          formatPortfolioTradeRecordedReply(
+            recorded.trade,
+            computeHoldings(recorded.trades),
+            this.usdToVndRate,
+          ),
+        );
+        return;
+      }
+      case CommandType.PORTFOLIO_HISTORY: {
+        const page = await this.portfolioService.listTradesPage(chatId, args.page ?? 1);
+        await this.zaloService.sendTextMessage(chatId, formatPortfolioHistoryReply(page));
+        return;
+      }
+      case CommandType.PORTFOLIO_DELETE: {
+        const deleted = await this.portfolioService.deleteTrade(chatId, args.index!);
+        await this.zaloService.sendTextMessage(
+          chatId,
+          formatPortfolioDeletedReply(deleted.trade, computeHoldings(deleted.trades)),
+        );
+        return;
+      }
+      case CommandType.PORTFOLIO_CLEAR: {
+        if (!args.confirmed) {
+          await this.zaloService.sendTextMessage(chatId, formatPortfolioClearConfirmReply());
+          return;
+        }
+        const deletedCount = await this.portfolioService.clearTrades(chatId);
+        await this.zaloService.sendTextMessage(chatId, formatPortfolioClearedReply(deletedCount));
+        return;
+      }
+      case CommandType.PORTFOLIO_INVALID:
+      default: {
+        await this.zaloService.sendTextMessage(chatId, formatPortfolioInvalidReply());
+        return;
+      }
+    }
+  }
+
+  /**
+   * "/danhmuc": one store read, then one price lookup for every held coin
+   * (spec EPIC-003-NFR03). A price source outage gets the "/gia" outage reply
+   * and no numbers (AC13); a lookup that finds none of the coins lists them
+   * all as unpriced instead of calling them unknown coins.
+   */
+  private async replyWithPortfolio(chatId: string): Promise<void> {
+    const startedAt = Date.now();
+    const trades = await this.portfolioService.listTrades(chatId);
+    if (trades.length === 0) {
+      await this.zaloService.sendTextMessage(chatId, formatPortfolioEmptyReply());
+      return;
+    }
+
+    const holdings = computeHoldings(trades);
+    const symbols = holdings.holdings.map((holding) => holding.symbol);
+    let coins: CoinMarketData[] = [];
+    if (symbols.length > 0) {
+      try {
+        coins = await this.coingeckoService.getPricesBySymbols(symbols);
+      } catch (error) {
+        if (!(error instanceof UnknownCoinSymbolsError)) throw error;
+      }
+    }
+    const prices = pricesBySymbol(coins, symbols, (symbol) =>
+      this.coingeckoService.resolveSymbolToId(symbol),
+    );
+    await this.zaloService.sendTextMessage(
+      chatId,
+      formatPortfolioReply(computePortfolio(holdings, prices), this.usdToVndRate),
+    );
+    this.logger.log(
+      JSON.stringify({
+        event: 'portfolio-view',
+        chatId,
+        coins: symbols.length,
+        durationMs: Date.now() - startedAt,
+      }),
+    );
+  }
+
   private async handleReplyError(chatId: string, error: unknown): Promise<void> {
     if (error instanceof UnknownCoinSymbolsError) {
       await this.zaloService.sendTextMessage(chatId, formatUnknownSymbolsReply(error.symbols));
@@ -208,6 +373,40 @@ export class WebhookController {
     }
     if (error instanceof AlertNotFoundError) {
       await this.zaloService.sendTextMessage(chatId, formatAlertNotFoundReply(error.index));
+      return;
+    }
+    if (error instanceof PortfolioOversellError) {
+      await this.zaloService.sendTextMessage(
+        chatId,
+        formatPortfolioOversellReply(error.symbol, error.heldQuantity),
+      );
+      return;
+    }
+    if (error instanceof PortfolioLimitError) {
+      await this.zaloService.sendTextMessage(
+        chatId,
+        formatPortfolioLimitReply(error.kind, error.limit),
+      );
+      return;
+    }
+    if (error instanceof PortfolioTradeNotFoundError) {
+      await this.zaloService.sendTextMessage(chatId, formatPortfolioNotFoundReply(error.index));
+      return;
+    }
+    if (error instanceof PortfolioDeleteWouldOversellError) {
+      await this.zaloService.sendTextMessage(
+        chatId,
+        formatPortfolioDeleteRefusedReply(error.index, error.symbol),
+      );
+      return;
+    }
+    if (error instanceof PortfolioUnavailableError || error instanceof InconsistentTradesError) {
+      // PortfolioService already logged the failure by name only; the inconsistent-trades
+      // message names a trade number and a coin, never an amount (NFR06).
+      if (error instanceof InconsistentTradesError) {
+        this.logger.error(`Portfolio for ${chatId} could not be replayed: ${error.message}`);
+      }
+      await this.zaloService.sendTextMessage(chatId, formatPortfolioUnavailableReply());
       return;
     }
 
