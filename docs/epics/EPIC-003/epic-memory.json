@@ -1,6 +1,6 @@
 {
   "epic": "EPIC-003",
-  "summary": "Portfolio tracking (Initiative 3). Intent phase started 2026-09-24. Artifacts in Vietnamese.",
+  "summary": "Portfolio tracking (Initiative 3). Implement done 2026-09-26 on feature/epic-003-portfolio-tracking (9 commits), not pushed/deployed. Pending: real Neon driver run of opt-in spec, deploy (migrate 0002 first), AC17/AC20 post-deploy. Artifacts in Vietnamese.",
   "entries": [
     {
       "at": "2026-09-24T15:32:29.322Z",
@@ -25,8 +25,44 @@
       "author": "Thach <vnsnake123@gmail.com>",
       "kind": "decision",
       "text": "Spec approved 2026-09-25 with all 7 PO decisions: manual entry (sync later), weighted-average cost, private chats only (groups refused, no financial data in logs), rolling 24h change, VND at fixed rate, only /gia-priceable coins, 200 trades / 20 held coins per chat. AC20 (tolerance = price-source spread) accepted."
+    },
+    {
+      "at": "2026-09-26T02:34:33.559Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Implemented on feature/epic-003-portfolio-tracking (branched from feature/epic-002-fix-alert-monitoring): eefa8c3, cd13193, 54403ba, e867c28, 06ba161, 28d1f69, 6ad411e, 9d41285, 1cd82ce. Unit 185->268, e2e 23->38 pass, opt-in skipped 8->23."
+    },
+    {
+      "at": "2026-09-26T02:34:33.559Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Store = Neon Postgres via neon() HTTP; each write is one sql.transaction: pg_advisory_xact_lock(hashtext(chat_id)) then INSERT...HAVING / DELETE...NOT EXISTS carrying no-oversell, 200 trades, 20 held coins. quantity NUMERIC(21,8) (plan said 20,8 - 1e12 needs 21 digits)."
+    },
+    {
+      "at": "2026-09-26T02:34:33.559Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "PGlite cannot run under Jest without --experimental-vm-modules (its ESM and CJS builds both await import(\"module\")). Dropped from deps; store SQL proven once manually (15/15 scenarios). Real Neon driver path still unrun: opt-in test/portfolio.postgres.e2e-spec.ts needs a Neon branch or Docker proxy before merge."
+    },
+    {
+      "at": "2026-09-26T02:34:33.559Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "constraint",
+      "text": "/danhmuc only for chat_type PRIVATE (missing counts as group). Logs never carry amounts; DB errors logged as name + SQLSTATE only. Deploy order: npm run db:migrate (0002) before vercel deploy."
+    },
+    {
+      "at": "2026-09-26T02:34:33.559Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "context",
+      "text": "scripts/db-migrate.js now exports splitStatements/applyMigrations (CLI unchanged) so tests run the exact migration code. Local lint on Windows needs prettier endOfLine:auto (CRLF working copy); no .gitattributes yet."
     }
   ],
-  "reflections": [],
-  "updatedAt": "2026-09-25T02:19:38.881Z"
+  "reflections": [
+    {
+      "at": "2026-09-26T02:34:33.559Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "text": "Spent several attempts on an in-process Postgres (PGlite) before checking whether its loader works under Jest CJS at all. Next time: probe a new test dependency in the real runner with a 5-line spike before building an adapter around it. Also: walking the digest failure order found ZaloService resolving false being counted as sent - check return values, not just throws."
+    }
+  ],
+  "updatedAt": "2026-09-26T02:34:33.559Z"
 }
