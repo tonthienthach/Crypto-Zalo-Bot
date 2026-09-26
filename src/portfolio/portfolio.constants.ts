@@ -22,3 +22,6 @@ export const HISTORY_PAGE_SIZE = 20;
  * with zero, not a floating-point one.
  */
 export const QUANTITY_SCALE = 10n ** BigInt(MAX_QUANTITY_DECIMALS);
+
+/** How close together two identical trades must be for the reply to flag the second one. */
+export const TWIN_TRADE_WINDOW_MS = 2 * 60 * 1000;

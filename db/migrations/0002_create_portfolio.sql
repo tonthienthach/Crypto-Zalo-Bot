@@ -8,7 +8,7 @@
 --
 -- Rollback (loses every trade users recorded — owner decision only):
 --   DROP TABLE IF EXISTS portfolio_usage
---   DROP TABLE IF EXISTS portfolio_trades
+--   DROP TABLE IF EXISTS portfolio_trades  (drops its index too)
 CREATE TABLE IF NOT EXISTS portfolio_trades (
   id BIGSERIAL PRIMARY KEY,
   chat_id TEXT NOT NULL CHECK (char_length(chat_id) BETWEEN 1 AND 64),
@@ -18,8 +18,15 @@ CREATE TABLE IF NOT EXISTS portfolio_trades (
   quantity NUMERIC(21, 8) NOT NULL CHECK (quantity > 0),
   price_usd NUMERIC(21, 8) NOT NULL CHECK (price_usd > 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Zalo message_id of the command that recorded this trade: a redelivered
+  -- webhook carries the same id and must not record the trade twice.
+  source_message_id TEXT CHECK (char_length(source_message_id) BETWEEN 1 AND 128),
   UNIQUE (chat_id, seq)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS portfolio_trades_chat_source_message_idx
+  ON portfolio_trades (chat_id, source_message_id)
+  WHERE source_message_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS portfolio_usage (
   chat_id TEXT NOT NULL CHECK (char_length(chat_id) BETWEEN 1 AND 64),

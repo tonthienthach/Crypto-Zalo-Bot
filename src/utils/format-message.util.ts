@@ -427,16 +427,29 @@ function formatPositionLine(symbol: string, holdings: HoldingsResult): string {
   )}`;
 }
 
-/** Reply for a recorded "/danhmuc mua|ban ..." (spec EPIC-003-AC01). */
+/**
+ * Reply for a recorded "/danhmuc mua|ban ..." (spec EPIC-003-AC01).
+ * `duplicate`: the same Zalo message was delivered again and nothing new was
+ * written. `twin`: an identical trade recorded just before this one — both
+ * are kept (AC19), the reply says how to delete this one if it was a mistake.
+ */
 export function formatPortfolioTradeRecordedReply(
   trade: PortfolioTrade,
   holdings: HoldingsResult,
   usdToVndRate: number,
+  options: { duplicate?: boolean; twin?: PortfolioTrade } = {},
 ): string {
   const body = [
-    `✅ Đã ghi giao dịch ${formatTradeSummary(trade)}`,
+    options.duplicate
+      ? `ℹ️ Tin nhắn này đã được ghi trước đó, không ghi lại: ${formatTradeSummary(trade)}`
+      : `✅ Đã ghi giao dịch ${formatTradeSummary(trade)}`,
     formatPositionLine(trade.symbol, holdings),
   ];
+  if (options.twin) {
+    body.push(
+      `⚠️ Giống hệt giao dịch #${options.twin.seq} vừa ghi. Nếu gửi nhầm, gõ /danhmuc xoa ${trade.seq} để xoá giao dịch này.`,
+    );
+  }
   if (trade.side === 'sell') {
     body.push(
       `Lãi/lỗ đã chốt của ${trade.symbol.toUpperCase()}: ${formatSignedMoney(

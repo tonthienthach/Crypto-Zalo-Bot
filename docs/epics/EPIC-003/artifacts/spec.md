@@ -83,6 +83,7 @@ Dữ liệu được **người dùng tự nhập**. Việc tự lấy số dư 
 | `EPIC-003-FR13` | Mỗi lần một chat ghi giao dịch hoặc xem danh mục đều được ghi lại, gồm chat và thời điểm, không gồm số liệu tài chính. Nhờ vậy owner đếm được "số chat không phải owner có danh mục và vẫn dùng sau ngày đầu tiên" (intent §5) mà không phải hỏi người dùng. | Must | intent §5 (tiêu chí thành công) |
 | `EPIC-003-FR14` | `/danhmuc xoahet` xoá toàn bộ giao dịch của chat, sau khi chat xác nhận bằng `/danhmuc xoahet xacnhan`. Không xác nhận thì không xoá gì. | Should | intent Open Q6 (dữ liệu tài chính cá nhân — người dùng tự xoá được) |
 | `EPIC-003-FR15` | `/help` liệt kê lệnh `/danhmuc` kèm ví dụ, và `docs/API.md` được cập nhật. | Should | `docs/RULES.md` |
+| `EPIC-003-FR16` | Một tin nhắn Zalo (cùng `message_id`, cùng chat) chỉ ghi được **tối đa một** giao dịch: khi Zalo gửi lại webhook, bot không ghi lần hai và trả lời rằng tin đã được ghi. Khi một giao dịch giống hệt giao dịch ngay trước nó (cùng chiều, coin, số lượng, giá) được ghi trong vòng 2 phút, cả hai vẫn được giữ (AC19) nhưng lời xác nhận cảnh báo và chỉ cách xoá. *(Bổ sung 2026-09-26 theo yêu cầu owner, sau implement.)* | Must | Owner, 2026-09-26 |
 
 ## 5. Non-functional requirements
 
@@ -123,6 +124,7 @@ Dữ liệu được **người dùng tự nhập**. Việc tự lấy số dư 
 | `EPIC-003-AC18` | **Given** chat có danh mục, **when** gửi `/huy`, **then** `/danhmuc` vẫn trả về danh mục đầy đủ, và bản tin 9h không còn gửi tới chat đó. (edge path) |
 | `EPIC-003-AC19` | **Given** cùng một chat gửi hai lệnh `/danhmuc mua btc 1 60000` gần như cùng lúc, **then** có đúng 2 giao dịch được ghi và số đang giữ là 2 BTC. **Given** database lỗi giữa chừng một lệnh ghi, **then** không có giao dịch dở dang nào, và bot trả lời lỗi thân thiện. (NFR07) |
 | `EPIC-003-AC20` | **Given** bản deploy production, **when** owner so tổng giá trị `/danhmuc` với tổng tự cộng từ các app sàn/ví tại cùng thời điểm, **then** hai số lệch nhau không quá chênh lệch giá giữa nguồn giá của bot và giá của sàn (owner chấp nhận khi duyệt; kiểm tra thủ công, `intent.md` §5). |
+| `EPIC-003-AC21` | **Given** một lệnh `/danhmuc mua btc 0.5 60000` có `message_id` X đã được ghi, **when** Zalo gửi lại đúng webhook đó (cùng X), **then** số giao dịch không đổi và bot trả lời "đã được ghi trước đó, không ghi lại". **Given** cùng lệnh đó gửi bằng một tin mới trong vòng 2 phút, **then** có 2 giao dịch và lời xác nhận có cảnh báo "Giống hệt giao dịch #n" kèm lệnh xoá. (FR16) |
 
 ## 7. Out of scope
 

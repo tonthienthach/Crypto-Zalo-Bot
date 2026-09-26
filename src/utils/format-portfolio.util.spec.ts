@@ -146,6 +146,31 @@ describe('portfolio formatters (EPIC-003)', () => {
     expect(reply).toContain('Lãi/lỗ đã chốt của BTC: +$6,000.00');
   });
 
+  it('a redelivered message says nothing new was recorded', () => {
+    const trades = ac03Trades().slice(0, 1);
+    const reply = formatPortfolioTradeRecordedReply(trades[0], computeHoldings(trades), RATE, {
+      duplicate: true,
+    });
+
+    expect(reply).toContain('đã được ghi trước đó, không ghi lại: #1 Mua 0.5 BTC');
+    expect(reply).not.toContain('✅');
+  });
+
+  it('an identical trade sent twice keeps both, and says how to delete the second', () => {
+    const trades = ac03Trades().slice(0, 1);
+    const second = { ...trades[0], seq: 2 };
+    const reply = formatPortfolioTradeRecordedReply(
+      second,
+      computeHoldings([...trades, second]),
+      RATE,
+      { twin: trades[0] },
+    );
+
+    expect(reply).toContain('✅ Đã ghi giao dịch #2');
+    expect(reply).toContain('Giống hệt giao dịch #1 vừa ghi');
+    expect(reply).toContain('/danhmuc xoa 2');
+  });
+
   it('AC08: history lists number, side, coin, quantity, price and Vietnam date, newest first', () => {
     const trades = ac03Trades().reverse();
     const reply = formatPortfolioHistoryReply({ trades, total: 4, page: 1, pageCount: 1 });

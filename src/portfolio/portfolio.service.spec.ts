@@ -80,7 +80,7 @@ describe('PortfolioService', () => {
       expect(lock.text).toContain('pg_advisory_xact_lock(hashtext(');
       expect(lock.values).toEqual(['chat-1']);
       expect(insert.text).toContain('INSERT INTO portfolio_trades');
-      expect(insert.text).toContain('HAVING COUNT(*) <');
+      expect(insert.text).toContain('AND COUNT(*) <');
       // The quantity is sent as exact text, cast to NUMERIC in SQL — never through a float.
       expect(insert.values).toContain('0.5');
       expect(insert.values).toContain('70000');
@@ -94,6 +94,58 @@ describe('PortfolioService', () => {
         createdAt: new Date('2026-09-25T02:00:00.000Z'),
       });
       expect(result.trades.map((trade) => trade.quantity)).toEqual(['0.50000000', '0.5']);
+      expect(result.duplicate).toBe(false);
+    });
+
+    it('stores the Zalo message_id with the trade, and refuses a message that already recorded one', async () => {
+      mockSql.transaction.mockResolvedValue([
+        [],
+        [{ seq: 1 }],
+        [],
+        [row(1, 'buy', 'btc', '0.5', '70000')],
+        [],
+      ]);
+
+      await service.recordTrade('chat-1', 'buy', 'btc', '0.5', 70000, 'msg-1');
+
+      const [, insert, , , lookup] = transactionQueries();
+      expect(insert.text).toContain('source_message_id');
+      expect(insert.text).toContain('NOT EXISTS');
+      expect(insert.values).toContain('msg-1');
+      expect(lookup.text).toContain('source_message_id');
+      expect(lookup.values).toEqual(['chat-1', 'msg-1']);
+    });
+
+    it('a redelivered message returns the trade it recorded, marked duplicate, instead of a refusal', async () => {
+      mockSql.transaction.mockResolvedValue([
+        [],
+        [],
+        [],
+        [row(1, 'buy', 'btc', '0.5', '70000'), row(2, 'buy', 'eth', '1', '2000')],
+        [{ seq: '1' }],
+      ]);
+
+      const result = await service.recordTrade('chat-1', 'buy', 'btc', '0.5', 70000, 'msg-1');
+
+      expect(result.duplicate).toBe(true);
+      expect(result.trade.seq).toBe(1);
+      expect(result.trades).toHaveLength(2);
+    });
+
+    it('without a message_id nothing is looked up as a duplicate', async () => {
+      mockSql.transaction.mockResolvedValue([
+        [],
+        [{ seq: 1 }],
+        [],
+        [row(1, 'buy', 'btc', '0.5', '70000')],
+        [],
+      ]);
+
+      await service.recordTrade('chat-1', 'buy', 'btc', '0.5', 70000);
+
+      const [, insert] = transactionQueries();
+      // NULL never equals a stored id, so the NOT EXISTS check always passes.
+      expect(insert.values).toContain(null);
     });
 
     it('a refused sell reports the held quantity (FR04)', async () => {

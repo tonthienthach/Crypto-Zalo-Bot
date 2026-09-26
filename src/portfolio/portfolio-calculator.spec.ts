@@ -2,6 +2,7 @@ import { PortfolioTrade, TradeSide } from './interfaces/portfolio.interface';
 import {
   computeHoldings,
   computePortfolio,
+  findRecentTwin,
   formatQuantityUnits,
   heldQuantityOf,
   InconsistentTradesError,
@@ -213,5 +214,43 @@ describe('portfolio calculator', () => {
       expect(snapshot.change24hPercent).toBeNull();
       expect(snapshot.unpricedSymbols).toEqual(['btc', 'eth']);
     });
+  });
+});
+
+describe('findRecentTwin', () => {
+  const at = (iso: string) => new Date(iso);
+  const base: PortfolioTrade = {
+    seq: 1,
+    side: 'buy',
+    symbol: 'btc',
+    quantity: '0.50000000',
+    priceUsd: 60000,
+    createdAt: at('2026-09-25T02:00:00.000Z'),
+  };
+
+  it('flags an identical trade recorded within 2 minutes before it (same quantity at any scale)', () => {
+    const second = { ...base, seq: 2, quantity: '0.5', createdAt: at('2026-09-25T02:01:30.000Z') };
+    expect(findRecentTwin([base, second], second)).toBe(base);
+  });
+
+  it('ignores a twin older than 2 minutes, or one that differs in side, coin, quantity or price', () => {
+    const later = { ...base, seq: 2, createdAt: at('2026-09-25T02:02:01.000Z') };
+    expect(findRecentTwin([base, later], later)).toBeUndefined();
+    for (const change of [
+      { side: 'sell' as const },
+      { symbol: 'eth' },
+      { quantity: '0.6' },
+      { priceUsd: 60001 },
+    ]) {
+      const other = { ...base, ...change, seq: 2, createdAt: at('2026-09-25T02:00:10.000Z') };
+      expect(findRecentTwin([base, other], other)).toBeUndefined();
+    }
+  });
+
+  it('only compares with the trade just before, and the first trade has no twin', () => {
+    const middle = { ...base, seq: 2, symbol: 'eth', createdAt: at('2026-09-25T02:00:10.000Z') };
+    const third = { ...base, seq: 3, createdAt: at('2026-09-25T02:00:20.000Z') };
+    expect(findRecentTwin([base, middle, third], third)).toBeUndefined();
+    expect(findRecentTwin([base], base)).toBeUndefined();
   });
 });

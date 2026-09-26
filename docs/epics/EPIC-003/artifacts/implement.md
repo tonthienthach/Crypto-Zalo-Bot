@@ -261,6 +261,8 @@ Chưa làm, vì đây là kiểm tra thủ công trên production do owner làm 
 9. **CHANGELOG/ROADMAP chưa sửa**, đúng plan ("cập nhật khi ship").
 10. Plan §3 ghi nhánh tách từ `master`; thực tế nhánh tách từ nhánh EPIC-002-FIX (§1).
 
+- **Rev 2 (2026-09-26, owner yêu cầu): chống ghi trùng giao dịch.** Thêm cột `source_message_id` và unique index một phần `(chat_id, source_message_id)` vào `0002_create_portfolio.sql`. Sửa thẳng file 0002 vì chưa chạy trên production. `recordTrade` nhận `message_id` của Zalo; trong cùng transaction, dưới khoá của chat, câu INSERT có thêm `NOT EXISTS` và một câu SELECT tìm giao dịch cũ. Tin gửi lại trả về giao dịch cũ với `duplicate: true`. Unique index là lớp chặn cuối nếu điều kiện bị lách. Hàm thuần `findRecentTwin` (`portfolio-calculator.ts`, cửa sổ `TWIN_TRADE_WINDOW_MS` = 2 phút) phát hiện giao dịch giống hệt giao dịch ngay trước, để lời xác nhận cảnh báo. Lần gửi trùng vẫn cộng 1 vào `portfolio_usage.writes`. Chấp nhận được, vì chỉ số thành công đếm chat chứ không đếm số lần ghi.
+
 ## 5. Discovered work
 
 | Item | Where it went |
@@ -276,7 +278,7 @@ Chưa làm, vì đây là kiểm tra thủ công trên production do owner làm 
 - **Tranh chấp khoá thật chưa được chứng minh.** PGlite chỉ có một kết nối, nên hai kịch bản đồng thời của AC19 thực chất chạy tuần tự. Việc khoá advisory chặn được hai request HTTP song song chỉ chứng minh được trên Postgres thật (mục trên).
 - **Bộ đếm usage nằm chung transaction với lệnh.** Nếu ghi `portfolio_usage` lỗi thì cả lệnh xem/ghi cũng lỗi (người dùng nhận "tạm thời không truy cập được"), và mỗi lần xem là một lần ghi. Cách này được chọn để giữ 1 round-trip. Nếu bộ đếm gây sự cố thì tách nó ra.
 - **Ghi giao dịch phụ thuộc nguồn giá.** Coin được kiểm tra bằng `getPricesBySymbols` trước khi ghi (FR03), nên khi CoinGecko và CoinPaprika cùng lỗi thì không ghi được giao dịch.
-- **Giao dịch có thể bị ghi trùng** nếu lời xác nhận Zalo không tới và người dùng gửi lại. Không có cơ chế chống lặp theo `message_id`. Spec AC19 coi hai lần gửi là hai giao dịch, và người dùng xoá được bằng `/danhmuc xoa`.
+- ~~**Giao dịch có thể bị ghi trùng**~~ Đã xử lý 2026-09-26 (FR16/AC21, xem §4). Còn lại: người dùng cố ý gửi lại bằng một tin mới vẫn tạo giao dịch thứ hai (đúng AC19), chỉ được cảnh báo. Kịch bản DB thật cho chống lặp nằm trong bộ Postgres opt-in, chưa chạy (không có Docker/Neon branch).
 - **`chat_type` của chat riêng thật** mới chỉ được xác nhận qua một payload ngày 2026-09-04. Nếu owner bị chặn nhầm, log sẽ có dòng `Portfolio command refused outside a private chat … chat_type=…`. Cần smoke test ở bước 9.
 - **AC17 (p95 ≤ 5 giây) và AC20 (đối chiếu với app sàn)** chỉ đo được sau deploy.
 - **Số thứ tự `seq` được dùng lại** khi xoá giao dịch mới nhất. Plan đã chấp nhận điều này.

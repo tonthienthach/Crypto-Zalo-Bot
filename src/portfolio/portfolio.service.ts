@@ -70,10 +70,16 @@ interface TradeRow {
   created_at: string | Date;
 }
 
+interface SeqRow {
+  seq: number | string;
+}
+
 export interface RecordedTrade {
   trade: PortfolioTrade;
   /** Every trade of the chat after this one was recorded, oldest first. */
   trades: PortfolioTrade[];
+  /** True when this Zalo message had already recorded `trade` (a redelivered webhook). */
+  duplicate: boolean;
 }
 
 export interface DeletedTrade {
@@ -115,6 +121,11 @@ export class PortfolioService {
    * Records one trade and returns it with the chat's trades after it. When a
    * rule refuses the write, the trades read in the same transaction say
    * which rule, and nothing was written.
+   *
+   * `sourceMessageId` is the Zalo `message_id` of the command. Zalo can
+   * deliver the same webhook more than once: a message that already recorded
+   * a trade gets that trade back with `duplicate: true`, and nothing is
+   * written. The check runs under the chat lock; a unique index backs it up.
    */
   async recordTrade(
     chatId: string,
@@ -122,18 +133,25 @@ export class PortfolioService {
     symbol: string,
     quantity: string,
     priceUsd: number,
+    sourceMessageId?: string,
   ): Promise<RecordedTrade> {
     return this.guard(async () => {
       const price = priceUsd.toString();
-      const [, inserted, , rows] = (await this.sql.transaction([
+      const messageId = sourceMessageId || null;
+      const [, inserted, , rows, alreadyRecorded] = (await this.sql.transaction([
         this.lockChat(chatId),
         this.sql`
-          INSERT INTO portfolio_trades (chat_id, seq, side, symbol, quantity, price_usd)
+          INSERT INTO portfolio_trades
+            (chat_id, seq, side, symbol, quantity, price_usd, source_message_id)
           SELECT ${chatId}, COALESCE(MAX(seq), 0) + 1, ${side}, ${symbol},
-                 ${quantity}::numeric, ${price}::numeric
+                 ${quantity}::numeric, ${price}::numeric, ${messageId}::text
           FROM portfolio_trades
           WHERE chat_id = ${chatId}
-          HAVING COUNT(*) < ${MAX_TRADES_PER_CHAT}
+          HAVING NOT EXISTS (
+              SELECT 1 FROM portfolio_trades
+              WHERE chat_id = ${chatId} AND source_message_id = ${messageId}::text
+            )
+            AND COUNT(*) < ${MAX_TRADES_PER_CHAT}
             AND (
               ${side} = 'buy'
               OR COALESCE(SUM(CASE WHEN symbol = ${symbol}
@@ -155,14 +173,23 @@ export class PortfolioService {
         `,
         this.countUsage(chatId, 'writes'),
         this.selectTrades(chatId),
-      ])) as [unknown, { seq: number | string }[], unknown, TradeRow[]];
+        this.sql`
+          SELECT seq FROM portfolio_trades
+          WHERE chat_id = ${chatId} AND source_message_id = ${messageId}::text
+        `,
+      ])) as [unknown, SeqRow[], unknown, TradeRow[], SeqRow[] | undefined];
 
       const trades = rows.map((row) => this.toTrade(row));
       if (inserted.length === 0) {
+        const original = alreadyRecorded?.[0];
+        if (original) {
+          const seq = Number(original.seq);
+          return { trade: trades.find((trade) => trade.seq === seq)!, trades, duplicate: true };
+        }
         throw this.refusalReason(trades, side, symbol);
       }
       const seq = Number(inserted[0].seq);
-      return { trade: trades.find((trade) => trade.seq === seq)!, trades };
+      return { trade: trades.find((trade) => trade.seq === seq)!, trades, duplicate: false };
     });
   }
 

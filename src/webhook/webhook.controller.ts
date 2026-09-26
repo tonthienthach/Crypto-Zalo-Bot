@@ -19,6 +19,7 @@ import { ParsedCommand } from '../command-parser/interfaces/parsed-command.inter
 import { pricesBySymbol } from '../portfolio/portfolio-prices';
 import {
   computeHoldings,
+  findRecentTwin,
   computePortfolio,
   InconsistentTradesError,
 } from '../portfolio/portfolio-calculator';
@@ -117,16 +118,21 @@ export class WebhookController {
       return { ok: true };
     }
 
-    await this.replyToMessage(chatId, text, message.chat.chat_type);
+    await this.replyToMessage(chatId, text, message.chat.chat_type, message.message_id);
     return { ok: true };
   }
 
-  private async replyToMessage(chatId: string, text: string, chatType?: string): Promise<void> {
+  private async replyToMessage(
+    chatId: string,
+    text: string,
+    chatType?: string,
+    messageId?: string,
+  ): Promise<void> {
     try {
       const command = this.commandParserService.parse(text);
 
       if (PORTFOLIO_COMMANDS.has(command.type)) {
-        await this.replyToPortfolioCommand(chatId, command, chatType);
+        await this.replyToPortfolioCommand(chatId, command, chatType, messageId);
         return;
       }
 
@@ -238,6 +244,7 @@ export class WebhookController {
     chatId: string,
     command: ParsedCommand,
     chatType?: string,
+    messageId?: string,
   ): Promise<void> {
     if ((chatType ?? '').toUpperCase() !== 'PRIVATE') {
       this.logger.warn(
@@ -265,13 +272,26 @@ export class WebhookController {
           symbol,
           args.quantity!,
           args.priceUsd!,
+          messageId,
         );
+        if (recorded.duplicate) {
+          // A redelivered webhook: the trade was recorded the first time.
+          this.logger.warn(
+            `Portfolio trade not recorded twice: chat ${chatId} resent message ${messageId}`,
+          );
+        }
         await this.zaloService.sendTextMessage(
           chatId,
           formatPortfolioTradeRecordedReply(
             recorded.trade,
             computeHoldings(recorded.trades),
             this.usdToVndRate,
+            {
+              duplicate: recorded.duplicate,
+              twin: recorded.duplicate
+                ? undefined
+                : findRecentTwin(recorded.trades, recorded.trade),
+            },
           ),
         );
         return;

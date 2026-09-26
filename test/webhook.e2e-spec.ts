@@ -498,11 +498,14 @@ describe('WebhookController (e2e)', () => {
       createdAt: at,
     };
 
-    function send(text: string, chat: Record<string, unknown> = PRIVATE_CHAT) {
+    function send(text: string, chat: Record<string, unknown> = PRIVATE_CHAT, messageId?: string) {
       return request(app.getHttpServer())
         .post('/webhook')
         .set('x-bot-api-secret-token', SECRET)
-        .send({ event_name: 'message.text.received', message: { text, chat } })
+        .send({
+          event_name: 'message.text.received',
+          message: { text, chat, ...(messageId ? { message_id: messageId } : {}) },
+        })
         .expect(200, { ok: true });
     }
 
@@ -532,9 +535,43 @@ describe('WebhookController (e2e)', () => {
       await send('/danhmuc mua btc 0.5 60000');
 
       expect(getPricesBySymbols).toHaveBeenCalledWith(['btc']);
-      expect(recordTrade).toHaveBeenCalledWith('pf-chat', 'buy', 'btc', '0.5', 60000);
+      expect(recordTrade).toHaveBeenCalledWith('pf-chat', 'buy', 'btc', '0.5', 60000, undefined);
       expect(reply()).toContain('#1 Mua 0.5 BTC × $60,000.00');
       expect(reply()).toContain('Đang giữ: 0.5 BTC, giá vốn TB $60,000.00');
+    });
+
+    it('a redelivered webhook (same message_id) is passed on, and the reply says it was not recorded again', async () => {
+      getPricesBySymbols.mockResolvedValue([
+        { id: 'bitcoin', symbol: 'btc', name: 'BTC', priceUsd: 65000, changePercent24h: 1 },
+      ]);
+      recordTrade.mockResolvedValue({ trade: btcBuy, trades: [btcBuy], duplicate: true });
+
+      await send('/danhmuc mua btc 0.5 60000', PRIVATE_CHAT, '02b8d8946c41fe18a757');
+
+      expect(recordTrade).toHaveBeenCalledWith(
+        'pf-chat',
+        'buy',
+        'btc',
+        '0.5',
+        60000,
+        '02b8d8946c41fe18a757',
+      );
+      expect(reply()).toContain('đã được ghi trước đó, không ghi lại');
+      expect(reply()).not.toContain('Giống hệt');
+    });
+
+    it('the same trade sent twice within 2 minutes is recorded twice (AC19), and the reply flags it', async () => {
+      getPricesBySymbols.mockResolvedValue([
+        { id: 'bitcoin', symbol: 'btc', name: 'BTC', priceUsd: 65000, changePercent24h: 1 },
+      ]);
+      const second = { ...btcBuy, seq: 2, createdAt: new Date(at.getTime() + 30_000) };
+      recordTrade.mockResolvedValue({ trade: second, trades: [btcBuy, second], duplicate: false });
+
+      await send('/danhmuc mua btc 0.5 60000', PRIVATE_CHAT, 'msg-second');
+
+      expect(reply()).toContain('✅ Đã ghi giao dịch #2');
+      expect(reply()).toContain('Giống hệt giao dịch #1 vừa ghi');
+      expect(reply()).toContain('/danhmuc xoa 2');
     });
 
     it('AC03: "/danhmuc" prices every held coin in one lookup', async () => {

@@ -72,6 +72,23 @@ export function definePortfolioStoreScenarios(ctx: PortfolioStoreContext): void 
     expect(await tradeCount(ctx, CHAT_A)).toBe(1);
   });
 
+  it('a redelivered Zalo message records its trade once; another message, or another chat, records again', async () => {
+    const first = await ctx.service().recordTrade(CHAT_A, 'buy', 'btc', '0.5', 60000, 'msg-1');
+    const again = await ctx.service().recordTrade(CHAT_A, 'buy', 'btc', '0.5', 60000, 'msg-1');
+
+    expect(first.duplicate).toBe(false);
+    expect(again.duplicate).toBe(true);
+    expect(again.trade.seq).toBe(first.trade.seq);
+    expect(await tradeCount(ctx, CHAT_A)).toBe(1);
+
+    // A new message with the same trade is a second trade (AC19); ids are per chat.
+    await ctx.service().recordTrade(CHAT_A, 'buy', 'btc', '0.5', 60000, 'msg-2');
+    await ctx.service().recordTrade(CHAT_B, 'buy', 'btc', '0.5', 60000, 'msg-1');
+    await ctx.service().recordTrade(CHAT_A, 'buy', 'btc', '0.5', 60000);
+    expect(await tradeCount(ctx, CHAT_A)).toBe(3);
+    expect(await tradeCount(ctx, CHAT_B)).toBe(1);
+  });
+
   it('a sell of exactly the held quantity is allowed', async () => {
     await ctx.service().recordTrade(CHAT_A, 'buy', 'btc', '0.6', 60000);
     const { trades } = await ctx.service().recordTrade(CHAT_A, 'sell', 'btc', '0.6', 61000);

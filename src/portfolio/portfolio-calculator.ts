@@ -6,7 +6,7 @@ import {
   PortfolioSnapshot,
   PortfolioTrade,
 } from './interfaces/portfolio.interface';
-import { MAX_QUANTITY_DECIMALS, QUANTITY_SCALE } from './portfolio.constants';
+import { MAX_QUANTITY_DECIMALS, QUANTITY_SCALE, TWIN_TRADE_WINDOW_MS } from './portfolio.constants';
 
 /**
  * Raised when stored trades can't be replayed — a sell larger than what was
@@ -181,4 +181,28 @@ export function computePortfolio(
     unpricedSymbols,
     missingChangeSymbols,
   };
+}
+
+/**
+ * The trade just before `trade` if it is identical (side, coin, quantity,
+ * price) and was recorded within TWIN_TRADE_WINDOW_MS — most likely the user
+ * sent the same command twice. Both are kept (spec EPIC-003-AC19); the reply
+ * only points at the older one so the user can delete a mistake.
+ */
+export function findRecentTwin(
+  trades: PortfolioTrade[],
+  trade: PortfolioTrade,
+): PortfolioTrade | undefined {
+  const previous = trades.filter((other) => other.seq < trade.seq).pop();
+  if (
+    previous &&
+    previous.side === trade.side &&
+    previous.symbol === trade.symbol &&
+    toQuantityUnits(previous.quantity) === toQuantityUnits(trade.quantity) &&
+    previous.priceUsd === trade.priceUsd &&
+    trade.createdAt.getTime() - previous.createdAt.getTime() <= TWIN_TRADE_WINDOW_MS
+  ) {
+    return previous;
+  }
+  return undefined;
 }
