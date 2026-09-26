@@ -28,6 +28,8 @@ Từ lúc deploy (2026-09-23) đến 2026-09-24T15:01Z, run log `price-alerts:ru
 
 Kết luận: **AC18 fail** (p95 115574.4s so với yêu cầu ≤ 90s). NFR02 pass trên 2 mẫu này (1.0s ≤ 15s), nhưng 2 mẫu là quá ít để kết luận.
 
+**Đo lại sau khi sửa (2026-09-26): AC18 pass.** Đo lại sau khi sửa URL cron-job.org, cửa sổ 24 giờ 2026-09-24T15:25:21Z → 2026-09-25T15:25:21Z, khoảng 1.440 lượt, đúng 1 lượt/phút. Run log giới hạn 1.440 mục nên số liệu ghép từ 2 lần đọc `alerts:report`. Lần đọc 2026-09-25T02:06Z (642 lượt đầu): p50 61.4s, p95 81.2s. Lần đọc 2026-09-26T02:07Z (798 lượt 02:08Z→15:25Z): p50 61.6s, **p95 81.1s**, p99 111.4s, max 115.3s, 26 khoảng > 90s, 0 khoảng > 180s. Thời gian mỗi lượt p95 0.84s, max 1.2s (NFR02 ≤ 15s). 0 lần gửi lỗi.
+
 ## 3. Why it happened
 
 **Confidence:** confirmed (nguyên nhân gốc, owner xác nhận 2026-09-24) · confirmed (lý do chuyện này xảy ra mà không ai hay)

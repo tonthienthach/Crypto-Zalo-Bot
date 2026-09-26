@@ -17,7 +17,9 @@
 
 > *Một dòng. Có bất kỳ dòng `fail` hoặc `untested` nào bên dưới thì verdict tổng là fail.*
 
-**Overall:** fail. 18/19 pass, 0 fail, 1 untested (`EPIC-002-AC18`).
+**Overall:** pass. 19/19 pass (AC18 đo trên production 2026-09-26, xem dòng `EPIC-002-AC18`).
+
+> Trước đó (rev 3): fail, 18/19 pass, 0 fail, 1 untested (`EPIC-002-AC18`).
 
 Theo luật của skill, verdict là fail chỉ vì AC18. AC18 cần 24 giờ quan sát trên production, nên không thể kiểm trước deploy, và đây không phải lỗi của build. Về mặt kỹ thuật, không còn gì chặn deploy. Chạy AC18 sau deploy mà đạt thì verdict chuyển sang pass.
 
@@ -47,7 +49,7 @@ Mọi lệnh bên dưới do verifier tự chạy trên HEAD `f1d81cb`, ngày 20
 | `EPIC-002-AC15` | 50 cảnh báo / 5 coin → nguồn giá ≤ 2 lần | pass | unit `√ looks up prices once for all distinct coins, however many alerts (AC15)`. |
 | `EPIC-002-AC16` | Không có / sai secret → `401`, không đánh giá gì | pass | e2e `√ rejects a call with no secret or a wrong secret, evaluating nothing (AC16)`. |
 | `EPIC-002-AC17` | Bản ghi lần gửi truy vấn được; mỗi lượt 1 dòng log NFR08 | pass | unit `(AC02, AC17)`, `√ logs failed deliveries separately so they cannot evict successful ones (FR12)`; integration (rev 2) `√ keeps delivery and run logs readable and capped (AC17)`; dòng log ở `price-alerts.controller.ts:47`. |
-| `EPIC-002-AC18` | Production 24 giờ: p95 khoảng cách giữa các lượt ≤ 90 giây | untested | Chưa deploy. Chỉ đo được sau deploy bằng `npm run alerts:report` (`docs/DEPLOYMENT.md` bước 8a). Việc này không làm được trước deploy, và không phải lỗi build. |
+| `EPIC-002-AC18` | Production 24 giờ: p95 khoảng cách giữa các lượt ≤ 90 giây | pass | Đo lại sau khi sửa URL cron-job.org, cửa sổ 24 giờ 2026-09-24T15:25:21Z → 2026-09-25T15:25:21Z, khoảng 1.440 lượt, đúng 1 lượt/phút. Run log giới hạn 1.440 mục nên số liệu ghép từ 2 lần đọc `alerts:report`. Lần đọc 2026-09-25T02:06Z (642 lượt đầu): p50 61.4s, p95 81.2s. Lần đọc 2026-09-26T02:07Z (798 lượt 02:08Z→15:25Z): p50 61.6s, **p95 81.1s**, p99 111.4s, max 115.3s, 26 khoảng > 90s, 0 khoảng > 180s. Thời gian mỗi lượt p95 0.84s, max 1.2s (NFR02 ≤ 15s). 0 lần gửi lỗi. Lần đo đầu (2026-09-24) fail vì job cron-job.org sai URL, xem `incident.md`. |
 | `EPIC-002-AC19` | `/huy` → cảnh báo vẫn còn và vẫn chạy | pass | e2e `√ leaves alerts alone when the chat unsubscribes from the digest (AC19)`. |
 
 > *`pass` bắt buộc có output lệnh đã chụp lại. `untested` nghĩa là chưa có gì kiểm tra nó.
@@ -61,7 +63,7 @@ Mọi lệnh bên dưới do verifier tự chạy trên HEAD `f1d81cb`, ngày 20
 |---|---|---|
 | AC01–AC17, AC19: unit / e2e theo `plan.md` §5 | Có (chạy lại trên `f1d81cb`) | pass |
 | AC10, AC11, AC14, AC17: integration Redis thật | Có ở rev 2; rev 3 không chạy lại vì service layer không đổi | 5/5 pass (rev 2) |
-| AC18: quan sát production 24 giờ | Không (chưa deploy) | untested |
+| AC18: quan sát production 24 giờ | Có (production, 2026-09-26) | pass |
 | §6 Feedback loop: lint, unit, e2e, build | Có | Cả 4 đều exit 0 (xem §4) |
 | §6 Đầu cuối cục bộ (`start:dev` + `curl`) | Không (thiếu `.env`; không gọi production) | Không có AC nào phụ thuộc vào proof này |
 | Proof mới ở rev 3 | Có | `√ retries a failed send on the very next run (AC13)`, `√ backs off 5 minutes only after 3 failures in a row`, `√ does not count a slow price lookup against the send budget` |

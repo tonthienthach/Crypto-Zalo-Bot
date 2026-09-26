@@ -94,22 +94,19 @@ a way to know *who* the users are and *what* they each want.
 
 ## Initiative 2: Price alerts (threshold notifications)
 
-**Status:** Deployed 2026-09-23 (PR #3, `vercel deploy --prod`; `/health` ok,
-`/cron/price-alerts` 401 without / 200 with its own secret). **AC18 FAILED
-in production (measured 2026-09-24):** only 2 completed check runs in ~32h
-(p95 gap 115574s vs ≤ 90s), 2 active alerts unwatched, 0 deliveries —
-diagnosed in `docs/epics/EPIC-002/artifacts/incident.md`. Root cause
-(owner-confirmed 2026-09-24): the cron-job.org job had a wrong URL; fixed
-the same day, pending re-activation, AC18 being re-measured over the next
-24h. Confirmed gap: the check can
-stop silently — opened follow-up epic
-[`EPIC-002-FIX`](../docs/epics/EPIC-002-FIX/EPIC-002-FIX.md) (intent draft,
-awaiting stage-1 review). Also found: `vercel env pull` can't fetch the
-Sensitive `KV_REST_API_*` values, so `DEPLOYMENT.md` §8a step 4 doesn't work
-as written — copy them from the Upstash Console. **Still not confirmed:** the
-Vercel Hobby CPU budget and the intent success metric (≥1 non-owner alert
-delivered within 30 days). verify.md rev 3:
-18/19 pass, 0 fail (AC18 pending); review.md: ship with follow-ups, both
+**Status:** Shipped (deployed 2026-09-23, PR #3). **AC18 passed in production
+(2026-09-26):** after the owner fixed a wrong cron-job.org URL (the first
+~32h after deploy ran only 2 checks — see
+`docs/epics/EPIC-002/artifacts/incident.md`), the 24h window
+2026-09-24T15:25Z → 09-25T15:25Z ran ~1/min with p95 gap ~81s (≤ 90s),
+run duration p95 0.84s; verify.md now **pass 19/19**. The silent-stoppage
+gap is fixed by follow-up epic
+[`EPIC-002-FIX`](../docs/epics/EPIC-002-FIX/EPIC-002-FIX.md) (implemented on
+`feature/epic-002-fix-alert-monitoring`, awaiting verify; also corrects
+`DEPLOYMENT.md` §8a: Sensitive `KV_REST_API_*` must be copied from the
+Upstash Console). **Still not confirmed:** the Vercel Hobby CPU budget and
+the intent success metric (≥1 non-owner alert delivered within 30 days).
+review.md: ship with follow-ups, both
 should-fix items resolved before merge. Decided 2026-09-23:
 alerts stored in **Upstash Redis** (not Postgres — a per-minute check would
 exhaust Neon's free compute quota), checked every minute by **cron-job.org**
