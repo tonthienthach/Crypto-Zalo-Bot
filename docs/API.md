@@ -101,6 +101,11 @@ path — it just means fewer symbols get filled in.
 | `/canhbao btc > 100000` or `/cảnhbáo`, `/alert` | Alert when BTC rises to ≥ $100,000 (`<` for "falls to ≤"). USD; `.` decimal, `,` thousands (`100,000`); no `100k`. Max 10 per chat; rejected if already true at the current price |
 | `/canhbao` | List this chat's alerts, numbered, with state (watching / fired) |
 | `/canhbao xoa 2` (or `xóa`, `delete`) | Delete alert #2 of this chat's list |
+| `/danhmuc mua btc 0.5 60000` (or `/danhmục`, `/portfolio buy`) | Record a buy of 0.5 BTC at $60,000 per coin; `ban`/`bán`/`sell` records a sell (refused if it exceeds what the chat holds). Same number rules as `/canhbao`; quantity up to 8 decimals, ≤ 10^12. Only coins `/gia` can price. Max 200 trades and 20 held coins per chat. **Private chats only** — in a group, or with no `chat_type`, every `/danhmuc` command is refused |
+| `/danhmuc` | Portfolio: each held coin's value and unrealized PnL, total value, unrealized and realized PnL, 24h change — USD with ~VND. Weighted-average cost. Coins with no price right now are listed and left out of the totals |
+| `/danhmuc lichsu [trang]` (or `history`) | Trade history, newest first, 20 per page, with the stable trade numbers |
+| `/danhmuc xoa 3` (or `xoá`, `delete`) | Delete trade #3 (refused if a later sell would then exceed the holding) |
+| `/danhmuc xoahet` → `/danhmuc xoahet xacnhan` | Delete every trade of this chat, only after the confirmation command |
 | anything else | "I don't understand this command" reply |
 
 A fired alert re-arms (silently) once the price is back past the level by

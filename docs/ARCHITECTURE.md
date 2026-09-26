@@ -46,6 +46,7 @@ the reply is never carried in the webhook's own response body.
 | `command-parser/` | Pure text-parsing service: turns a raw chat message into a `ParsedCommand` (`PRICE`, `TOP_MARKETS`, `HELP`, `SUBSCRIBE`, `UNSUBSCRIBE`, `WATCHLIST`, `ALERT_CREATE`/`ALERT_LIST`/`ALERT_DELETE`/`ALERT_INVALID`, `UNKNOWN`). No I/O, fully unit-testable, handles accented/unaccented Vietnamese. |
 | `subscribers/` | `SubscribersService` — CRUD over the `subscribers` table (Vercel Postgres / Neon) backing `/dangky`, `/huy`, `/watchlist`, and the daily digest recipient list. See "Persistence" below. |
 | `price-alerts/` | `PriceAlertsService` — alert storage in Upstash Redis (`/canhbao`); `PriceAlertsController` — `/cron/price-alerts`, the per-minute check, guarded by `PriceAlertsCronSecretGuard`; `evaluateAlert()` — the pure fire / re-arm / cooldown rules; `PriceAlertsWatchController` — `/cron/price-alerts-watch`, the watcher that tells the owner when the check stops, guarded by `PriceAlertsWatchSecretGuard`; `evaluateMonitor()` / `evaluateWatchdog()` — the pure monitoring rules. See "Price alerts" below. |
+| `portfolio/` | `PortfolioService` — each chat's manually entered trades in Postgres (`portfolio_trades`, `portfolio_usage`) backing `/danhmuc`; `computeHoldings()` / `computePortfolio()` — the pure weighted-average cost and valuation rules; `pricesBySymbol()` — matches one price lookup back to held symbols. See "Portfolio" below. |
 | `zalo/` | Talks to the Zalo Bot "send message" API. Never throws — a failed send is logged and swallowed so an outbound Zalo outage can't turn into an unhandled webhook exception. Resolves `true`/`false` so callers that care (the alert check) know whether the send landed. |
 | `webhook/` | `WebhookController` — the only place that wires parsing + CoinGecko + Zalo + Subscribers together. Guarded by `WebhookSecretGuard`, DTO-validated by `ZaloWebhookDto`. Always acknowledges 200 to Zalo. |
 | `digest/` | `DigestController` — `POST /cron/daily-digest`, a machine-triggered (not user-triggered) endpoint that loads active subscribers from `SubscribersService` and pushes each their own watchlist. Guarded by `CronSecretGuard`. Has no scheduler of its own — see "Daily digest" below for what calls it. |
@@ -212,6 +213,41 @@ The only durable state in the app: the `subscribers` table (`chat_id`,
 - **Soft delete**: `/huy` sets `is_active = false` rather than deleting the
   row, so `watchlist` history survives and re-subscribing via `/dangky`
   restores it.
+
+### Portfolio (Postgres, EPIC-003)
+
+`/danhmuc` lets a private chat record buy/sell trades and see its holdings,
+PnL and 24h change, also as a section of the 9am digest. See
+`docs/epics/EPIC-003` for the spec and plan.
+
+- **Why Postgres, not Redis like price alerts**: portfolio data is only read
+  or written when a user sends a command, plus one query per day for the
+  digest, so Neon's compute quota is not at risk (price alerts left Postgres
+  because of a *per-minute* query). In exchange, Postgres gives exact
+  `NUMERIC` amounts, `CHECK` constraints and real transactions, which the
+  no-oversell and limit rules need.
+- **One round-trip per command**: every write is one `sql.transaction([...])`
+  over the Neon HTTP driver. Its first statement is
+  `pg_advisory_xact_lock(hashtext(chat_id))`, so two commands of the same
+  chat run one after the other and different chats never wait on each other.
+  The rules (no sell above the holding; 200 trades; 20 held coins; no delete
+  that turns a later sell into an oversell, via a running `SUM() OVER`) sit
+  in the `WHERE`/`HAVING` of the same statement that writes. A broken rule
+  writes nothing; a failed statement rolls the whole command back.
+- **Numbers are computed, never stored**: `computeHoldings()` replays the
+  trades in `seq` order (weighted-average cost, quantities as exact `bigint`
+  10^-8 units), and `computePortfolio()` values them. Same functions for
+  `/danhmuc`, the digest and write confirmations.
+- **Digest**: the trades of every active subscriber load in one query; each
+  subscriber still gets one price lookup, for watchlist ∪ held coins. The
+  portfolio part has its own `try/catch` — a failure costs only that part.
+  Symbols sharing a CoinGecko id (`matic`/`pol`) are matched through the id,
+  as in the alert check.
+- **Privacy**: only `chat_type: PRIVATE` chats get through (a missing
+  `chat_type` counts as a group). Logs carry chat ids, counts and durations,
+  never amounts; database errors are logged by name and SQLSTATE only.
+  `portfolio_usage` counts views/writes per chat per day for the success
+  metric (`npm run portfolio:report`).
 
 ### Price alerts (Upstash Redis + external per-minute scheduler)
 

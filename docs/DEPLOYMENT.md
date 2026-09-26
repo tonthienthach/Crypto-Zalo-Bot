@@ -69,6 +69,29 @@ Digest subscribers (`/dangky`, `/huy`, `/watchlist`) are stored in Postgres
 
 `vercel env add <name> production` prompts you to paste the value.
 
+### Portfolio tables (EPIC-003) — migrate **before** deploying the code
+
+`db/migrations/0002_create_portfolio.sql` adds `portfolio_trades` and
+`portfolio_usage`. It only adds tables (`IF NOT EXISTS`), so it is safe to
+run against production before the new code ships, and the old code keeps
+working with it. Run `npm run db:migrate` with the production
+`POSTGRES_URL` (if `vercel env pull` writes `[SENSITIVE]` for it, copy the
+connection string from the Neon/Vercel Storage dashboard into a shell
+variable instead), then deploy (step 4).
+
+- Check it: `npm run portfolio:report` prints `Chats that used /danhmuc: 0`.
+- Code rollback (`vercel rollback`, step 7) needs no schema change: the
+  previous build never reads the new tables.
+- Removing the feature for good (**deletes every trade users recorded** —
+  owner decision only): `DROP TABLE IF EXISTS portfolio_usage` and
+  `DROP TABLE IF EXISTS portfolio_trades`.
+
+After deploying, smoke-test from a real **private** chat with the bot:
+`/danhmuc mua btc 0.001 1`, `/danhmuc`, `/danhmuc lichsu`, then
+`/danhmuc xoahet` + `/danhmuc xoahet xacnhan`. If the private chat is
+refused, the Vercel log line `Portfolio command refused outside a private
+chat: ... chat_type=...` shows what Zalo actually sent.
+
 ## 3b. Attach Upstash Redis (price alerts)
 
 Price alerts (`/canhbao`) are stored in Upstash Redis, **not** Postgres — see
