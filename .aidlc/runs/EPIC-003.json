@@ -6,7 +6,7 @@
     "epic": "EPIC-003"
   },
   "startedAt": "2026-09-25T02:08:02.527Z",
-  "updatedAt": "2026-09-26T03:57:06.519Z",
+  "updatedAt": "2026-09-26T04:11:19.607Z",
   "currentStepIdx": 4,
   "status": "running",
   "steps": [
@@ -91,8 +91,10 @@
       "agent": "aidlc-native-verifier",
       "name": "verify",
       "revision": 1,
-      "status": "awaiting_work",
-      "artifactsProduced": [],
+      "status": "awaiting_review",
+      "artifactsProduced": [
+        "docs/epics/EPIC-003/artifacts/verify.md"
+      ],
       "startedAt": "2026-09-26T03:57:06.516Z"
     },
     {
