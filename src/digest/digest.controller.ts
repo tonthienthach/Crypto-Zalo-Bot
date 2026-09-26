@@ -168,7 +168,7 @@ export class DigestController {
         heldSymbols === undefined
           ? formatPortfolioDigestUnavailableSection()
           : this.portfolioSection(subscriber.chatId, trades, heldSymbols, coins, run);
-      await this.zaloService.sendTextMessage(
+      const delivered = await this.zaloService.sendTextMessage(
         subscriber.chatId,
         formatDailyDigestReply(
           watchlistCoins,
@@ -177,7 +177,12 @@ export class DigestController {
           portfolioSection,
         ),
       );
-      run.sent++;
+      // ZaloService never throws; a failed send resolves false (already logged there).
+      if (delivered) {
+        run.sent++;
+      } else {
+        run.failed++;
+      }
     } catch (error) {
       run.failed++;
       if (error instanceof UnknownCoinSymbolsError || error instanceof CoingeckoUnavailableError) {

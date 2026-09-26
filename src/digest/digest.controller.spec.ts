@@ -23,7 +23,7 @@ describe('DigestController', () => {
 
   beforeEach(async () => {
     getPricesBySymbols = jest.fn();
-    sendTextMessage = jest.fn().mockResolvedValue(undefined);
+    sendTextMessage = jest.fn().mockResolvedValue(true);
     listActive = jest.fn();
     listTradesForChats = jest.fn().mockResolvedValue(new Map());
 
@@ -217,6 +217,21 @@ describe('DigestController', () => {
           portfolioLoadFailed: false,
         }),
       );
+      jest.restoreAllMocks();
+    });
+
+    it('NFR09: a send Zalo refused counts as failed in the run log, not as sent', async () => {
+      const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+      listActive.mockResolvedValue([sub('chat-a', ['btc']), sub('chat-b', ['btc'])]);
+      getPricesBySymbols.mockResolvedValue([coin('btc', 70000)]);
+      sendTextMessage.mockResolvedValueOnce(false);
+
+      await controller.sendDailyDigest();
+
+      const runLine = log.mock.calls
+        .map((c) => String(c[0]))
+        .find((m) => m.includes('daily-digest-run'));
+      expect(JSON.parse(runLine!)).toEqual(expect.objectContaining({ sent: 1, failed: 1 }));
       jest.restoreAllMocks();
     });
 
