@@ -1,0 +1,35 @@
+import path from 'path';
+
+// scripts/db-migrate.js is a plain Node script, tested from here so it runs under `npm test`.
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+const { applyMigrations, splitStatements } = require('../../scripts/db-migrate');
+
+const MIGRATIONS_DIR = path.resolve(__dirname, '..', '..', 'db', 'migrations');
+
+describe('db-migrate (EPIC-003 migration 0002)', () => {
+  it('drops comment lines and splits on semicolons', () => {
+    expect(splitStatements('-- a comment; with a semicolon\nCREATE A;\n\nCREATE B;\n')).toEqual([
+      'CREATE A',
+      'CREATE B',
+    ]);
+  });
+
+  it('runs every file in order, one idempotent statement per call', async () => {
+    const statements: string[] = [];
+    const sql = { query: jest.fn(async (statement: string) => statements.push(statement)) };
+
+    const files = await applyMigrations(sql, MIGRATIONS_DIR, () => undefined);
+
+    expect(files).toBe(2);
+    expect(statements.map((statement) => statement.split('\n')[0])).toEqual([
+      'CREATE TABLE IF NOT EXISTS subscribers (',
+      'CREATE INDEX IF NOT EXISTS subscribers_is_active_idx ON subscribers (is_active)',
+      'CREATE TABLE IF NOT EXISTS portfolio_trades (',
+      'CREATE TABLE IF NOT EXISTS portfolio_usage (',
+    ]);
+    // Every statement is re-runnable: db-migrate.js applies every file on every call.
+    for (const statement of statements) {
+      expect(statement).toMatch(/^CREATE (TABLE|INDEX) IF NOT EXISTS /);
+    }
+  });
+});
