@@ -26,13 +26,17 @@ const PORTFOLIO_DELETE_KEYWORDS = new Set(['xoa', 'delete']);
 const PORTFOLIO_CLEAR_KEYWORDS = new Set(['xoahet', 'clear']);
 const PORTFOLIO_CONFIRM_KEYWORDS = new Set(['xacnhan', 'confirm']);
 const PORTFOLIO_SYMBOL_PATTERN = /^[a-z0-9]+$/;
-/** A trade number or history page: 1-999. */
-const SMALL_POSITIVE_INTEGER_PATTERN = /^\d{1,3}$/;
+/** A trade number or history page: 1-999999 (trade numbers keep growing past the 200-trade cap). */
+const POSITIVE_INTEGER_PATTERN = /^\d{1,6}$/;
 
 /** "btc > 100000", "btc>100000", "btc < 0.35" — symbol, operator, price token. */
 const ALERT_CREATE_PATTERN = /^([a-z0-9]+)\s*([<>])\s*(\S+)$/;
-/** Plain "100000" / "0.35", or comma-grouped thousands "100,000" / "1,234.5". */
-const POSITIVE_NUMBER_PATTERN = /^(\d+|\d{1,3}(,\d{3})+)(\.\d+)?$/;
+/**
+ * Plain "100000" / "0.35", or comma-grouped thousands "100,000" / "1,234.5"
+ * (spec EPIC-002-FR02). A grouped number can't start with "0": "0,123" is a
+ * decimal comma that would otherwise read as 123, so it is refused instead.
+ */
+const POSITIVE_NUMBER_PATTERN = /^(\d+|[1-9]\d{0,2}(,\d{3})+)(\.\d+)?$/;
 
 @Injectable()
 export class CommandParserService {
@@ -193,14 +197,14 @@ export class CommandParserService {
       if (rest.length > 1) {
         return invalid;
       }
-      const page = rest.length === 0 ? 1 : this.parseSmallPositiveInteger(rest[0]);
+      const page = rest.length === 0 ? 1 : this.parsePositiveInteger(rest[0]);
       return page === null
         ? invalid
         : { type: CommandType.PORTFOLIO_HISTORY, symbols: [], portfolio: { page } };
     }
 
     if (PORTFOLIO_DELETE_KEYWORDS.has(keyword)) {
-      const index = rest.length === 1 ? this.parseSmallPositiveInteger(rest[0]) : null;
+      const index = rest.length === 1 ? this.parsePositiveInteger(rest[0]) : null;
       return index === null
         ? invalid
         : { type: CommandType.PORTFOLIO_DELETE, symbols: [], portfolio: { index } };
@@ -242,9 +246,9 @@ export class CommandParserService {
     return { value, plain };
   }
 
-  /** "3" -> 3; null for anything outside 1-999. */
-  private parseSmallPositiveInteger(raw: string): number | null {
-    if (!SMALL_POSITIVE_INTEGER_PATTERN.test(raw) || Number(raw) < 1) {
+  /** "3" -> 3; null for anything outside 1-999999. */
+  private parsePositiveInteger(raw: string): number | null {
+    if (!POSITIVE_INTEGER_PATTERN.test(raw) || Number(raw) < 1) {
       return null;
     }
     return Number(raw);

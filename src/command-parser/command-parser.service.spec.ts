@@ -137,6 +137,12 @@ describe('CommandParserService', () => {
       expect(parser.parse('/canhbao btc > 1,234.5').alert?.threshold).toBe(1234.5);
     });
 
+    it('refuses a decimal comma instead of reading "0,350" as 350', () => {
+      expect(parser.parse('/canhbao ada < 0,35').type).toBe(CommandType.ALERT_INVALID);
+      expect(parser.parse('/canhbao ada < 0,350').type).toBe(CommandType.ALERT_INVALID);
+      expect(parser.parse('/canhbao btc > 01,000').type).toBe(CommandType.ALERT_INVALID);
+    });
+
     it.each([
       ['/canhbao btc > 100k'],
       ['/canhbao btc 100000'],
@@ -242,6 +248,10 @@ describe('CommandParserService', () => {
       ['/danhmuc mua btc-x 1 1'],
       ['/danhmuc mua abcdefghijklmnopqrstu 1 1'],
       ['/danhmuc mua btc 1,00 60000'],
+      ['/danhmuc mua btc 0,123 60000'],
+      ['/danhmuc mua btc 0,5 60000'],
+      ['/danhmuc mua btc 0.5 0,123'],
+      ['/danhmuc xoa 1234567'],
       ['/danhmuc banh btc 1 60000'],
     ])('AC05: rejects "%s" as PORTFOLIO_INVALID', (text) => {
       expect(parser.parse(text)).toEqual({ type: CommandType.PORTFOLIO_INVALID, symbols: [] });
@@ -262,6 +272,8 @@ describe('CommandParserService', () => {
       expect(parser.parse('/danhmuc xoa 3')).toEqual(expected);
       expect(parser.parse('/danhmuc xoá 3')).toEqual(expected);
       expect(parser.parse('/portfolio delete 3')).toEqual(expected);
+      // Trade numbers keep growing past the 200-trade cap, so #1234 must stay deletable.
+      expect(parser.parse('/danhmuc xoa 1234').portfolio).toEqual({ index: 1234 });
     });
 
     it('AC15: "/danhmuc xoahet" asks for confirmation, "/danhmuc xoahet xacnhan" confirms', () => {
@@ -280,7 +292,7 @@ describe('CommandParserService', () => {
       ['/danhmuc lichsu 1 2'],
       ['/danhmuc xoa'],
       ['/danhmuc xoa 0'],
-      ['/danhmuc xoa 1000'],
+      ['/danhmuc xoa 1000000'],
       ['/danhmuc xoahet ok'],
       ['/danhmuc xoahet xacnhan them'],
     ])('rejects "%s" as PORTFOLIO_INVALID', (text) => {
