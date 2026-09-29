@@ -50,6 +50,7 @@ Số test trước → sau epic này:
 - **Unit:** 185 → **268** (14 → 19 suite).
 - **e2e:** 23 → **38 pass**.
 - **Opt-in skip:** 8 → **23**. Có 8 test Redis thật của EPIC-002/FIX và 15 kịch bản Postgres thật mới.
+- **Sau rev 2 và rev 3 (2026-09-29):** unit **288**, e2e **40 pass**, opt-in skip **26** (18 kịch bản Postgres thật). Lint và build xanh. Rev 3 chạy bộ kịch bản store trên PGlite (Postgres 16 WASM, harness không commit): **28/28 pass**, với đúng `PortfolioService` và `db-migrate.js` của HEAD. Riêng một bảng tạo bằng 0002 bản cũ (`eefa8c3`) sau khi migrate có cột `source_message_id`, có unique index, chỉ một CHECK và giữ nguyên dữ liệu.
 
 `npm run lint` (với `prettier endOfLine: auto`, xem §6) và `npm run build` xanh trước mỗi commit.
 
@@ -263,6 +264,12 @@ Chưa làm, vì đây là kiểm tra thủ công trên production do owner làm 
 
 - **Rev 2 (2026-09-26, owner yêu cầu): chống ghi trùng giao dịch.** Thêm cột `source_message_id` và unique index một phần `(chat_id, source_message_id)` vào `0002_create_portfolio.sql`. Sửa thẳng file 0002 vì chưa chạy trên production. `recordTrade` nhận `message_id` của Zalo; trong cùng transaction, dưới khoá của chat, câu INSERT có thêm `NOT EXISTS` và một câu SELECT tìm giao dịch cũ. Tin gửi lại trả về giao dịch cũ với `duplicate: true`. Unique index là lớp chặn cuối nếu điều kiện bị lách. Hàm thuần `findRecentTwin` (`portfolio-calculator.ts`, cửa sổ `TWIN_TRADE_WINDOW_MS` = 2 phút) phát hiện giao dịch giống hệt giao dịch ngay trước, để lời xác nhận cảnh báo. Lần gửi trùng vẫn cộng 1 vào `portfolio_usage.writes`. Chấp nhận được, vì chỉ số thành công đếm chat chứ không đếm số lần ghi.
 
+- **Rev 3 (2026-09-29): sửa theo verify rev 1.** Ba commit:
+  - `102be65`: parser từ chối dấu phẩy thập phân. Một số có nhóm hàng nghìn không được bắt đầu bằng `0`, nên `0,123` bị từ chối (trước đó đọc thành 123), còn `100,000` và `60,000.5` vẫn đúng như EPIC-002-FR02 và EPIC-003-AC05. Lời nhắc lỗi có thêm "0.5, không phải 0,5". Số thứ tự xoá và trang lịch sử nhận tới 999999, vì `seq` tăng mãi.
+  - `cc24a41`: số tiền trong danh mục làm tròn tới cent, giá coin vẫn giữ tới 6 chữ số lẻ. Số tiền tròn về 0 thì hiện `$0.00` không dấu, kèm `➖`. Khi mọi coin đều thiếu giá, bot ghi "chưa lấy được giá lúc này" thay vì `$0.00`. Biến động 24h ≤ −100% được coi là không có số liệu.
+  - `9409ef6`: `writes` chỉ được cộng từ chính các dòng `RETURNING` của INSERT, qua một CTE ghi dữ liệu. Vẫn 1 round-trip, nên lệnh bị từ chối hay tin gửi lại không được tính. `message_id` dài hơn 128 ký tự thì bỏ qua chống lặp (NULL), không làm lỗi lệnh; tôi chọn cách này thay vì nới cột, vì id thật chỉ dài 20 ký tự. `InconsistentTradesError` không còn chứa số lượng. Migration 0002 có thêm `ALTER TABLE … ADD COLUMN IF NOT EXISTS`.
+  - Không sửa: tin Zalo gửi lại sau khi giao dịch gốc đã bị xoá thì được ghi lại (xem Known gaps).
+
 ## 5. Discovered work
 
 | Item | Where it went |
@@ -276,8 +283,10 @@ Chưa làm, vì đây là kiểm tra thủ công trên production do owner làm 
 
 - **Driver Neon HTTP thật chưa được chạy** với `PortfolioService`, vì máy không có Docker và cũng chưa có Neon branch. Spec opt-in `portfolio.postgres.e2e-spec.ts` đang bị skip. Những điểm cần xác nhận trước khi merge: `sql.transaction([...])` chứa `pg_advisory_xact_lock` qua HTTP, `NUMERIC` trả về dạng chuỗi, tham số mảng trong `chat_id = ANY(${chatIds})`, và `COUNT(*)` trả về chuỗi. Cách chạy: tạo một Neon branch, đặt `PORTFOLIO_INT_DATABASE_URL=… npm run test:e2e -- portfolio.postgres`, xong thì xoá branch.
 - **Tranh chấp khoá thật chưa được chứng minh.** PGlite chỉ có một kết nối, nên hai kịch bản đồng thời của AC19 thực chất chạy tuần tự. Việc khoá advisory chặn được hai request HTTP song song chỉ chứng minh được trên Postgres thật (mục trên).
-- **Bộ đếm usage nằm chung transaction với lệnh.** Nếu ghi `portfolio_usage` lỗi thì cả lệnh xem/ghi cũng lỗi (người dùng nhận "tạm thời không truy cập được"), và mỗi lần xem là một lần ghi. Cách này được chọn để giữ 1 round-trip. Nếu bộ đếm gây sự cố thì tách nó ra.
+- **Bộ đếm usage nằm chung transaction với lệnh.** Nếu ghi `portfolio_usage` lỗi thì cả lệnh xem/ghi cũng lỗi (người dùng nhận "tạm thời không truy cập được"), và mỗi lần xem là một lần ghi. Từ rev 3, lượt ghi chỉ được đếm khi thật sự có giao dịch được ghi. Cách này được chọn để giữ 1 round-trip. Nếu bộ đếm gây sự cố thì tách nó ra.
 - **Ghi giao dịch phụ thuộc nguồn giá.** Coin được kiểm tra bằng `getPricesBySymbols` trước khi ghi (FR03), nên khi CoinGecko và CoinPaprika cùng lỗi thì không ghi được giao dịch.
+- **Tin gửi lại sau khi giao dịch gốc đã bị xoá sẽ được ghi lại**, vì không còn dòng nào mang `message_id` đó. Cửa sổ gửi lại của Zalo ngắn, nên trường hợp này hiếm. Chấp nhận, không sửa (verify rev 1, owner duyệt).
+- **1 BTC viết `1,234` vẫn được hiểu là 1234**, đúng spec EPIC-002-FR02. Chỉ dạng bắt đầu bằng `0,` bị từ chối. Nếu người dùng quen dùng dấu phẩy thập phân thì cần quyết định sản phẩm mới.
 - ~~**Giao dịch có thể bị ghi trùng**~~ Đã xử lý 2026-09-26 (FR16/AC21, xem §4). Còn lại: người dùng cố ý gửi lại bằng một tin mới vẫn tạo giao dịch thứ hai (đúng AC19), chỉ được cảnh báo. Kịch bản DB thật cho chống lặp nằm trong bộ Postgres opt-in, chưa chạy (không có Docker/Neon branch).
 - **`chat_type` của chat riêng thật** mới chỉ được xác nhận qua một payload ngày 2026-09-04. Nếu owner bị chặn nhầm, log sẽ có dòng `Portfolio command refused outside a private chat … chat_type=…`. Cần smoke test ở bước 9.
 - **AC17 (p95 ≤ 5 giây) và AC20 (đối chiếu với app sàn)** chỉ đo được sau deploy.
