@@ -120,6 +120,23 @@ describeIfRedis('PriceAlertsService against a real Redis (integration)', () => {
     await expect(service.acquireRunLock()).resolves.toEqual(expect.any(String));
   });
 
+  it('shares the owner-message hold between callers, with a TTL (FIX-NFR05)', async () => {
+    const now = new Date('2026-09-25T03:00:00.000Z');
+    await expect(service.hasNoticeHold()).resolves.toBe(false);
+
+    await expect(service.claimNoticeHold(now, 60_000)).resolves.toBe(true);
+    await expect(service.claimNoticeHold(now, 60_000)).resolves.toBe(false);
+    await expect(service.hasNoticeHold()).resolves.toBe(true);
+    const ttl = await redis.pttl('price-alerts:monitor-notice-hold');
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(60_000);
+
+    await service.releaseNoticeHold();
+    await expect(service.hasNoticeHold()).resolves.toBe(false);
+    await service.setNoticeHold(now, 60_000);
+    await expect(service.claimNoticeHold(now, 60_000)).resolves.toBe(false);
+  });
+
   it('keeps delivery and run logs readable and capped (AC17)', async () => {
     for (let i = 0; i < 1445; i++) {
       await service.recordRun({

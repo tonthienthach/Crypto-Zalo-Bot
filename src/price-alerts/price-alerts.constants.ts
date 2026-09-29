@@ -39,6 +39,8 @@ export const REDIS_KEYS = {
   /** The check's view of the watcher (WatchdogState). */
   watchdog: 'price-alerts:watchdog',
   monitorNotices: 'price-alerts:monitor-notices',
+  /** Set (with a TTL) after an owner message whose state couldn't be stored: holds repeats across instances. */
+  noticeHold: 'price-alerts:monitor-notice-hold',
   /** Hash of rejected-call counts for one UTC day (YYYY-MM-DD), one field per UTC minute (HH:MM). */
   rejected: (day: string) => `price-alerts:rejected:${day}`,
 } as const;

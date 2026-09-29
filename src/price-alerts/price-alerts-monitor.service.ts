@@ -18,14 +18,17 @@ import { PriceAlertsService } from './price-alerts.service';
  *
  * Redis trouble is handled here (spec EPIC-002-FIX-NFR05): when state can't
  * be read, or a delivered message's state can't be saved, further messages
- * are held to one per STATE_UNREADABLE_NOTICE_MS using this instance's
- * memory — the only thing left to remember with.
+ * are held to one per STATE_UNREADABLE_NOTICE_MS. The hold lives in Redis
+ * (a key with that TTL), so every instance and every cold start sees it, and
+ * a later successful save does not lift it early. Only when Redis can't hold
+ * it either does this instance's memory stand in — the one thing left to
+ * remember with.
  */
 @Injectable()
 export class PriceAlertsMonitorService {
   private readonly logger = new Logger(PriceAlertsMonitorService.name);
   private readonly ownerChatId: string | undefined;
-  /** Last message this instance sent without being able to store that it did. */
+  /** Last message this instance sent without being able to store that it did (the fallback hold). */
   private lastUnrecordedSendAt: number | null = null;
 
   constructor(
@@ -69,10 +72,9 @@ export class PriceAlertsMonitorService {
     };
     try {
       await this.priceAlertsService.setMonitorState(next);
-      this.lastUnrecordedSendAt = null;
     } catch (error) {
       this.logger.error(`Price-alert watcher can't save its state: ${String(error)}`);
-      if (delivered) this.lastUnrecordedSendAt = now.getTime();
+      if (delivered) await this.holdAfterUnrecordedSend(now);
     }
   }
 
@@ -93,13 +95,13 @@ export class PriceAlertsMonitorService {
     } catch (error) {
       // Same rule as the watcher: a delivered message we couldn't record
       // must not repeat every 5 minutes (spec EPIC-002-FIX-NFR05).
-      if (delivered) this.lastUnrecordedSendAt = now.getTime();
+      if (delivered) await this.holdAfterUnrecordedSend(now);
       throw error;
     }
   }
 
   private async notify(action: MonitorAction, now: Date): Promise<boolean> {
-    if (this.withinUnrecordedWindow(now)) {
+    if (await this.isHeld(now)) {
       return false;
     }
     const activeAlerts =
@@ -109,17 +111,49 @@ export class PriceAlertsMonitorService {
     return this.send(action.kind, formatMonitorMessage(action, activeAlerts), now);
   }
 
-  /** For messages whose sending can't be stored: at most one per window per instance. */
+  /**
+   * For messages whose sending can't be stored in the monitoring state: at
+   * most one per window across instances. The hold is claimed before sending
+   * (SET NX), so two instances can't both send; a send that fails gives the
+   * claim back. When Redis can't take the claim, this instance's memory is
+   * the hold.
+   */
   private async sendUnrecorded(kind: MonitorNotice['kind'], text: string, now: Date) {
-    if (this.withinUnrecordedWindow(now)) {
+    if (this.withinMemoryHold(now)) {
       return;
+    }
+    const claimed = await this.priceAlertsService
+      .claimNoticeHold(now, STATE_UNREADABLE_NOTICE_MS)
+      .catch(() => null);
+    if (claimed === false) {
+      return; // Another instance (or an earlier run) already told the owner this hour.
     }
     if (await this.send(kind, text, now)) {
       this.lastUnrecordedSendAt = now.getTime();
+    } else if (claimed) {
+      await this.priceAlertsService.releaseNoticeHold().catch(() => undefined);
     }
   }
 
-  private withinUnrecordedWindow(now: Date): boolean {
+  /** A message went out but its state didn't save: hold repeats, in Redis if it will take it. */
+  private async holdAfterUnrecordedSend(now: Date): Promise<void> {
+    this.lastUnrecordedSendAt = now.getTime();
+    await this.priceAlertsService
+      .setNoticeHold(now, STATE_UNREADABLE_NOTICE_MS)
+      .catch((error: unknown) => {
+        this.logger.error(`Failed to store the price-alert monitor hold: ${String(error)}`);
+      });
+  }
+
+  /** Held by this instance's memory, or by the shared hold in Redis (unreadable counts as not held). */
+  private async isHeld(now: Date): Promise<boolean> {
+    if (this.withinMemoryHold(now)) {
+      return true;
+    }
+    return this.priceAlertsService.hasNoticeHold().catch(() => false);
+  }
+
+  private withinMemoryHold(now: Date): boolean {
     return (
       this.lastUnrecordedSendAt !== null &&
       now.getTime() - this.lastUnrecordedSendAt < STATE_UNREADABLE_NOTICE_MS

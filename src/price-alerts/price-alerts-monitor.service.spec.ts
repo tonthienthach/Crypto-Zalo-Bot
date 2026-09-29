@@ -36,6 +36,9 @@ describe('PriceAlertsMonitorService', () => {
   let alerts: Record<string, jest.Mock>;
   let sendTextMessage: jest.Mock;
   let stored: MonitorState | null;
+  /** The shared hold key, as Redis would keep it: expires `holdMs` after it was set. */
+  let holdUntil: number | null;
+  let clock: number;
 
   function create(ownerChatId: string | null = 'owner-chat') {
     return new PriceAlertsMonitorService(
@@ -50,7 +53,22 @@ describe('PriceAlertsMonitorService', () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     stored = watching;
+    holdUntil = null;
+    clock = T;
+    const held = () => holdUntil !== null && clock < holdUntil;
     alerts = {
+      hasNoticeHold: jest.fn(async () => held()),
+      claimNoticeHold: jest.fn(async (now: Date, holdMs: number) => {
+        if (held()) return false;
+        holdUntil = now.getTime() + holdMs;
+        return true;
+      }),
+      setNoticeHold: jest.fn(async (now: Date, holdMs: number) => {
+        holdUntil = now.getTime() + holdMs;
+      }),
+      releaseNoticeHold: jest.fn(async () => {
+        holdUntil = null;
+      }),
       getMonitorState: jest.fn(async () => stored),
       setMonitorState: jest.fn(async (state: MonitorState) => {
         stored = state;
@@ -159,6 +177,69 @@ describe('PriceAlertsMonitorService', () => {
     }
 
     expect(sendTextMessage).toHaveBeenCalledTimes(1);
+  });
+
+  describe('the hold across flaky Redis and many instances (FIX-NFR05, verify finding #2)', () => {
+    /** Runs the watcher every 5 minutes for `hours`, on the instance `pick(i)` returns. */
+    async function runEveryFiveMinutes(
+      hours: number,
+      pick: (i: number) => PriceAlertsMonitorService,
+    ) {
+      for (let i = 0; i < hours * 12; i++) {
+        clock = T + min(16 + 5 * i);
+        await pick(i).runWatcher(at(min(16 + 5 * i)));
+      }
+    }
+
+    it('flaky state reads (every other one fails) send at most one message an hour', async () => {
+      let reads = 0;
+      alerts.getMonitorState.mockImplementation(async () => {
+        if (reads++ % 2 === 0) throw new Error('redis timeout');
+        return stored;
+      });
+      const service = create();
+
+      await runEveryFiveMinutes(1, () => service);
+
+      // Before the fix a successful save lifted the hold: 6 messages an hour.
+      expect(sendTextMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('a fresh instance on every run (cold starts) still sends at most one an hour', async () => {
+      alerts.getMonitorState.mockRejectedValue(new Error('redis timeout'));
+
+      await runEveryFiveMinutes(3, () => create());
+
+      // Before the fix each instance had its own memory: 36 messages in 3 hours.
+      expect(sendTextMessage).toHaveBeenCalledTimes(3);
+      expect(sendTextMessage.mock.calls[0][1]).toContain('không đọc được trạng thái');
+    });
+
+    it('two instances taking turns share the hold after a delivered message fails to save', async () => {
+      alerts.setMonitorState.mockRejectedValue(new Error('redis write failed'));
+      const a = create();
+      const b = create();
+
+      await runEveryFiveMinutes(3, (i) => (i % 2 === 0 ? a : b));
+
+      expect(sendTextMessage).toHaveBeenCalledTimes(3);
+      expect(alerts.setNoticeHold).toHaveBeenCalled();
+    });
+
+    it('gives the claim back when the message could not be delivered, so the next run retries', async () => {
+      alerts.getMonitorState.mockRejectedValue(new Error('redis timeout'));
+      sendTextMessage.mockResolvedValueOnce(false).mockResolvedValue(true);
+      const service = create();
+
+      clock = T + min(16);
+      await service.runWatcher(at(min(16)));
+      expect(alerts.releaseNoticeHold).toHaveBeenCalledTimes(1);
+      clock = T + min(21);
+      await service.runWatcher(at(min(21)));
+
+      expect(sendTextMessage).toHaveBeenCalledTimes(2);
+      expect(holdUntil).toBe(T + min(21) + min(60));
+    });
   });
 
   describe('checkWatcher (FIX-FR07)', () => {

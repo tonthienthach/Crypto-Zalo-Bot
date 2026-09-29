@@ -25,6 +25,7 @@ const mockRedis = {
   mget: jest.fn(),
   set: jest.fn(),
   del: jest.fn(),
+  exists: jest.fn(),
   eval: jest.fn(),
   hgetall: jest.fn(),
   multi: jest.fn(() => mockTx),
@@ -269,6 +270,38 @@ describe('PriceAlertsService', () => {
       expect(keys).toEqual(['price-alerts:rejected:2026-09-25']);
       expect(args).toEqual(['23:59', '42', String(3 * 24 * 60 * 60)]);
       expect(mockTx.exec).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('owner-message hold (EPIC-002-FIX-NFR05)', () => {
+    const now = new Date('2026-09-25T03:00:00.000Z');
+
+    it('claims the hold with SET NX and a TTL, true only when this call took it', async () => {
+      mockRedis.set.mockResolvedValueOnce('OK').mockResolvedValueOnce(null);
+
+      await expect(service.claimNoticeHold(now, 3_600_000)).resolves.toBe(true);
+      await expect(service.claimNoticeHold(now, 3_600_000)).resolves.toBe(false);
+      expect(mockRedis.set).toHaveBeenCalledWith(
+        'price-alerts:monitor-notice-hold',
+        '2026-09-25T03:00:00.000Z',
+        { nx: true, px: 3_600_000 },
+      );
+    });
+
+    it('sets, reads and releases the same key', async () => {
+      mockRedis.exists.mockResolvedValue(1);
+
+      await service.setNoticeHold(now, 3_600_000);
+      await expect(service.hasNoticeHold()).resolves.toBe(true);
+      await service.releaseNoticeHold();
+
+      expect(mockRedis.set).toHaveBeenCalledWith(
+        'price-alerts:monitor-notice-hold',
+        '2026-09-25T03:00:00.000Z',
+        { px: 3_600_000 },
+      );
+      expect(mockRedis.exists).toHaveBeenCalledWith('price-alerts:monitor-notice-hold');
+      expect(mockRedis.del).toHaveBeenCalledWith('price-alerts:monitor-notice-hold');
     });
   });
 

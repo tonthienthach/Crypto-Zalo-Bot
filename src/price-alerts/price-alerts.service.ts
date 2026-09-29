@@ -257,6 +257,33 @@ export class PriceAlertsService {
     await this.redis.set(REDIS_KEYS.watchdog, state);
   }
 
+  /**
+   * The owner-message hold (spec EPIC-002-FIX-NFR05), shared by every
+   * instance: set when a message went out that the monitoring state couldn't
+   * record, so no instance repeats it before `holdMs` has passed. Only
+   * touched when a message is due or its state failed to save.
+   */
+  async hasNoticeHold(): Promise<boolean> {
+    return (await this.redis.exists(REDIS_KEYS.noticeHold)) === 1;
+  }
+
+  /** Takes the hold unless another instance holds it: true when this call took it. */
+  async claimNoticeHold(now: Date, holdMs: number): Promise<boolean> {
+    const result = await this.redis.set(REDIS_KEYS.noticeHold, now.toISOString(), {
+      nx: true,
+      px: holdMs,
+    });
+    return result === 'OK';
+  }
+
+  async setNoticeHold(now: Date, holdMs: number): Promise<void> {
+    await this.redis.set(REDIS_KEYS.noticeHold, now.toISOString(), { px: holdMs });
+  }
+
+  async releaseNoticeHold(): Promise<void> {
+    await this.redis.del(REDIS_KEYS.noticeHold);
+  }
+
   async recordMonitorNotice(notice: MonitorNotice): Promise<void> {
     await this.pushCapped(REDIS_KEYS.monitorNotices, notice, MAX_MONITOR_NOTICES);
   }
