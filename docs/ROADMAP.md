@@ -8,6 +8,13 @@ work progresses or new direction is decided, rather than starting a new doc.
 Status legend: `Idea` (not committed) · `Planned` (scoped, not started) ·
 `In progress` · `Shipped` · `Dropped` (with reason).
 
+## Current state (2026-09-29)
+
+**Merged to `master`, not yet deployed:** Initiative 2's `EPIC-002-FIX`
+(price-alert watcher) and Initiative 3's `EPIC-003` (portfolio tracking) —
+see their sections below for what's still needed before/after
+`vercel deploy --prod`.
+
 ## Current state (2026-09-22)
 
 Bot on Vercel serverless, now with a Postgres-backed subscriber list
@@ -101,13 +108,18 @@ a way to know *who* the users are and *what* they each want.
 2026-09-24T15:25Z → 09-25T15:25Z ran ~1/min with p95 gap ~81s (≤ 90s),
 run duration p95 0.84s; verify.md now **pass 19/19**. The silent-stoppage
 gap is fixed by follow-up epic
-[`EPIC-002-FIX`](../docs/epics/EPIC-002-FIX/EPIC-002-FIX.md) (implemented on
-`feature/epic-002-fix-alert-monitoring`, awaiting verify; also corrects
-`DEPLOYMENT.md` §8a: Sensitive `KV_REST_API_*` must be copied from the
-Upstash Console). **Still not confirmed:** the Vercel Hobby CPU budget and
-the intent success metric (≥1 non-owner alert delivered within 30 days).
-review.md: ship with follow-ups, both
-should-fix items resolved before merge. Decided 2026-09-23:
+[`EPIC-002-FIX`](../docs/epics/EPIC-002-FIX/EPIC-002-FIX.md) — merged to
+`master` 2026-09-29 (verify rev 2: 15 pass, 0 fail, 5 untested deferred to
+post-deploy; review: ship, all should-fix closed). Adds an independent
+watcher (Upstash QStash, every 5 min) that tells the owner within ~20 min
+if the per-minute check itself stops, and corrects `DEPLOYMENT.md` §8a:
+Sensitive `KV_REST_API_*` must be copied from the Upstash Console.
+**Not yet deployed to production** — owner still needs to add
+`PRICE_ALERTS_WATCH_SECRET` / `OWNER_CHAT_ID` on Vercel, run
+`vercel deploy --prod`, and create the QStash schedule (`DEPLOYMENT.md`
+§8b). **Still not confirmed:** the Vercel Hobby CPU budget, the real
+Upstash command budget (NFR04), and the intent success metric (≥1
+non-owner alert delivered within 30 days). Decided 2026-09-23:
 alerts stored in **Upstash Redis** (not Postgres — a per-minute check would
 exhaust Neon's free compute quota), checked every minute by **cron-job.org**
 (Vercel Hobby cron is daily-only); latency target ~1–2 min; alerts re-arm
@@ -120,12 +132,24 @@ checks stored thresholds against current prices and pushes on breach.
 
 ## Initiative 3: Portfolio tracking
 
-**Status:** In progress (intent draft 2026-09-24)
+**Status:** Merged to `master` 2026-09-29, **not yet deployed**. Verify rev 2:
+18 pass, 0 fail, 3 untested (AC17 p95 latency, AC19 real Neon-driver
+concurrency, AC20 owner reconciliation with an exchange app — all deferred
+to post-deploy). Review: ship with follow-up (branch order — resolved by
+merging after `EPIC-002-FIX`). `/danhmuc mua|ban <coin> <qty> <price>`
+records a trade (Postgres, weighted-average cost); `/danhmuc`,
+`/danhmuc lichsu`, `/danhmuc xoa`; a portfolio section in the 9am digest.
+A redelivered Zalo message never double-records a trade (dedup on
+`message_id`); a quantity may not contain a comma (avoids a 1000x
+decimal-comma slip), while a price still can (`60,000`).
 **Tracked as:** [`EPIC-003`](../docs/epics/EPIC-003/EPIC-003.md) — originator
 is the owner's own need (holds <20 coins across 2–3 exchanges/wallets,
 checks each app by hand, no PnL view). Success metric: ≥1 non-owner chat
 records a portfolio within 30 days. Out of scope: paid tiers, non-Zalo
-channels. Manual entry vs. exchange/wallet sync left for spec to decide.
+channels. Manual entry only (no exchange/wallet sync) for this epic.
+**Deploy still needed:** `npm run db:migrate` on production (adds
+`portfolio_trades` / `portfolio_usage`, safe to re-run), then
+`vercel deploy --prod`. No new env vars.
 **Why:** Turns a lookup tool into a daily habit (PnL in the digest).
 **Depends on:** Initiative 1 (per-user storage).
 

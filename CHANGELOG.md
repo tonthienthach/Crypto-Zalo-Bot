@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Portfolio tracking (Initiative 3 / EPIC-003, merged to `master`
+  2026-09-29, not yet deployed; see `docs/ROADMAP.md`): new
+  `/danhmuc mua|ban <coin> <qty> <price>` records a manually entered trade
+  (Postgres, weighted-average cost), `/danhmuc` shows holdings/PnL/24h
+  change, `/danhmuc lichsu` the trade history, `/danhmuc xoa <n>` /
+  `/danhmuc xoahet` delete; private chats only. A portfolio section is
+  added to the 9am digest. A redelivered Zalo message never records a
+  trade twice (dedup on `message_id`); a quantity may not contain a comma.
+  New `db/migrations/0002_create_portfolio.sql` and
+  `npm run portfolio:report` (usage, read-only). See `docs/DEPLOYMENT.md`
+  step 3a (re-run `npm run db:migrate`) — no new env vars.
+- Price-alert monitoring (Initiative 2 / EPIC-002-FIX, merged to `master`
+  2026-09-29, not yet deployed; see `docs/ROADMAP.md`): an independent
+  watcher (`/cron/price-alerts-watch`, Upstash QStash every 5 min) tells
+  the owner within ~20 min if the per-minute alert check itself stops
+  running, with a recovery message once it resumes; each check run is now
+  logged with an outcome (`healthy`/`no-price`/`failed`/`skipped`/
+  `rejected`) so `npm run alerts:report` can tell "not called" from
+  "called but broken". New env `PRICE_ALERTS_WATCH_SECRET` /
+  `OWNER_CHAT_ID`. See `docs/DEPLOYMENT.md` step 8b.
 - Price alerts (Initiative 2 / EPIC-002, deployed to production 2026-09-23;
   see `docs/ROADMAP.md`): new
   `/canhbao <coin> > <price>` / `<` command, plus `/canhbao` (list) and
