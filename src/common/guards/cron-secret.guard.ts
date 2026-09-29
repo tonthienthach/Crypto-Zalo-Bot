@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
+import { secretEquals } from './secret-equals';
 
 const SECRET_HEADER = 'x-cron-secret-token';
 const BEARER_PREFIX = 'Bearer ';
@@ -34,7 +35,7 @@ export class CronSecretGuard implements CanActivate {
     const providedSecret = this.extractProvidedSecret(request);
 
     // An unset expected secret rejects every call instead of matching nothing-vs-nothing.
-    if (!expectedSecret || !providedSecret || providedSecret !== expectedSecret) {
+    if (!secretEquals(providedSecret, expectedSecret)) {
       this.logger.warn(`Rejected cron call with invalid secret from ${request.ip}`);
       this.onRejected();
       throw new UnauthorizedException('Invalid cron secret');

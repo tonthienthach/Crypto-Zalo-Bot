@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
+import { secretEquals } from './secret-equals';
 
 /**
  * Confirmed against https://bot.zaloplatforms.com/docs/webhook/: Zalo signs
@@ -37,7 +38,7 @@ export class WebhookSecretGuard implements CanActivate {
       (request.headers[SECRET_HEADER] as string | undefined) ??
       (request.query[SECRET_QUERY_PARAM] as string | undefined);
 
-    if (!providedSecret || providedSecret !== expectedSecret) {
+    if (!secretEquals(providedSecret, expectedSecret)) {
       this.logger.warn(`Rejected webhook call with invalid secret from ${request.ip}`);
       throw new UnauthorizedException('Invalid webhook secret');
     }

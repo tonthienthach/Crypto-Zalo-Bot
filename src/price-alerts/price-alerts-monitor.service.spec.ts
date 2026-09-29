@@ -179,6 +179,27 @@ describe('PriceAlertsMonitorService', () => {
     expect(sendTextMessage).toHaveBeenCalledTimes(1);
   });
 
+  it('warns at boot when the watch secret equals another secret, and still boots (FIX-NFR08)', () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const config = {
+      'monitoring.ownerChatId': 'owner-chat',
+      'priceAlerts.watchSecretToken': 'same-secret-0123456789',
+      'cron.secretToken': 'digest-secret-0123456789',
+      'priceAlerts.cronSecretToken': 'same-secret-0123456789',
+    } as Record<string, string>;
+
+    const service = new PriceAlertsMonitorService(
+      alerts as unknown as PriceAlertsService,
+      { sendTextMessage } as unknown as ZaloService,
+      { get: (key: string) => config[key] } as unknown as ConfigService,
+    );
+
+    expect(service).toBeDefined();
+    const logged = warn.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logged).toContain('PRICE_ALERTS_WATCH_SECRET equals PRICE_ALERTS_CRON_SECRET');
+    expect(logged).not.toContain('same-secret');
+  });
+
   describe('the hold across flaky Redis and many instances (FIX-NFR05, verify finding #2)', () => {
     /** Runs the watcher every 5 minutes for `hours`, on the instance `pick(i)` returns. */
     async function runEveryFiveMinutes(

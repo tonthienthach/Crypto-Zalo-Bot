@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { watchSecretReusedAs } from '../common/guards/secret-equals';
 import {
   formatMonitorMessage,
   formatMonitorStateUnreadableMessage,
@@ -37,6 +38,18 @@ export class PriceAlertsMonitorService {
     configService: ConfigService,
   ) {
     this.ownerChatId = configService.get<string>('monitoring.ownerChatId') || undefined;
+    // Boot-time check of spec EPIC-002-FIX-NFR08: warns, never blocks boot.
+    const reused = watchSecretReusedAs({
+      watch: configService.get<string>('priceAlerts.watchSecretToken'),
+      digest: configService.get<string>('cron.secretToken'),
+      check: configService.get<string>('priceAlerts.cronSecretToken'),
+    });
+    if (reused.length > 0) {
+      this.logger.warn(
+        `PRICE_ALERTS_WATCH_SECRET equals ${reused.join(' and ')}: it lives at a different ` +
+          'scheduler and must be its own secret (docs/DEPLOYMENT.md §8b)',
+      );
+    }
   }
 
   /** One watcher run (spec EPIC-002-FIX-FR03–FR06), triggered every 5 minutes. */
