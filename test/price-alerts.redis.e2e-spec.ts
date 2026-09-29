@@ -120,21 +120,24 @@ describeIfRedis('PriceAlertsService against a real Redis (integration)', () => {
     await expect(service.acquireRunLock()).resolves.toEqual(expect.any(String));
   });
 
-  it('shares the owner-message hold between callers, with a TTL (FIX-NFR05)', async () => {
-    const now = new Date('2026-09-25T03:00:00.000Z');
-    await expect(service.hasNoticeHold()).resolves.toBe(false);
+  it('shares the owner-message holds between callers, one per kind, with a TTL (FIX-NFR05)', async () => {
+    const hold = { at: '2026-09-25T03:00:00.000Z', since: '2026-09-25T02:40:00.000Z' };
+    await expect(service.getNoticeHold('state-unreadable')).resolves.toBeNull();
 
-    await expect(service.claimNoticeHold(now, 60_000)).resolves.toBe(true);
-    await expect(service.claimNoticeHold(now, 60_000)).resolves.toBe(false);
-    await expect(service.hasNoticeHold()).resolves.toBe(true);
-    const ttl = await redis.pttl('price-alerts:monitor-notice-hold');
+    await expect(service.claimNoticeHold('state-unreadable', hold, 60_000)).resolves.toBe(true);
+    await expect(service.claimNoticeHold('state-unreadable', hold, 60_000)).resolves.toBe(false);
+    await expect(service.getNoticeHold('state-unreadable')).resolves.toEqual(hold);
+    // Holding one kind never holds another.
+    await expect(service.getNoticeHold('outage')).resolves.toBeNull();
+    const ttl = await redis.pttl('price-alerts:monitor-notice-hold:state-unreadable');
     expect(ttl).toBeGreaterThan(0);
     expect(ttl).toBeLessThanOrEqual(60_000);
 
-    await service.releaseNoticeHold();
-    await expect(service.hasNoticeHold()).resolves.toBe(false);
-    await service.setNoticeHold(now, 60_000);
-    await expect(service.claimNoticeHold(now, 60_000)).resolves.toBe(false);
+    await service.releaseNoticeHold('state-unreadable');
+    await expect(service.getNoticeHold('state-unreadable')).resolves.toBeNull();
+    await service.setNoticeHold('outage', hold, 60_000);
+    await expect(service.claimNoticeHold('outage', hold, 60_000)).resolves.toBe(false);
+    await expect(service.getNoticeHold('outage')).resolves.toEqual(hold);
   });
 
   it('keeps delivery and run logs readable and capped (AC17)', async () => {

@@ -1,3 +1,5 @@
+import { NoticeHoldKind } from './interfaces/price-alert.interface';
+
 /** Hard cap on alerts a single chat may hold at once (spec EPIC-002-FR04). */
 export const MAX_ALERTS_PER_CHAT = 10;
 
@@ -39,8 +41,8 @@ export const REDIS_KEYS = {
   /** The check's view of the watcher (WatchdogState). */
   watchdog: 'price-alerts:watchdog',
   monitorNotices: 'price-alerts:monitor-notices',
-  /** Set (with a TTL) after an owner message whose state couldn't be stored: holds repeats across instances. */
-  noticeHold: 'price-alerts:monitor-notice-hold',
+  /** Set (with a TTL) after an owner message whose state couldn't be stored: holds repeats of that kind across instances. */
+  noticeHold: (kind: NoticeHoldKind) => `price-alerts:monitor-notice-hold:${kind}`,
   /** Hash of rejected-call counts for one UTC day (YYYY-MM-DD), one field per UTC minute (HH:MM). */
   rejected: (day: string) => `price-alerts:rejected:${day}`,
 } as const;
