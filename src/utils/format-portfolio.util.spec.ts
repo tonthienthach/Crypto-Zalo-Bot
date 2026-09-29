@@ -252,6 +252,8 @@ describe('portfolio formatters (EPIC-003)', () => {
     expect(reply).toContain('/danhmuc mua btc 0.5 60000');
     expect(reply).toContain('/danhmuc ban btc 0.4 80000');
     expect(reply).toContain('"60k"');
+    expect(reply).toContain('Số lượng không có dấu phẩy');
+    expect(reply).toContain('1.5, không phải 1,5');
   });
 
   it('AC12: the group refusal points to a private chat', () => {

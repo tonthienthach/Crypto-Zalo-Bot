@@ -37,6 +37,13 @@ const ALERT_CREATE_PATTERN = /^([a-z0-9]+)\s*([<>])\s*(\S+)$/;
  * decimal comma that would otherwise read as 123, so it is refused instead.
  */
 const POSITIVE_NUMBER_PATTERN = /^(\d+|[1-9]\d{0,2}(,\d{3})+)(\.\d+)?$/;
+/**
+ * A "/danhmuc" quantity takes no comma at all (EPIC-003-AC05, owner decision
+ * 2026-09-29): "1,500" is 1500 under the thousands rule but 1.5 to anyone
+ * used to a decimal comma — a 1000x error nothing would flag. Prices keep the
+ * thousands comma.
+ */
+const PLAIN_NUMBER_PATTERN = /^\d+(\.\d+)?$/;
 
 @Injectable()
 export class CommandParserService {
@@ -154,7 +161,8 @@ export class CommandParserService {
    * Parses the arguments of "/danhmuc" (spec EPIC-003-FR01, FR09, FR10,
    * FR14): none -> view, "mua|ban <coin> <quantity> <price>" -> trade,
    * "lichsu [page]" -> history, "xoa <n>" -> delete, "xoahet [xacnhan]" ->
-   * clear. Numbers follow the "/canhbao" price rules (FR02); anything else,
+   * clear. The price follows the "/canhbao" price rules (FR02); the quantity
+   * takes no comma (PLAIN_NUMBER_PATTERN). Anything else,
    * including out-of-range values (NFR05), is PORTFOLIO_INVALID so the reply
    * can show the correct syntax.
    */
@@ -172,7 +180,9 @@ export class CommandParserService {
         return invalid;
       }
       const [symbol, rawQuantity, rawPrice] = rest;
-      const quantity = this.parsePositiveNumber(rawQuantity, MAX_QUANTITY_DECIMALS, MAX_QUANTITY);
+      const quantity = PLAIN_NUMBER_PATTERN.test(rawQuantity)
+        ? this.parsePositiveNumber(rawQuantity, MAX_QUANTITY_DECIMALS, MAX_QUANTITY)
+        : null;
       const price = this.parsePositiveNumber(rawPrice, MAX_THRESHOLD_DECIMALS, MAX_ALERT_THRESHOLD);
       if (
         !PORTFOLIO_SYMBOL_PATTERN.test(symbol) ||

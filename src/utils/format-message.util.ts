@@ -572,7 +572,8 @@ export function formatPortfolioInvalidReply(): string {
     '⚠️ Cú pháp danh mục chưa đúng.',
     PORTFOLIO_TRADE_EXAMPLE,
     'Bán: /danhmuc ban btc 0.4 80000',
-    'Số lượng và giá (USD) dùng "." cho số lẻ (0.5, không phải 0,5), "," cho hàng nghìn (không hỗ trợ "60k"); số lượng tối đa 8 chữ số lẻ.',
+    'Số lượng không có dấu phẩy, dùng "." cho số lẻ (1.5, không phải 1,5), tối đa 8 chữ số lẻ.',
+    'Giá (USD) dùng "." cho số lẻ, "," cho hàng nghìn (60,000; không hỗ trợ "60k").',
     'Xem: /danhmuc · Lịch sử: /danhmuc lichsu · Xoá: /danhmuc xoa 3 · Xoá hết: /danhmuc xoahet',
   ].join('\n');
 }

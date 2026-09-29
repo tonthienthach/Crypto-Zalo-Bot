@@ -613,6 +613,14 @@ describe('WebhookController (e2e)', () => {
       expect(reply()).toContain('/danhmuc mua btc 0.5 60000');
     });
 
+    it('AC05: a comma in the quantity is refused with the number rule, and records nothing', async () => {
+      await send('/danhmuc mua btc 1,500 60,000');
+
+      expect(getPricesBySymbols).not.toHaveBeenCalled();
+      expect(recordTrade).not.toHaveBeenCalled();
+      expect(reply()).toContain('1.5, không phải 1,5');
+    });
+
     it('AC06: an unknown coin gets the "/gia" unknown-coin reply and records nothing', async () => {
       getPricesBySymbols.mockRejectedValue(new UnknownCoinSymbolsError(['xyzabc']));
 

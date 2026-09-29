@@ -216,15 +216,22 @@ describe('CommandParserService', () => {
       expect(parser.parse('/portfolio buy eth 1 2000').portfolio?.side).toBe('buy');
     });
 
-    it('AC05: "," is a thousands separator in the price and the quantity', () => {
+    it('AC05: "," is a thousands separator in the price only', () => {
       expect(parser.parse('/danhmuc mua btc 1 60,000.5').portfolio).toEqual({
         side: 'buy',
         quantity: '1',
         priceUsd: 60000.5,
       });
-      expect(parser.parse('/danhmuc mua shib 1,000,000 0.00001').portfolio?.quantity).toBe(
-        '1000000',
-      );
+      expect(parser.parse('/danhmuc mua btc 1.5 60,000').portfolio).toEqual({
+        side: 'buy',
+        quantity: '1.5',
+        priceUsd: 60000,
+      });
+      expect(parser.parse('/danhmuc mua shib 1000000 0.00001').portfolio?.quantity).toBe('1000000');
+    });
+
+    it('AC05: "/canhbao" keeps the thousands comma in its threshold', () => {
+      expect(parser.parse('/canhbao btc > 100,000').alert?.threshold).toBe(100000);
     });
 
     it('accepts 8 quantity decimals and the 10^12 upper bound', () => {
@@ -251,6 +258,10 @@ describe('CommandParserService', () => {
       ['/danhmuc mua btc 0,123 60000'],
       ['/danhmuc mua btc 0,5 60000'],
       ['/danhmuc mua btc 0.5 0,123'],
+      // No comma in a quantity at all (owner decision 2026-09-29): "1,500" is ambiguous.
+      ['/danhmuc mua btc 1,500 60000'],
+      ['/danhmuc ban btc 1,234.5 60000'],
+      ['/danhmuc mua shib 1,000,000 0.00001'],
       ['/danhmuc xoa 1234567'],
       ['/danhmuc banh btc 1 60000'],
     ])('AC05: rejects "%s" as PORTFOLIO_INVALID', (text) => {
