@@ -270,6 +270,8 @@ Chưa làm, vì đây là kiểm tra thủ công trên production do owner làm 
   - `d72a1a9`: `writes` chỉ được cộng từ chính các dòng `RETURNING` của INSERT, qua một CTE ghi dữ liệu. Vẫn 1 round-trip, nên lệnh bị từ chối hay tin gửi lại không được tính. `message_id` dài hơn 128 ký tự thì bỏ qua chống lặp (NULL), không làm lỗi lệnh; tôi chọn cách này thay vì nới cột, vì id thật chỉ dài 20 ký tự. `InconsistentTradesError` không còn chứa số lượng. Migration 0002 có thêm `ALTER TABLE … ADD COLUMN IF NOT EXISTS`.
   - Không sửa: tin Zalo gửi lại sau khi giao dịch gốc đã bị xoá thì được ghi lại (xem Known gaps).
 
+- **Rev 4 (2026-09-29): số lượng không có dấu phẩy.** Verify rev 2 xếp `1,500` = 1500 BTC là rủi ro Medium (lỗ hổng spec). Owner quyết định: số lượng trong `/danhmuc mua|ban` không được chứa dấu phẩy, giá vẫn nhận dấu phẩy hàng nghìn, `/canhbao` giữ nguyên. Commit `503c6e8`: `PLAIN_NUMBER_PATTERN` cho số lượng trong `command-parser.service.ts`, lời nhắc lỗi tách quy tắc số lượng và giá, test unit (`1,500`, `1,234.5`, `1,000,000` bị từ chối; `1.5` với giá `60,000` được nhận; `/canhbao btc > 100,000` vẫn đúng) và e2e (không gọi nguồn giá, không ghi). Spec FR02/AC05 và `docs/API.md` sửa theo. Unit 309 → 313, e2e 40 → 41 pass.
+
 ## 5. Discovered work
 
 | Item | Where it went |
@@ -286,7 +288,7 @@ Chưa làm, vì đây là kiểm tra thủ công trên production do owner làm 
 - **Bộ đếm usage nằm chung transaction với lệnh.** Nếu ghi `portfolio_usage` lỗi thì cả lệnh xem/ghi cũng lỗi (người dùng nhận "tạm thời không truy cập được"), và mỗi lần xem là một lần ghi. Từ rev 3, lượt ghi chỉ được đếm khi thật sự có giao dịch được ghi. Cách này được chọn để giữ 1 round-trip. Nếu bộ đếm gây sự cố thì tách nó ra.
 - **Ghi giao dịch phụ thuộc nguồn giá.** Coin được kiểm tra bằng `getPricesBySymbols` trước khi ghi (FR03), nên khi CoinGecko và CoinPaprika cùng lỗi thì không ghi được giao dịch.
 - **Tin gửi lại sau khi giao dịch gốc đã bị xoá sẽ được ghi lại**, vì không còn dòng nào mang `message_id` đó. Cửa sổ gửi lại của Zalo ngắn, nên trường hợp này hiếm. Chấp nhận, không sửa (verify rev 1, owner duyệt).
-- **1 BTC viết `1,234` vẫn được hiểu là 1234**, đúng spec EPIC-002-FR02. Chỉ dạng bắt đầu bằng `0,` bị từ chối. Nếu người dùng quen dùng dấu phẩy thập phân thì cần quyết định sản phẩm mới.
+- ~~**1 BTC viết `1,234` vẫn được hiểu là 1234**~~ Đã xử lý ở rev 4: số lượng không còn nhận dấu phẩy. Giá vẫn nhận (`1,234` = $1234), đúng EPIC-002-FR02.
 - ~~**Giao dịch có thể bị ghi trùng**~~ Đã xử lý 2026-09-26 (FR16/AC21, xem §4). Còn lại: người dùng cố ý gửi lại bằng một tin mới vẫn tạo giao dịch thứ hai (đúng AC19), chỉ được cảnh báo. Kịch bản DB thật cho chống lặp nằm trong bộ Postgres opt-in, chưa chạy (không có Docker/Neon branch).
 - **`chat_type` của chat riêng thật** mới chỉ được xác nhận qua một payload ngày 2026-09-04. Nếu owner bị chặn nhầm, log sẽ có dòng `Portfolio command refused outside a private chat … chat_type=…`. Cần smoke test ở bước 9.
 - **AC17 (p95 ≤ 5 giây) và AC20 (đối chiếu với app sàn)** chỉ đo được sau deploy.
