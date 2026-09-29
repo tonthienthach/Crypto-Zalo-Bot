@@ -12,7 +12,7 @@
 
 ## 1. Verdict
 
-**Overall:** ship với follow-up. Không có blocker. 3 should-fix nên xử lý trước/khi merge, không bắt buộc để ship.
+**Overall:** ship. Không có blocker. Cả 3 should-fix đã được owner chốt hoặc sửa (2026-09-29, xem §3, §6).
 
 ## 2. Scope reviewed
 
@@ -29,9 +29,9 @@
 
 ## 3. Should-fix
 
-1. `src/price-alerts/price-alerts-monitor.service.ts:88-129` — rev 3 (`0aba0b4`) đổi hold chống-spam sang theo từng loại tin. Khi Redis chập chờn, owner có thể nhận **2 tin/giờ** thay vì ≤ 1 như `spec.md` NFR05 viết. Engineer tự diễn giải "ưu tiên NFR01 (báo ngừng ≤ 20 phút) hơn NFR05", nhưng chưa có owner chốt bằng văn bản kiểu "Đã chốt" như các mục khác của spec. **Cần owner quyết định**: chấp nhận đánh đổi này, hay giới hạn lại còn ≤ 1 tin/giờ bằng cách khác.
-2. `docs/ARCHITECTURE.md:327-330` — vẫn mô tả chống lặp tin là "instance memory", trong khi code từ rev 2/3 đã chuyển sang hold trong Redis theo loại tin, xuyên instance (FR11). Doc trôi khỏi code — sửa một đoạn mô tả.
-3. `plan.md` §4 rủi ro R1 (QStash và Redis cùng do Upstash cung cấp — một điểm lỗi chung) tự yêu cầu "owner chấp nhận bằng văn bản ở review", nhưng chưa thấy xác nhận đó được ghi lại ở đâu ngoài chính plan.
+1. **ĐÃ CHỐT (2026-09-29).** `src/price-alerts/price-alerts-monitor.service.ts:88-129` — rev 3 (`0aba0b4`) đổi hold chống-spam sang theo từng loại tin. Khi Redis chập chờn, owner có thể nhận **2 tin/giờ** thay vì ≤ 1 như `spec.md` NFR05 viết. Owner chấp nhận đánh đổi này: ưu tiên báo ngừng nhanh (NFR01, ≤ 20 phút) hơn giữ đúng nghĩa đen của NFR05 (một trần gộp). `spec.md` NFR05/AC12 đã sửa lại thành "≤ 1 tin/giờ **cho mỗi loại tin**" (`0229cd3`); `ARCHITECTURE.md` đã sửa đoạn mô tả tương ứng (`f9b1fdc`).
+2. **ĐÃ SỬA (`f9b1fdc`).** `docs/ARCHITECTURE.md` — đoạn mô tả chống lặp tin là "instance memory" đã sửa thành đúng hành vi thật (hold theo loại tin, lưu trong Redis, xuyên instance).
+3. **ĐÃ CHỐT (2026-09-29).** `plan.md` §4 rủi ro R1 (QStash và Redis cùng do Upstash cung cấp — một điểm lỗi chung): owner chấp nhận rủi ro này ở quy mô hiện tại, đúng như plan đề xuất. Phương án dự phòng (Cloudflare Workers Cron, không sửa code) đã có sẵn trong `DEPLOYMENT.md` nếu cần chuyển sau này.
 
 ## 4. Always-in-scope checks
 
