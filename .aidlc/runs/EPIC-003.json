@@ -6,7 +6,7 @@
     "epic": "EPIC-003"
   },
   "startedAt": "2026-09-25T02:08:02.527Z",
-  "updatedAt": "2026-09-29T15:10:34.185Z",
+  "updatedAt": "2026-09-29T15:33:43.052Z",
   "currentStepIdx": 5,
   "status": "running",
   "steps": [
@@ -110,8 +110,10 @@
       "agent": "aidlc-native-reviewer",
       "name": "review",
       "revision": 1,
-      "status": "awaiting_work",
-      "artifactsProduced": [],
+      "status": "awaiting_review",
+      "artifactsProduced": [
+        "docs/epics/EPIC-003/artifacts/review.md"
+      ],
       "startedAt": "2026-09-29T15:10:34.183Z"
     },
     {

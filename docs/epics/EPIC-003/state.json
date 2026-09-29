@@ -116,12 +116,18 @@
     {
       "agent": "aidlc-native-reviewer",
       "name": "review",
-      "status": "awaiting_work",
+      "status": "approved",
       "revision": 1,
-      "runStatus": "awaiting_work",
+      "runStatus": "approved",
       "startedAt": "2026-09-29T15:10:32.431Z",
-      "finishedAt": null,
-      "history": [],
+      "finishedAt": "2026-09-29T15:33:42.702Z",
+      "history": [
+        {
+          "at": "2026-09-29T15:33:42.702Z",
+          "action": "approved",
+          "note": "Ship with follow-up (2026-09-29). Should-fix #1 (branched off EPIC-002-FIX, not master) handled by merge order: EPIC-002-FIX -> master first, then this branch rebases onto master before its own PR."
+        }
+      ],
       "artifactsProduced": []
     },
     {
@@ -136,5 +142,5 @@
       "artifactsProduced": []
     }
   ],
-  "updatedAt": "2026-09-29T15:10:32.431Z"
+  "updatedAt": "2026-09-29T15:33:42.702Z"
 }
