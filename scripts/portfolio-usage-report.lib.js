@@ -45,7 +45,9 @@ function summarizeUsage(rows) {
 
 /**
  * The intent.md §5 success metric: chats other than the owner that recorded
- * a portfolio and used it again after their first day.
+ * a portfolio and used it again after their first day. `writes` only counts
+ * trades actually written (PortfolioService.recordTrade bumps it from the
+ * INSERT's own rows), so a chat whose every trade was refused doesn't qualify.
  */
 function successMetric(chats, ownerChatId) {
   const qualifying = chats.filter(

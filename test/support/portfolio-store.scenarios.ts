@@ -89,6 +89,35 @@ export function definePortfolioStoreScenarios(ctx: PortfolioStoreContext): void 
     expect(await tradeCount(ctx, CHAT_B)).toBe(1);
   });
 
+  it('only a trade actually written counts as a write: refused and redelivered ones do not', async () => {
+    const writes = async () => {
+      const rows = await ctx.exec(
+        'SELECT COALESCE(SUM(writes), 0) AS n FROM portfolio_usage WHERE chat_id = $1',
+        [CHAT_A],
+      );
+      return Number(rows[0].n);
+    };
+
+    await ctx.service().recordTrade(CHAT_A, 'buy', 'btc', '0.5', 60000, 'msg-1');
+    await ctx.service().recordTrade(CHAT_A, 'buy', 'btc', '0.5', 60000, 'msg-1');
+    await expect(ctx.service().recordTrade(CHAT_A, 'sell', 'btc', '9', 60000)).rejects.toEqual(
+      new PortfolioOversellError('btc', '0.5'),
+    );
+    expect(await writes()).toBe(1);
+
+    await ctx.service().recordTrade(CHAT_A, 'sell', 'btc', '0.5', 61000);
+    expect(await writes()).toBe(2);
+  });
+
+  it('a message_id longer than the column allows still records the trade', async () => {
+    const { duplicate } = await ctx
+      .service()
+      .recordTrade(CHAT_A, 'buy', 'btc', '1', 60000, 'x'.repeat(200));
+
+    expect(duplicate).toBe(false);
+    expect(await tradeCount(ctx, CHAT_A)).toBe(1);
+  });
+
   it('a sell of exactly the held quantity is allowed', async () => {
     await ctx.service().recordTrade(CHAT_A, 'buy', 'btc', '0.6', 60000);
     const { trades } = await ctx.service().recordTrade(CHAT_A, 'sell', 'btc', '0.6', 61000);

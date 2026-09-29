@@ -17,15 +17,19 @@ export class InconsistentTradesError extends Error {}
 
 const DECIMAL_PATTERN = /^\d+(\.\d+)?$/;
 
-/** "0.5" / "0.50000000" -> 50000000n (10^-8 units). Throws on anything that isn't a plain decimal. */
+/**
+ * "0.5" / "0.50000000" -> 50000000n (10^-8 units). Throws on anything that
+ * isn't a plain decimal. The error never quotes the quantity: callers log
+ * its message, and logs carry no amounts (spec EPIC-003-NFR06).
+ */
 export function toQuantityUnits(quantity: string): bigint {
   if (!DECIMAL_PATTERN.test(quantity)) {
-    throw new InconsistentTradesError(`Not a decimal quantity: ${quantity}`);
+    throw new InconsistentTradesError('Not a decimal quantity');
   }
   const [whole, fraction = ''] = quantity.split('.');
   const significant = fraction.replace(/0+$/, '');
   if (significant.length > MAX_QUANTITY_DECIMALS) {
-    throw new InconsistentTradesError(`More than ${MAX_QUANTITY_DECIMALS} decimals: ${quantity}`);
+    throw new InconsistentTradesError(`Quantity has more than ${MAX_QUANTITY_DECIMALS} decimals`);
   }
   return BigInt(whole) * QUANTITY_SCALE + BigInt(significant.padEnd(MAX_QUANTITY_DECIMALS, '0'));
 }

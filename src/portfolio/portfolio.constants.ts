@@ -25,3 +25,6 @@ export const QUANTITY_SCALE = 10n ** BigInt(MAX_QUANTITY_DECIMALS);
 
 /** How close together two identical trades must be for the reply to flag the second one. */
 export const TWIN_TRADE_WINDOW_MS = 2 * 60 * 1000;
+
+/** Longest Zalo message_id kept for de-duplication; matches the column CHECK in migration 0002. */
+export const MAX_SOURCE_MESSAGE_ID_LENGTH = 128;

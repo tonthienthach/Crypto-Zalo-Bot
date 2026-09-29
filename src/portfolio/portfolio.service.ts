@@ -3,7 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { neon, NeonQueryFunction } from '@neondatabase/serverless';
 import { HoldingsResult, PortfolioTrade, TradeSide } from './interfaces/portfolio.interface';
 import { computeHoldings, heldQuantityOf } from './portfolio-calculator';
-import { HISTORY_PAGE_SIZE, MAX_HELD_COINS, MAX_TRADES_PER_CHAT } from './portfolio.constants';
+import {
+  HISTORY_PAGE_SIZE,
+  MAX_HELD_COINS,
+  MAX_SOURCE_MESSAGE_ID_LENGTH,
+  MAX_TRADES_PER_CHAT,
+} from './portfolio.constants';
 
 /** A sell larger than what the chat holds (spec EPIC-003-FR04). */
 export class PortfolioOversellError extends Error {
@@ -126,6 +131,12 @@ export class PortfolioService {
    * deliver the same webhook more than once: a message that already recorded
    * a trade gets that trade back with `duplicate: true`, and nothing is
    * written. The check runs under the chat lock; a unique index backs it up.
+   * An id longer than the column allows is not used for this check, so an
+   * unexpected id format can never make a trade fail to record.
+   *
+   * Only a trade actually written counts toward `portfolio_usage.writes`: the
+   * counter is bumped from the INSERT's own RETURNING rows, in the same
+   * statement, so a refused rule or a redelivered message adds nothing.
    */
   async recordTrade(
     chatId: string,
@@ -137,10 +148,14 @@ export class PortfolioService {
   ): Promise<RecordedTrade> {
     return this.guard(async () => {
       const price = priceUsd.toString();
-      const messageId = sourceMessageId || null;
-      const [, inserted, , rows, alreadyRecorded] = (await this.sql.transaction([
+      const messageId =
+        sourceMessageId && sourceMessageId.length <= MAX_SOURCE_MESSAGE_ID_LENGTH
+          ? sourceMessageId
+          : null;
+      const [, inserted, rows, alreadyRecorded] = (await this.sql.transaction([
         this.lockChat(chatId),
         this.sql`
+          WITH inserted AS (
           INSERT INTO portfolio_trades
             (chat_id, seq, side, symbol, quantity, price_usd, source_message_id)
           SELECT ${chatId}, COALESCE(MAX(seq), 0) + 1, ${side}, ${symbol},
@@ -170,14 +185,20 @@ export class PortfolioService {
               ) < ${MAX_HELD_COINS}
             )
           RETURNING seq
+          ),
+          counted AS (
+            INSERT INTO portfolio_usage (chat_id, day, writes)
+            SELECT ${chatId}, (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, 1 FROM inserted
+            ON CONFLICT (chat_id, day) DO UPDATE SET writes = portfolio_usage.writes + 1
+          )
+          SELECT seq FROM inserted
         `,
-        this.countUsage(chatId, 'writes'),
         this.selectTrades(chatId),
         this.sql`
           SELECT seq FROM portfolio_trades
           WHERE chat_id = ${chatId} AND source_message_id = ${messageId}::text
         `,
-      ])) as [unknown, SeqRow[], unknown, TradeRow[], SeqRow[] | undefined];
+      ])) as [unknown, SeqRow[], TradeRow[], SeqRow[] | undefined];
 
       const trades = rows.map((row) => this.toTrade(row));
       if (inserted.length === 0) {
@@ -197,7 +218,7 @@ export class PortfolioService {
   async listTrades(chatId: string): Promise<PortfolioTrade[]> {
     return this.guard(async () => {
       const [, rows] = (await this.sql.transaction([
-        this.countUsage(chatId, 'views'),
+        this.countView(chatId),
         this.selectTrades(chatId),
       ])) as [unknown, TradeRow[]];
       return rows.map((row) => this.toTrade(row));
@@ -312,20 +333,17 @@ export class PortfolioService {
     `;
   }
 
-  /** Per-chat per-day counter behind the success metric (spec EPIC-003-FR13). No amounts. */
-  private countUsage(chatId: string, column: 'views' | 'writes') {
-    // The day is a calendar day in Vietnam time.
-    return column === 'views'
-      ? this.sql`
-          INSERT INTO portfolio_usage (chat_id, day, views)
-          VALUES (${chatId}, (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, 1)
-          ON CONFLICT (chat_id, day) DO UPDATE SET views = portfolio_usage.views + 1
-        `
-      : this.sql`
-          INSERT INTO portfolio_usage (chat_id, day, writes)
-          VALUES (${chatId}, (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, 1)
-          ON CONFLICT (chat_id, day) DO UPDATE SET writes = portfolio_usage.writes + 1
-        `;
+  /**
+   * Per-chat per-day view counter behind the success metric (spec
+   * EPIC-003-FR13). No amounts. The day is a calendar day in Vietnam time.
+   * Writes are counted inside recordTrade, only when a trade is written.
+   */
+  private countView(chatId: string) {
+    return this.sql`
+      INSERT INTO portfolio_usage (chat_id, day, views)
+      VALUES (${chatId}, (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, 1)
+      ON CONFLICT (chat_id, day) DO UPDATE SET views = portfolio_usage.views + 1
+    `;
   }
 
   /** Which rule refused a trade, from the trades read under the same lock. */

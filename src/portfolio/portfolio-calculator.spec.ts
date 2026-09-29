@@ -47,6 +47,14 @@ describe('portfolio calculator', () => {
       expect(() => toQuantityUnits('-1')).toThrow(InconsistentTradesError);
       expect(() => toQuantityUnits('0.123456789')).toThrow(InconsistentTradesError);
     });
+
+    it('never quotes the quantity in the error, since the message is logged (NFR06)', () => {
+      for (const quantity of ['12.5e3', '0.123456789']) {
+        expect(() => toQuantityUnits(quantity)).toThrow(
+          expect.objectContaining({ message: expect.not.stringContaining(quantity) }),
+        );
+      }
+    });
   });
 
   describe('computeHoldings (EPIC-003-FR05)', () => {

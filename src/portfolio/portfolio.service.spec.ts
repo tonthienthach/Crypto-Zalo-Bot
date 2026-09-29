@@ -62,11 +62,10 @@ describe('PortfolioService', () => {
   }
 
   describe('recordTrade', () => {
-    it('runs lock, insert, usage and read in one transaction, and returns the new trade', async () => {
+    it('runs lock, insert + usage count and read in one transaction, and returns the new trade', async () => {
       mockSql.transaction.mockResolvedValue([
         [],
         [{ seq: 2 }],
-        [],
         [
           row(1, 'buy', 'btc', '0.50000000', '60000.00000000'),
           row(2, 'buy', 'btc', '0.5', '70000'),
@@ -76,7 +75,7 @@ describe('PortfolioService', () => {
       const result = await service.recordTrade('chat-1', 'buy', 'btc', '0.5', 70000);
 
       expect(mockSql.transaction).toHaveBeenCalledTimes(1);
-      const [lock, insert, usage] = transactionQueries();
+      const [lock, insert] = transactionQueries();
       expect(lock.text).toContain('pg_advisory_xact_lock(hashtext(');
       expect(lock.values).toEqual(['chat-1']);
       expect(insert.text).toContain('INSERT INTO portfolio_trades');
@@ -84,7 +83,9 @@ describe('PortfolioService', () => {
       // The quantity is sent as exact text, cast to NUMERIC in SQL — never through a float.
       expect(insert.values).toContain('0.5');
       expect(insert.values).toContain('70000');
-      expect(usage.text).toContain('INSERT INTO portfolio_usage');
+      // The write is counted from the INSERT's own rows, in the same statement (FR13).
+      expect(insert.text).toContain('INSERT INTO portfolio_usage');
+      expect(insert.text).toContain('FROM inserted');
       expect(result.trade).toEqual({
         seq: 2,
         side: 'buy',
@@ -101,14 +102,13 @@ describe('PortfolioService', () => {
       mockSql.transaction.mockResolvedValue([
         [],
         [{ seq: 1 }],
-        [],
         [row(1, 'buy', 'btc', '0.5', '70000')],
         [],
       ]);
 
       await service.recordTrade('chat-1', 'buy', 'btc', '0.5', 70000, 'msg-1');
 
-      const [, insert, , , lookup] = transactionQueries();
+      const [, insert, , lookup] = transactionQueries();
       expect(insert.text).toContain('source_message_id');
       expect(insert.text).toContain('NOT EXISTS');
       expect(insert.values).toContain('msg-1');
@@ -118,7 +118,6 @@ describe('PortfolioService', () => {
 
     it('a redelivered message returns the trade it recorded, marked duplicate, instead of a refusal', async () => {
       mockSql.transaction.mockResolvedValue([
-        [],
         [],
         [],
         [row(1, 'buy', 'btc', '0.5', '70000'), row(2, 'buy', 'eth', '1', '2000')],
@@ -136,7 +135,6 @@ describe('PortfolioService', () => {
       mockSql.transaction.mockResolvedValue([
         [],
         [{ seq: 1 }],
-        [],
         [row(1, 'buy', 'btc', '0.5', '70000')],
         [],
       ]);
@@ -148,8 +146,26 @@ describe('PortfolioService', () => {
       expect(insert.values).toContain(null);
     });
 
+    it('a message_id longer than the column allows is not used for de-duplication, and the trade still records', async () => {
+      mockSql.transaction.mockResolvedValue([
+        [],
+        [{ seq: 1 }],
+        [row(1, 'buy', 'btc', '0.5', '70000')],
+        [],
+      ]);
+      const longId = 'x'.repeat(129);
+
+      const result = await service.recordTrade('chat-1', 'buy', 'btc', '0.5', 70000, longId);
+
+      const [, insert, , lookup] = transactionQueries();
+      expect(insert.values).not.toContain(longId);
+      expect(insert.values).toContain(null);
+      expect(lookup.values).toEqual(['chat-1', null]);
+      expect(result.duplicate).toBe(false);
+    });
+
     it('a refused sell reports the held quantity (FR04)', async () => {
-      mockSql.transaction.mockResolvedValue([[], [], [], [row(1, 'buy', 'btc', '0.6', '60000')]]);
+      mockSql.transaction.mockResolvedValue([[], [], [row(1, 'buy', 'btc', '0.6', '60000')], []]);
 
       await expect(service.recordTrade('chat-1', 'sell', 'btc', '2', 80000)).rejects.toEqual(
         new PortfolioOversellError('btc', '0.6'),
@@ -158,7 +174,7 @@ describe('PortfolioService', () => {
 
     it('a refused write at 200 trades reports the trade limit (NFR05)', async () => {
       const trades = Array.from({ length: 200 }, (_, i) => row(i + 1, 'buy', 'btc', '1', '1'));
-      mockSql.transaction.mockResolvedValue([[], [], [], trades]);
+      mockSql.transaction.mockResolvedValue([[], [], trades, []]);
 
       await expect(service.recordTrade('chat-1', 'buy', 'btc', '1', 1)).rejects.toEqual(
         new PortfolioLimitError('trades', 200),
@@ -167,7 +183,7 @@ describe('PortfolioService', () => {
 
     it('a refused buy under 200 trades reports the held-coin limit (NFR05)', async () => {
       const trades = Array.from({ length: 20 }, (_, i) => row(i + 1, 'buy', `c${i}`, '1', '1'));
-      mockSql.transaction.mockResolvedValue([[], [], [], trades]);
+      mockSql.transaction.mockResolvedValue([[], [], trades, []]);
 
       await expect(service.recordTrade('chat-1', 'buy', 'c20', '1', 1)).rejects.toEqual(
         new PortfolioLimitError('coins', 20),

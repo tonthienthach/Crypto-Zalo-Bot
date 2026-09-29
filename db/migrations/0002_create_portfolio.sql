@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS portfolio_trades (
   UNIQUE (chat_id, seq)
 );
 
+-- source_message_id was added to this file after it was first written: a
+-- database that already ran the earlier version has the table without it.
+ALTER TABLE portfolio_trades
+  ADD COLUMN IF NOT EXISTS source_message_id TEXT
+  CHECK (char_length(source_message_id) BETWEEN 1 AND 128);
+
 CREATE UNIQUE INDEX IF NOT EXISTS portfolio_trades_chat_source_message_idx
   ON portfolio_trades (chat_id, source_message_id)
   WHERE source_message_id IS NOT NULL;
