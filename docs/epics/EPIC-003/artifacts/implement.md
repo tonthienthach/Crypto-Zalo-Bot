@@ -12,36 +12,36 @@
 
 | | |
 |---|---|
-| Branch | `feature/epic-003-portfolio-tracking`, tách từ `feature/epic-002-fix-alert-monitoring`, **không** tách từ `master` như plan §3 ghi. Lý do: EPIC-002-FIX implement trước, theo quyết định "làm lần lượt" của owner. Vì vậy nhánh này chứa luôn code của EPIC-002-FIX và commit docs `11d3668` (EPIC-002, không thuộc epic này) |
+| Branch | `feature/epic-003-portfolio-tracking`, tách từ `feature/epic-002-fix-alert-monitoring`, **không** tách từ `master` như plan §3 ghi. Lý do: EPIC-002-FIX implement trước, theo quyết định "làm lần lượt" của owner. Vì vậy nhánh này chứa luôn code của EPIC-002-FIX và commit docs `8fc7982` (EPIC-002, không thuộc epic này) |
 | PR | Chưa push, chưa mở PR. Nên merge EPIC-002-FIX vào `master` trước, rồi mở PR cho nhánh này. Khi đó diff của PR chỉ còn các commit EPIC-003 |
 
 Các commit của epic này, theo thứ tự:
 
 | Commit | Tiêu đề |
 |---|---|
-| `eefa8c3` | feat(portfolio): add portfolio tables migration |
-| `cd13193` | feat(portfolio): weighted-average cost calculator |
-| `54403ba` | feat(command-parser): parse /danhmuc |
-| `e867c28` | feat(portfolio): postgres-backed trade store |
-| `06ba161` | feat(portfolio): /danhmuc commands |
-| `28d1f69` | feat(digest): portfolio section in daily digest |
-| `6ad411e` | feat(portfolio): usage report script |
-| `9d41285` | docs(portfolio): /danhmuc commands, portfolio design and deploy order |
-| `1cd82ce` | fix(digest): count a refused Zalo send as failed in the run log |
+| `6d0e596` | feat(portfolio): add portfolio tables migration |
+| `565168a` | feat(portfolio): weighted-average cost calculator |
+| `fd907f7` | feat(command-parser): parse /danhmuc |
+| `b4297af` | feat(portfolio): postgres-backed trade store |
+| `6613782` | feat(portfolio): /danhmuc commands |
+| `a145c63` | feat(digest): portfolio section in daily digest |
+| `84943a7` | feat(portfolio): usage report script |
+| `823047b` | docs(portfolio): /danhmuc commands, portfolio design and deploy order |
+| `7a42412` | fix(digest): count a refused Zalo send as failed in the run log |
 
 ## 2. What was built
 
 | Plan step | Change | Files |
 |---|---|---|
-| 1 | Hai bảng mới. `portfolio_trades`: `seq` ổn định theo chat, `UNIQUE (chat_id, seq)`, `CHECK` cho độ dài chat id (≤ 64) và symbol (≤ 20), cho `side`, và cho số lượng/giá > 0; kiểu `NUMERIC(21,8)`. `portfolio_usage`: đếm `views`/`writes` theo chat và ngày. Chỉ dùng `IF NOT EXISTS`, không có `;` trong literal, và ghi lệnh rollback trong comment (`eefa8c3`) | `db/migrations/0002_create_portfolio.sql` |
-| 2 | Hàm thuần `computeHoldings()`: giá vốn trung bình gia quyền, số lượng tính bằng `bigint` đơn vị 10⁻⁸, reset giá vốn khi bán về 0, giữ lãi/lỗ đã chốt của coin đã bán hết. Hàm `computePortfolio()`: loại coin thiếu giá khỏi mọi tổng, loại coin thiếu % 24h khỏi biến động 24h. Thêm `InconsistentTradesError` (`cd13193`) | `src/portfolio/portfolio-calculator.ts` (+ spec), `interfaces/portfolio.interface.ts`, `portfolio.constants.ts` |
-| 3 | Parse `/danhmuc` (`/danhmục`, `/portfolio`) với `mua`/`buy`, `ban`/`bán`/`sell`, `lichsu`/`history [trang]`, `xoa`/`delete <n>`, `xoahet [xacnhan]`. `parseThreshold` được đổi thành `parsePositiveNumber(raw, maxDecimals, max)`, trả cả `value` lẫn chuỗi thập phân chính xác `plain`. Hành vi `/canhbao` không đổi (`54403ba`) | `src/command-parser/*` (+ spec) |
-| 4 | `PortfolioService`: mỗi lệnh ghi là một `sql.transaction`. Câu đầu lấy khoá advisory theo chat, sau đó là `INSERT … SELECT … HAVING` (không bán quá, tối đa 200 giao dịch, tối đa 20 coin) hoặc `DELETE … NOT EXISTS` (số dư chạy của coin không được âm, dùng `SUM() OVER`), đếm usage, rồi đọc lại. Nếu có luật từ chối, lỗi cụ thể được suy ra từ chính dữ liệu đọc trong transaction đó. Lỗi DB trả về `PortfolioUnavailableError` và chỉ log tên lỗi kèm SQLSTATE. `scripts/db-migrate.js` export thêm `splitStatements`/`applyMigrations`, CLI giữ nguyên (`e867c28`) | `src/portfolio/portfolio.service.ts` (+ spec), `portfolio.module.ts`, `db-migrate.spec.ts`, `scripts/db-migrate.js`, `test/portfolio.postgres.e2e-spec.ts` (opt-in), `test/support/portfolio-store.scenarios.ts` |
-| 5 | Webhook: mọi lệnh `/danhmuc` đi qua `replyToPortfolioCommand`. Chat không phải `PRIVATE`, kể cả khi thiếu `chat_type`, bị từ chối trước khi gọi store hay nguồn giá, và bot log giá trị `chat_type` nhận được. Ghi giao dịch: kiểm tra coin bằng `getPricesBySymbols([symbol])` trước. Xem: 1 lần đọc store rồi 1 lần tra giá, sau đó log `portfolio-view` (không có số tiền). Có 16 formatter thuần mới (USD kèm ~VND); `/help` được cập nhật (`06ba161`) | `src/webhook/webhook.controller.ts`, `webhook.module.ts`, `src/utils/format-message.util.ts`, `src/utils/format-portfolio.util.spec.ts`, `src/portfolio/portfolio-prices.ts`, `test/webhook.e2e-spec.ts` |
-| 6 | Bản tin: tải giao dịch của mọi subscriber bằng 1 truy vấn. Mỗi subscriber gọi tra giá đúng 1 lần cho watchlist ∪ coin đang giữ, rồi tách kết quả ra. Chat không giữ coin nào nhận đúng tin cũ. Phần danh mục có `try/catch` riêng. Mỗi lượt log một dòng `daily-digest-run` (`28d1f69`) | `src/digest/digest.controller.ts` (+ spec), `digest.module.ts` |
-| 7 | `npm run portfolio:report`, chỉ đọc: mỗi chat có ngày đầu, số ngày dùng, số lần xem/ghi, và tiêu chí thành công (loại trừ `OWNER_CHAT_ID`). Phần tính toán nằm trong lib thuần (`6ad411e`) | `scripts/portfolio-usage-report.js`, `scripts/portfolio-usage-report.lib.js`, `src/portfolio/usage-report-lib.spec.ts`, `package.json` |
-| 8 | `API.md`: bảng lệnh. `ARCHITECTURE.md`: bảng module và mục "Portfolio". `DEPLOYMENT.md` §3a: chạy migration 0002 trước khi deploy, cách rollback và drop bảng, smoke test trong chat riêng (`9d41285`) | docs |
-| (thêm) | Tìm ra khi rà thứ tự lỗi: `ZaloService` không throw mà trả `false`, nên `daily-digest-run` đếm lần gửi hỏng thành `sent`. Đã sửa, có test (`1cd82ce`) | `src/digest/digest.controller.ts` (+ spec) |
+| 1 | Hai bảng mới. `portfolio_trades`: `seq` ổn định theo chat, `UNIQUE (chat_id, seq)`, `CHECK` cho độ dài chat id (≤ 64) và symbol (≤ 20), cho `side`, và cho số lượng/giá > 0; kiểu `NUMERIC(21,8)`. `portfolio_usage`: đếm `views`/`writes` theo chat và ngày. Chỉ dùng `IF NOT EXISTS`, không có `;` trong literal, và ghi lệnh rollback trong comment (`6d0e596`) | `db/migrations/0002_create_portfolio.sql` |
+| 2 | Hàm thuần `computeHoldings()`: giá vốn trung bình gia quyền, số lượng tính bằng `bigint` đơn vị 10⁻⁸, reset giá vốn khi bán về 0, giữ lãi/lỗ đã chốt của coin đã bán hết. Hàm `computePortfolio()`: loại coin thiếu giá khỏi mọi tổng, loại coin thiếu % 24h khỏi biến động 24h. Thêm `InconsistentTradesError` (`565168a`) | `src/portfolio/portfolio-calculator.ts` (+ spec), `interfaces/portfolio.interface.ts`, `portfolio.constants.ts` |
+| 3 | Parse `/danhmuc` (`/danhmục`, `/portfolio`) với `mua`/`buy`, `ban`/`bán`/`sell`, `lichsu`/`history [trang]`, `xoa`/`delete <n>`, `xoahet [xacnhan]`. `parseThreshold` được đổi thành `parsePositiveNumber(raw, maxDecimals, max)`, trả cả `value` lẫn chuỗi thập phân chính xác `plain`. Hành vi `/canhbao` không đổi (`fd907f7`) | `src/command-parser/*` (+ spec) |
+| 4 | `PortfolioService`: mỗi lệnh ghi là một `sql.transaction`. Câu đầu lấy khoá advisory theo chat, sau đó là `INSERT … SELECT … HAVING` (không bán quá, tối đa 200 giao dịch, tối đa 20 coin) hoặc `DELETE … NOT EXISTS` (số dư chạy của coin không được âm, dùng `SUM() OVER`), đếm usage, rồi đọc lại. Nếu có luật từ chối, lỗi cụ thể được suy ra từ chính dữ liệu đọc trong transaction đó. Lỗi DB trả về `PortfolioUnavailableError` và chỉ log tên lỗi kèm SQLSTATE. `scripts/db-migrate.js` export thêm `splitStatements`/`applyMigrations`, CLI giữ nguyên (`b4297af`) | `src/portfolio/portfolio.service.ts` (+ spec), `portfolio.module.ts`, `db-migrate.spec.ts`, `scripts/db-migrate.js`, `test/portfolio.postgres.e2e-spec.ts` (opt-in), `test/support/portfolio-store.scenarios.ts` |
+| 5 | Webhook: mọi lệnh `/danhmuc` đi qua `replyToPortfolioCommand`. Chat không phải `PRIVATE`, kể cả khi thiếu `chat_type`, bị từ chối trước khi gọi store hay nguồn giá, và bot log giá trị `chat_type` nhận được. Ghi giao dịch: kiểm tra coin bằng `getPricesBySymbols([symbol])` trước. Xem: 1 lần đọc store rồi 1 lần tra giá, sau đó log `portfolio-view` (không có số tiền). Có 16 formatter thuần mới (USD kèm ~VND); `/help` được cập nhật (`6613782`) | `src/webhook/webhook.controller.ts`, `webhook.module.ts`, `src/utils/format-message.util.ts`, `src/utils/format-portfolio.util.spec.ts`, `src/portfolio/portfolio-prices.ts`, `test/webhook.e2e-spec.ts` |
+| 6 | Bản tin: tải giao dịch của mọi subscriber bằng 1 truy vấn. Mỗi subscriber gọi tra giá đúng 1 lần cho watchlist ∪ coin đang giữ, rồi tách kết quả ra. Chat không giữ coin nào nhận đúng tin cũ. Phần danh mục có `try/catch` riêng. Mỗi lượt log một dòng `daily-digest-run` (`a145c63`) | `src/digest/digest.controller.ts` (+ spec), `digest.module.ts` |
+| 7 | `npm run portfolio:report`, chỉ đọc: mỗi chat có ngày đầu, số ngày dùng, số lần xem/ghi, và tiêu chí thành công (loại trừ `OWNER_CHAT_ID`). Phần tính toán nằm trong lib thuần (`84943a7`) | `scripts/portfolio-usage-report.js`, `scripts/portfolio-usage-report.lib.js`, `src/portfolio/usage-report-lib.spec.ts`, `package.json` |
+| 8 | `API.md`: bảng lệnh. `ARCHITECTURE.md`: bảng module và mục "Portfolio". `DEPLOYMENT.md` §3a: chạy migration 0002 trước khi deploy, cách rollback và drop bảng, smoke test trong chat riêng (`823047b`) | docs |
+| (thêm) | Tìm ra khi rà thứ tự lỗi: `ZaloService` không throw mà trả `false`, nên `daily-digest-run` đếm lần gửi hỏng thành `sent`. Đã sửa, có test (`7a42412`) | `src/digest/digest.controller.ts` (+ spec) |
 | 9 | **Chưa làm, owner làm:** deploy. Xem §6 | — |
 
 ## 3. Proofs executed
@@ -50,7 +50,7 @@ Số test trước → sau epic này:
 - **Unit:** 185 → **268** (14 → 19 suite).
 - **e2e:** 23 → **38 pass**.
 - **Opt-in skip:** 8 → **23**. Có 8 test Redis thật của EPIC-002/FIX và 15 kịch bản Postgres thật mới.
-- **Sau rev 2 và rev 3 (2026-09-29):** unit **288**, e2e **40 pass**, opt-in skip **26** (18 kịch bản Postgres thật). Lint và build xanh. Rev 3 chạy bộ kịch bản store trên PGlite (Postgres 16 WASM, harness không commit): **28/28 pass**, với đúng `PortfolioService` và `db-migrate.js` của HEAD. Riêng một bảng tạo bằng 0002 bản cũ (`eefa8c3`) sau khi migrate có cột `source_message_id`, có unique index, chỉ một CHECK và giữ nguyên dữ liệu.
+- **Sau rev 2 và rev 3 (2026-09-29):** unit **288**, e2e **40 pass**, opt-in skip **26** (18 kịch bản Postgres thật). Lint và build xanh. Rev 3 chạy bộ kịch bản store trên PGlite (Postgres 16 WASM, harness không commit): **28/28 pass**, với đúng `PortfolioService` và `db-migrate.js` của HEAD. Riêng một bảng tạo bằng 0002 bản cũ (`6d0e596`) sau khi migrate có cột `source_message_id`, có unique index, chỉ một CHECK và giữ nguyên dữ liệu.
 
 `npm run lint` (với `prettier endOfLine: auto`, xem §6) và `npm run build` xanh trước mỗi commit.
 
@@ -63,7 +63,7 @@ Test Suites: 2 skipped, 1 passed, 1 of 3 total
 Tests:       23 skipped, 38 passed, 61 total
 ```
 
-**Kịch bản store trên Postgres thật (chạy tay, một lần).** Bộ 15 kịch bản trong `test/support/portfolio-store.scenarios.ts` đã được chạy với PGlite (Postgres 16 bản WASM, chạy trong tiến trình), đúng với `portfolio.service.ts` và migration đã commit ở `e867c28`. Để chạy được phải thêm `--experimental-vm-modules`, nên PGlite không được đưa vào CI (xem §4). Kết quả:
+**Kịch bản store trên Postgres thật (chạy tay, một lần).** Bộ 15 kịch bản trong `test/support/portfolio-store.scenarios.ts` đã được chạy với PGlite (Postgres 16 bản WASM, chạy trong tiến trình), đúng với `portfolio.service.ts` và migration đã commit ở `b4297af`. Để chạy được phải thêm `--experimental-vm-modules`, nên PGlite không được đưa vào CI (xem §4). Kết quả:
 
 ```
 $ node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-e2e.json portfolio.pglite
@@ -265,9 +265,9 @@ Chưa làm, vì đây là kiểm tra thủ công trên production do owner làm 
 - **Rev 2 (2026-09-26, owner yêu cầu): chống ghi trùng giao dịch.** Thêm cột `source_message_id` và unique index một phần `(chat_id, source_message_id)` vào `0002_create_portfolio.sql`. Sửa thẳng file 0002 vì chưa chạy trên production. `recordTrade` nhận `message_id` của Zalo; trong cùng transaction, dưới khoá của chat, câu INSERT có thêm `NOT EXISTS` và một câu SELECT tìm giao dịch cũ. Tin gửi lại trả về giao dịch cũ với `duplicate: true`. Unique index là lớp chặn cuối nếu điều kiện bị lách. Hàm thuần `findRecentTwin` (`portfolio-calculator.ts`, cửa sổ `TWIN_TRADE_WINDOW_MS` = 2 phút) phát hiện giao dịch giống hệt giao dịch ngay trước, để lời xác nhận cảnh báo. Lần gửi trùng vẫn cộng 1 vào `portfolio_usage.writes`. Chấp nhận được, vì chỉ số thành công đếm chat chứ không đếm số lần ghi.
 
 - **Rev 3 (2026-09-29): sửa theo verify rev 1.** Ba commit:
-  - `102be65`: parser từ chối dấu phẩy thập phân. Một số có nhóm hàng nghìn không được bắt đầu bằng `0`, nên `0,123` bị từ chối (trước đó đọc thành 123), còn `100,000` và `60,000.5` vẫn đúng như EPIC-002-FR02 và EPIC-003-AC05. Lời nhắc lỗi có thêm "0.5, không phải 0,5". Số thứ tự xoá và trang lịch sử nhận tới 999999, vì `seq` tăng mãi.
-  - `cc24a41`: số tiền trong danh mục làm tròn tới cent, giá coin vẫn giữ tới 6 chữ số lẻ. Số tiền tròn về 0 thì hiện `$0.00` không dấu, kèm `➖`. Khi mọi coin đều thiếu giá, bot ghi "chưa lấy được giá lúc này" thay vì `$0.00`. Biến động 24h ≤ −100% được coi là không có số liệu.
-  - `9409ef6`: `writes` chỉ được cộng từ chính các dòng `RETURNING` của INSERT, qua một CTE ghi dữ liệu. Vẫn 1 round-trip, nên lệnh bị từ chối hay tin gửi lại không được tính. `message_id` dài hơn 128 ký tự thì bỏ qua chống lặp (NULL), không làm lỗi lệnh; tôi chọn cách này thay vì nới cột, vì id thật chỉ dài 20 ký tự. `InconsistentTradesError` không còn chứa số lượng. Migration 0002 có thêm `ALTER TABLE … ADD COLUMN IF NOT EXISTS`.
+  - `eb54c49`: parser từ chối dấu phẩy thập phân. Một số có nhóm hàng nghìn không được bắt đầu bằng `0`, nên `0,123` bị từ chối (trước đó đọc thành 123), còn `100,000` và `60,000.5` vẫn đúng như EPIC-002-FR02 và EPIC-003-AC05. Lời nhắc lỗi có thêm "0.5, không phải 0,5". Số thứ tự xoá và trang lịch sử nhận tới 999999, vì `seq` tăng mãi.
+  - `23e1d65`: số tiền trong danh mục làm tròn tới cent, giá coin vẫn giữ tới 6 chữ số lẻ. Số tiền tròn về 0 thì hiện `$0.00` không dấu, kèm `➖`. Khi mọi coin đều thiếu giá, bot ghi "chưa lấy được giá lúc này" thay vì `$0.00`. Biến động 24h ≤ −100% được coi là không có số liệu.
+  - `d72a1a9`: `writes` chỉ được cộng từ chính các dòng `RETURNING` của INSERT, qua một CTE ghi dữ liệu. Vẫn 1 round-trip, nên lệnh bị từ chối hay tin gửi lại không được tính. `message_id` dài hơn 128 ký tự thì bỏ qua chống lặp (NULL), không làm lỗi lệnh; tôi chọn cách này thay vì nới cột, vì id thật chỉ dài 20 ký tự. `InconsistentTradesError` không còn chứa số lượng. Migration 0002 có thêm `ALTER TABLE … ADD COLUMN IF NOT EXISTS`.
   - Không sửa: tin Zalo gửi lại sau khi giao dịch gốc đã bị xoá thì được ghi lại (xem Known gaps).
 
 ## 5. Discovered work
@@ -276,7 +276,7 @@ Chưa làm, vì đây là kiểm tra thủ công trên production do owner làm 
 |---|---|
 | Lint local trên Windows báo lỗi `␍` ở mọi file CRLF (git `core.autocrlf=true`, prettier `endOfLine: lf`). Cổng lint của epic này chạy với `prettier endOfLine: auto`. CI (Linux) không bị ảnh hưởng | Nên thêm `.gitattributes` (`* text=auto eol=lf`). EPIC-002-FIX cũng đã ghi nhận việc này. Để owner quyết |
 | `PriceAlertsController.loadPrices` và `pricesBySymbol()` làm cùng một việc | Dọn sau khi cả hai nhánh merge (plan §7) |
-| Đếm lượt gửi bản tin hỏng thành `sent` | Đã sửa ở `1cd82ce` |
+| Đếm lượt gửi bản tin hỏng thành `sent` | Đã sửa ở `7a42412` |
 | Intent Open Q5 (thời gian mỗi lần kiểm tra hôm nay) vẫn chưa có số liệu | Owner, trước khi ra mắt (spec Concern 9) |
 
 ## 6. Known gaps
