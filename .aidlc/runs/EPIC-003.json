@@ -6,8 +6,8 @@
     "epic": "EPIC-003"
   },
   "startedAt": "2026-09-25T02:08:02.527Z",
-  "updatedAt": "2026-09-26T04:11:19.607Z",
-  "currentStepIdx": 4,
+  "updatedAt": "2026-09-29T15:10:34.185Z",
+  "currentStepIdx": 5,
   "status": "running",
   "steps": [
     {
@@ -91,19 +91,28 @@
       "agent": "aidlc-native-verifier",
       "name": "verify",
       "revision": 1,
-      "status": "awaiting_review",
+      "status": "approved",
       "artifactsProduced": [
         "docs/epics/EPIC-003/artifacts/verify.md"
       ],
-      "startedAt": "2026-09-26T03:57:06.516Z"
+      "startedAt": "2026-09-26T03:57:06.516Z",
+      "finishedAt": "2026-09-29T15:10:34.183Z",
+      "history": [
+        {
+          "kind": "approve",
+          "at": "2026-09-29T15:10:34.183Z",
+          "revision": 1
+        }
+      ]
     },
     {
       "stepIdx": 5,
       "agent": "aidlc-native-reviewer",
       "name": "review",
       "revision": 1,
-      "status": "pending",
-      "artifactsProduced": []
+      "status": "awaiting_work",
+      "artifactsProduced": [],
+      "startedAt": "2026-09-29T15:10:34.183Z"
     },
     {
       "stepIdx": 6,
