@@ -115,14 +115,20 @@
     {
       "agent": "aidlc-native-reviewer",
       "name": "review",
-      "status": "awaiting_work",
+      "status": "approved",
       "revision": 1,
-      "runStatus": "awaiting_work",
+      "runStatus": "approved",
       "startedAt": "2026-09-29T15:10:32.431Z",
-      "finishedAt": null,
-      "history": [],
+      "finishedAt": "2026-09-29T15:32:59.378Z",
+      "history": [
+        {
+          "at": "2026-09-29T15:32:59.378Z",
+          "action": "approved",
+          "note": "Ship (2026-09-29). NFR05/AC12 amended to per-kind cap (owner decision); R1 accepted in writing; ARCHITECTURE.md doc drift fixed; 0aba0b4/a7287d2 independently verified post-review."
+        }
+      ],
       "artifactsProduced": []
     }
   ],
-  "updatedAt": "2026-09-29T15:10:32.431Z"
+  "updatedAt": "2026-09-29T15:32:59.378Z"
 }

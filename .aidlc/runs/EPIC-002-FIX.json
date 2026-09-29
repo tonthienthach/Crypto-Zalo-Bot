@@ -11,7 +11,7 @@
     "from_epic": "EPIC-002"
   },
   "startedAt": "2026-09-24T15:18:56.128Z",
-  "updatedAt": "2026-09-29T15:10:33.017Z",
+  "updatedAt": "2026-09-29T15:32:59.757Z",
   "currentStepIdx": 5,
   "status": "running",
   "steps": [
@@ -115,8 +115,10 @@
       "agent": "aidlc-native-reviewer",
       "name": "review",
       "revision": 1,
-      "status": "awaiting_work",
-      "artifactsProduced": [],
+      "status": "awaiting_review",
+      "artifactsProduced": [
+        "docs/epics/EPIC-002-FIX/artifacts/review.md"
+      ],
       "startedAt": "2026-09-29T15:10:33.015Z"
     }
   ]
