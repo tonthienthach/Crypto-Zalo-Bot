@@ -311,6 +311,20 @@ describe('PriceAlertsMonitorService', () => {
       expect(stored?.outage).toBeNull();
     });
 
+    it('a "down" delivered on a run whose state failed to save still gets its recovery', async () => {
+      alerts.setMonitorState.mockRejectedValueOnce(new Error('redis write failed'));
+      const service = create();
+      await runAt(min(16), service); // "down" delivered, state not saved
+      alerts.listRecentRuns.mockResolvedValue([healthyRun(0), healthyRun(min(20))]);
+
+      // A fresh instance: only the Redis hold remembers the "down".
+      await runAt(min(21), create());
+
+      expect(sendTextMessage).toHaveBeenCalledTimes(2);
+      expect(sendTextMessage.mock.calls[1][1]).toContain('Canh giá đã chạy lại');
+      expect(stored?.outage).toBeNull();
+    });
+
     it('a new outage within the hour of a held one is still reported', async () => {
       alerts.setMonitorState.mockRejectedValueOnce(new Error('redis write failed'));
       const service = create();
@@ -324,6 +338,16 @@ describe('PriceAlertsMonitorService', () => {
       const texts = sendTextMessage.mock.calls.map((call) => String(call[1]));
       expect(texts.filter((text) => text.includes('Ngừng canh giá'))).toHaveLength(2);
       expect(stored?.outage).toEqual({ since: iso(min(25)), notifiedAt: iso(min(41)) });
+    });
+
+    it('a healthy watcher reads no hold at all', async () => {
+      const service = create();
+      stored = { ...watching, lastWatcherRunAt: iso(min(5)) };
+      alerts.listRecentRuns.mockResolvedValue([healthyRun(min(9))]);
+
+      await runAt(min(10), service);
+
+      expect(alerts.getNoticeHold).not.toHaveBeenCalled();
     });
   });
 

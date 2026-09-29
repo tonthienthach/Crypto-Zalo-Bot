@@ -15,7 +15,11 @@ import {
   WatchdogState,
 } from './interfaces/price-alert.interface';
 import { evaluateMonitor, evaluateWatchdog } from './price-alert-monitor';
-import { MONITOR_RUNS_WINDOW, STATE_UNREADABLE_NOTICE_MS } from './price-alerts.constants';
+import {
+  MONITOR_RUNS_WINDOW,
+  STATE_UNREADABLE_NOTICE_MS,
+  WATCHER_STATE_STALE_MS,
+} from './price-alerts.constants';
 import { PriceAlertsService } from './price-alerts.service';
 
 /** Delivered (now, or earlier and held): when the owner got the message. */
@@ -94,6 +98,7 @@ export class PriceAlertsMonitorService {
       return;
     }
 
+    state = await this.withUnrecordedOutage(state, now);
     let decision = evaluateMonitor(state, runs, now, () => 0);
     const action = decision.action;
     if (action && (action.kind === 'down' || action.kind === 'reminder')) {
@@ -121,6 +126,30 @@ export class PriceAlertsMonitorService {
       this.logger.error(`Price-alert watcher can't save its state: ${String(error)}`);
       if (sent && !sent.held) await this.holdAfterUnrecordedSend(decision.action!, now);
     }
+  }
+
+  /**
+   * A "down" delivered on a run whose state then failed to save leaves the
+   * stored state without that outage, so its recovery would end silently
+   * (verify rev 2). The outage hold remembers it: when the stored state is
+   * stale (the last save failed, or the watcher was down) and says the owner
+   * wasn't told, it's put back from the hold. A fresh state skips this, so a
+   * healthy watcher reads nothing extra.
+   */
+  private async withUnrecordedOutage(
+    state: MonitorState | null,
+    now: Date,
+  ): Promise<MonitorState | null> {
+    if (!state || state.outage?.notifiedAt) return state;
+    if (now.getTime() - Date.parse(state.lastWatcherRunAt) <= WATCHER_STATE_STALE_MS) return state;
+    const hold = await this.findHold('outage', now);
+    if (!hold?.since) return state;
+    if (state.outage && state.outage.since !== hold.since) return state;
+    // A hold about an outage that already ended (a healthy run since) is stale.
+    if (state.lastHealthyAt && Date.parse(state.lastHealthyAt) > Date.parse(hold.since)) {
+      return state;
+    }
+    return { ...state, outage: { since: hold.since, notifiedAt: hold.at } };
   }
 
   /**

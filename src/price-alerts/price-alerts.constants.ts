@@ -112,6 +112,13 @@ export const WATCHDOG_CHECK_EVERY_MINUTES = 5;
 /** When the watcher can't read its state, at most one message per this window (spec EPIC-002-FIX-NFR05). */
 export const STATE_UNREADABLE_NOTICE_MS = 60 * 60_000;
 
+/**
+ * A stored watcher state older than this (1.5 watcher intervals) means the
+ * last run's save failed or the watcher was down: only then does the watcher
+ * look for an outage message it sent but could not record.
+ */
+export const WATCHER_STATE_STALE_MS = 7.5 * 60_000;
+
 /** Newest run summaries the watcher reads each time: 30 minutes at one run per minute. */
 export const MONITOR_RUNS_WINDOW = 30;
 
