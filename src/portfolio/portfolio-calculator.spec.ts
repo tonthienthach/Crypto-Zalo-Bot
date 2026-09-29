@@ -205,6 +205,23 @@ describe('portfolio calculator', () => {
       expect(snapshot.missingChangeSymbols).toEqual(['eth']);
     });
 
+    it('a 24h change of −100% or less is treated as missing, never as an infinite change', () => {
+      for (const changePercent24h of [-100, -150]) {
+        const snapshot = computePortfolio(
+          ac03Holdings(),
+          new Map([
+            ['btc', { priceUsd: 70000, changePercent24h: 2 }],
+            ['eth', { priceUsd: 2500, changePercent24h }],
+          ]),
+        );
+
+        expect(Number.isFinite(snapshot.change24hUsd)).toBe(true);
+        expect(snapshot.change24hUsd).toBeCloseTo(823.53, 2);
+        expect(snapshot.missingChangeSymbols).toEqual(['eth']);
+        expect(snapshot.lines[1]).toEqual(expect.objectContaining({ change24hUsd: null }));
+      }
+    });
+
     it('no priced coin at all: totals are zero and the 24h change is unknown', () => {
       const snapshot = computePortfolio(ac03Holdings(), new Map());
 

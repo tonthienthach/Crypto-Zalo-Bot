@@ -20,6 +20,14 @@ const USD_FORMATTER = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 6,
 });
 
+/** Portfolio amounts (value, profit/loss): whole cents, unlike coin prices above. */
+const USD_AMOUNT_FORMATTER = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 const VND_FORMATTER = new Intl.NumberFormat('vi-VN', {
   maximumFractionDigits: 0,
 });
@@ -292,24 +300,54 @@ function formatQuantity(quantity: string): string {
   }
 }
 
-/** "+$3,000.00 (~+76.200.000₫)" / "−$492.26 (~−12.503.404₫)" (spec EPIC-003-FR08). */
+/**
+ * A portfolio amount (value, profit/loss, 24h change) in whole cents: prices
+ * keep up to 6 decimals, amounts don't ("−$492.260062" -> "−$492.26"). Float
+ * noise such as −0.000001 rounds to 0, which then shows with no sign.
+ */
+function toCents(amountUsd: number): number {
+  const cents = Math.round(amountUsd * 100) / 100;
+  return cents === 0 ? 0 : cents;
+}
+
+function formatAmountUsd(amountUsd: number): string {
+  return USD_AMOUNT_FORMATTER.format(amountUsd);
+}
+
+/** "+$3,000.00 (~+76.200.000₫)" / "−$492.26 (~−12.503.404₫)" / "$0.00 (~0₫)" (spec EPIC-003-FR08). */
 function formatSignedMoney(amountUsd: number, usdToVndRate: number): string {
-  const sign = amountUsd < 0 ? '−' : '+';
-  const magnitude = Math.abs(amountUsd);
-  return `${sign}${formatUsd(magnitude)} (~${sign}${toVndDisplay(magnitude, usdToVndRate)})`;
+  const rounded = toCents(amountUsd);
+  const sign = rounded < 0 ? '−' : rounded > 0 ? '+' : '';
+  const magnitude = Math.abs(rounded);
+  return `${sign}${formatAmountUsd(magnitude)} (~${sign}${toVndDisplay(magnitude, usdToVndRate)})`;
 }
 
 function formatSignedPercent(percent: number | null): string {
   if (percent === null || !Number.isFinite(percent)) return '';
-  return ` (${percent < 0 ? '−' : '+'}${Math.abs(percent).toFixed(2)}%)`;
+  const rounded = Number(percent.toFixed(2));
+  const sign = rounded < 0 ? '−' : rounded > 0 ? '+' : '';
+  return ` (${sign}${Math.abs(rounded).toFixed(2)}%)`;
 }
 
 function pnlEmoji(amountUsd: number): string {
-  return amountUsd < 0 ? '🔻' : '🔺';
+  const rounded = toCents(amountUsd);
+  return rounded < 0 ? '🔻' : rounded > 0 ? '🔺' : '➖';
 }
 
 function formatMoney(amountUsd: number, usdToVndRate: number): string {
-  return `${formatUsd(amountUsd)} (~${toVndDisplay(amountUsd, usdToVndRate)})`;
+  const rounded = toCents(amountUsd);
+  return `${formatAmountUsd(rounded)} (~${toVndDisplay(rounded, usdToVndRate)})`;
+}
+
+/**
+ * The total value, or — when coins are held but none has a price right now —
+ * a plain "no price" instead of a misleading "$0.00".
+ */
+function formatTotalValue(snapshot: PortfolioSnapshot, usdToVndRate: number): string {
+  if (snapshot.lines.length > 0 && !snapshot.lines.some((line) => line.priced)) {
+    return 'chưa lấy được giá lúc này';
+  }
+  return formatMoney(snapshot.totalValueUsd, usdToVndRate);
 }
 
 /** Notes for coins left out of the totals or the 24h change (spec AC13). */
@@ -362,7 +400,7 @@ export function formatPortfolioReply(snapshot: PortfolioSnapshot, usdToVndRate: 
     );
   }
 
-  body.push('', `💰 Tổng giá trị: ${formatMoney(snapshot.totalValueUsd, usdToVndRate)}`);
+  body.push('', `💰 Tổng giá trị: ${formatTotalValue(snapshot, usdToVndRate)}`);
   if (snapshot.lines.some((line) => line.priced)) {
     body.push(
       `📈 Lãi/lỗ chưa chốt: ${pnlEmoji(snapshot.unrealizedPnlUsd)} ${formatSignedMoney(
@@ -385,7 +423,7 @@ export function formatPortfolioDigestSection(
   snapshot: PortfolioSnapshot,
   usdToVndRate: number,
 ): string {
-  const body = [`💼 Danh mục: ${formatMoney(snapshot.totalValueUsd, usdToVndRate)}`];
+  const body = [`💼 Danh mục: ${formatTotalValue(snapshot, usdToVndRate)}`];
   if (snapshot.lines.some((line) => line.priced)) {
     body.push(
       `📈 Lãi/lỗ chưa chốt: ${pnlEmoji(snapshot.unrealizedPnlUsd)} ${formatSignedMoney(

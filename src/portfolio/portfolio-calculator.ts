@@ -137,7 +137,12 @@ export function computePortfolio(
 
     const valueUsd = unitsToNumber(holding.quantityUnits) * price.priceUsd;
     const unrealizedPnlUsd = valueUsd - holding.costBasisUsd;
-    const hasChange = price.changePercent24h !== null && Number.isFinite(price.changePercent24h);
+    // At −100% or below, 1 + change% / 100 is ≤ 0 and the value a day ago comes
+    // out infinite or negative: treat it like a missing 24h change, not "−$∞".
+    const hasChange =
+      price.changePercent24h !== null &&
+      Number.isFinite(price.changePercent24h) &&
+      price.changePercent24h > -100;
     const lineChangeUsd = hasChange
       ? valueUsd - valueUsd / (1 + (price.changePercent24h as number) / 100)
       : null;

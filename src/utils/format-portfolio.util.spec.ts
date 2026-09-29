@@ -124,6 +124,47 @@ describe('portfolio formatters (EPIC-003)', () => {
     expect(reply).not.toContain('Biến động 24h');
   });
 
+  it('amounts are shown in whole cents even when the price has 6 decimals', () => {
+    const reply = formatPortfolioReply(
+      computePortfolio(
+        computeHoldings([trade('buy', 'ada', '1000', 0.35)]),
+        new Map<string, HoldingPrice>([['ada', { priceUsd: 0.352617, changePercent24h: 1.3 }]]),
+      ),
+      RATE,
+    );
+
+    expect(reply).toContain('1000 ADA × $0.352617 = $352.62');
+    expect(reply).toContain('Lãi/lỗ chưa chốt: 🔺 +$2.62');
+    expect(reply).not.toContain('$352.617');
+    expect(reply).not.toContain('$2.617');
+  });
+
+  it('an amount that rounds to zero shows no sign and no down arrow', () => {
+    // 0.1 + 0.2 style float noise: bought and priced at the same value.
+    const reply = formatPortfolioReply(
+      computePortfolio(
+        computeHoldings([trade('buy', 'eth', '0.3', 3000), trade('sell', 'eth', '0.1', 3000)]),
+        new Map<string, HoldingPrice>([['eth', { priceUsd: 3000, changePercent24h: 0.0000001 }]]),
+      ),
+      RATE,
+    );
+
+    expect(reply).not.toContain('−$0.00');
+    expect(reply).not.toContain('+$0.00');
+    expect(reply).toContain('Lãi/lỗ chưa chốt: ➖ $0.00 (~0₫)');
+    expect(reply).toContain('Lãi/lỗ đã chốt: $0.00 (~0₫)');
+  });
+
+  it('when no held coin has a price, the total says so instead of $0.00', () => {
+    const snapshot = computePortfolio(computeHoldings(ac03Trades()), new Map());
+    const reply = formatPortfolioReply(snapshot, RATE);
+    const digest = formatPortfolioDigestSection(snapshot, RATE);
+
+    expect(reply).toContain('Tổng giá trị: chưa lấy được giá lúc này');
+    expect(reply).not.toContain('Tổng giá trị: $0.00');
+    expect(digest).toContain('Danh mục: chưa lấy được giá lúc này');
+  });
+
   it('AC07: the empty reply shows how to record a buy', () => {
     expect(formatPortfolioEmptyReply()).toContain('/danhmuc mua btc 0.5 60000');
   });
