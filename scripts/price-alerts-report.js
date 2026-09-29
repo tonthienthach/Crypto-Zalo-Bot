@@ -30,9 +30,9 @@ const { Redis } = require('@upstash/redis');
 const {
   countOutcomes,
   flattenRejections,
-  buildOutages,
   healthyStats,
   recentActivity,
+  reportOutages,
 } = require('./price-alerts-report.lib');
 
 function loadEnvFile(filePath) {
@@ -87,7 +87,6 @@ function printReport(data, now) {
   const { runs, successes, failures, alertCount, monitor, notices, hashesByDay } = data;
   const rejected = flattenRejections(hashesByDay);
   const starts = runs.map((run) => Date.parse(run.startedAt)).sort((a, b) => a - b);
-  const windowStart = starts.length ? starts[0] : now;
 
   console.log(`Active alerts: ${alertCount}`);
   console.log(
@@ -139,13 +138,23 @@ function printReport(data, now) {
     )}`,
   );
 
-  const outages = buildOutages(runs, rejected, windowStart, now);
+  const outages = reportOutages(runs, rejected, now);
   console.log(`\nOutages (>= 15 min without a healthy run): ${outages.length}`);
   for (const outage of outages) {
     const seen = [];
     if (outage.notCalled) seen.push('not called');
     for (const kind of ['rejected', 'no-price', 'failed', 'skipped']) {
       if (outage.counts[kind] > 0) seen.push(`${kind} x${outage.counts[kind]}`);
+    }
+    if (outage.noRunsLogged) {
+      console.log(
+        `  NO RUN HAS EVER BEEN LOGGED — the check was never reached${
+          outage.start === null
+            ? ''
+            : ` (rejected calls since ${time(outage.start)}, ${minutes(outage.durationMs)})`
+        }: ${seen.join(', ')}. Check the job's URL and secret (step 8a.2).`,
+      );
+      continue;
     }
     console.log(
       `  ${time(outage.start)} -> ${outage.ongoing ? 'ongoing' : time(outage.end)} ` +

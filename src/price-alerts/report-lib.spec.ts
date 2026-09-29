@@ -111,6 +111,38 @@ describe('price-alerts report lib (EPIC-002-FIX-FR09)', () => {
     });
   });
 
+  it('an empty run log is one ongoing outage, not zero outages (verify finding #3)', () => {
+    // A job with the wrong secret from the start: 60 minutes of rejected calls, no run logged.
+    const rejected = new Map<number, number>();
+    for (let m = 0; m < 60; m++) rejected.set(T + min(m), 1);
+
+    const outages = lib.reportOutages([], rejected, T + min(60));
+
+    expect(outages).toHaveLength(1);
+    expect(outages[0]).toMatchObject({
+      start: T,
+      durationMs: min(60),
+      ongoing: true,
+      noRunsLogged: true,
+      notCalled: false,
+      counts: { rejected: 60 },
+    });
+  });
+
+  it('an empty run log with nothing rejected is "not called" with no known start', () => {
+    const [outage] = lib.reportOutages([], new Map(), T);
+
+    expect(outage).toMatchObject({ start: null, noRunsLogged: true, notCalled: true });
+  });
+
+  it('with runs logged, the window starts at the oldest run, as before', () => {
+    const runs = [...healthyEveryMinute(0, 5), ...healthyEveryMinute(30, 31)];
+
+    expect(lib.reportOutages(runs, new Map(), T + min(31))).toEqual(
+      lib.buildOutages(runs, new Map(), T, T + min(31)),
+    );
+  });
+
   it('counts outcomes and flattens per-day rejection hashes', () => {
     const rejected = lib.flattenRejections({
       '2026-09-25': { '23:59': 2 },

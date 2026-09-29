@@ -137,11 +137,41 @@ function recentActivity(runs, rejectedByMinute, now, windowMs = RECENT_WINDOW_MS
   return { windowMs, counts: countOutcomes(recent, recentRejected) };
 }
 
+/**
+ * The outages of the report's window. With runs logged, the window starts at
+ * the oldest one. With none at all — the check was never reached, e.g. a job
+ * with the wrong URL or secret from the start (the EPIC-002 launch incident)
+ * — that is itself one ongoing outage, flagged `noRunsLogged`: since the
+ * first rejected call when there is one, else with no known start.
+ */
+function reportOutages(runs, rejectedByMinute, now) {
+  if (runs.length > 0) {
+    const windowStart = Math.min(...runs.map((run) => Date.parse(run.startedAt)));
+    return buildOutages(runs, rejectedByMinute, windowStart, now);
+  }
+  const rejectedAt = [...rejectedByMinute.keys()].filter((at) => at <= now);
+  const start = rejectedAt.length ? Math.min(...rejectedAt) : null;
+  let rejected = 0;
+  for (const [at, count] of rejectedByMinute) if (at <= now) rejected += count;
+  return [
+    {
+      start,
+      end: now,
+      durationMs: start === null ? null : now - start,
+      ongoing: true,
+      notCalled: rejected === 0,
+      noRunsLogged: true,
+      counts: { 'no-price': 0, failed: 0, skipped: 0, rejected },
+    },
+  ];
+}
+
 module.exports = {
   OUTAGE_THRESHOLD_MS,
   NOT_CALLED_GAP_MS,
   RECENT_WINDOW_MS,
   recentActivity,
+  reportOutages,
   outcomeOf,
   percentile,
   countOutcomes,
