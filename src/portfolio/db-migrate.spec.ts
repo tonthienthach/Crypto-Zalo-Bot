@@ -21,7 +21,8 @@ describe('db-migrate (EPIC-003 migration 0002)', () => {
     const files = await applyMigrations(sql, MIGRATIONS_DIR, () => undefined);
 
     expect(files).toBe(2);
-    expect(statements.map((statement) => statement.split('\n')[0])).toEqual([
+    // trimEnd: a Windows checkout (core.autocrlf) leaves a "\r" on every line.
+    expect(statements.map((statement) => statement.split('\n')[0].trimEnd())).toEqual([
       'CREATE TABLE IF NOT EXISTS subscribers (',
       'CREATE INDEX IF NOT EXISTS subscribers_is_active_idx ON subscribers (is_active)',
       'CREATE TABLE IF NOT EXISTS portfolio_trades (',
