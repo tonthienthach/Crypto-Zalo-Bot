@@ -289,9 +289,15 @@ Upstash QStash (every 5 min) --> /cron/price-alerts-watch  reads monitor state +
   Fallback if QStash is ever unusable: a Cloudflare Workers cron trigger
   calling the same endpoint (docs/DEPLOYMENT.md §8b); no code change.
 - **Delivery is the source of truth**: an outage is only marked "notified"
-  once Zalo accepted the message. When Redis itself can't be read (or the
-  state can't be saved after a send), repeats are held to one an hour using
-  instance memory.
+  once Zalo accepted the message. Each message kind (state-unreadable /
+  down / reminder / recovered) holds its own repeat-suppression key **in
+  Redis**, not instance memory, so it survives cold starts and is shared
+  across instances: a Redis read failure held back only the
+  "state-unreadable" notice, never delaying the real "down" one behind it
+  (spec `EPIC-002-FIX-NFR05`). Trade-off accepted: this can add up to one
+  message per hour per kind, more than the "≤ 1 message/hour" NFR05
+  originally read as a single combined cap — see spec §5 note
+  2026-09-29.
 - **Budget**: ~26k Upstash commands/month for the watcher (3 per run ×
   8,640), ~8.6k for the check's watchdog read, and at most 43.2k for
   rejected-call counting under constant abuse — ~295k/month in total
