@@ -212,20 +212,40 @@ $ npm test → 185 passed (toàn bộ 132 test cũ vẫn pass); npm run test:e2e
 6. **`countAlerts()` (`SCARD`) chỉ gọi khi gửi tin down/reminder**, để lấy số "cảnh báo đang không được canh" (FR04). Plan không liệt kê lệnh này; nó chỉ chạy khi đang có sự cố nên không đáng kể về ngân sách.
 7. **Không verify chữ ký QStash**, như plan §7.
 8. **Commit thêm `6434eef`** ngoài 7 bước. Đây là lỗi tìm ra khi rà thứ tự lỗi (§6), nằm trong phạm vi NFR05, không mở rộng phạm vi.
+9. **Rev 2 (2026-09-29): sửa theo verify rev 1**, owner duyệt sửa High, Medium và các Low dễ.
+   - **`b208458`, finding #1 (High, AC18).** Report in thêm dòng `Last 5 min: healthy N, no-price …, rejected …` và in "Last healthy run" kèm "cách đây bao lâu". Tính trong hàm thuần `recentActivity()` ở `price-alerts-report.lib.js`. §8a.4 của `DEPLOYMENT.md` giờ kiểm "Last 5 min: healthy ≥ 3" thay cho "By outcome tăng ≥ 3", vì tổng "By outcome" đứng yên khi run log đã đầy 1.440 mục. Test `report-lib.spec.ts` dựng log đầy 1.440 mục và chứng minh tổng đứng yên còn dòng 5 phút thì vẫn đổi.
+   - **`6b94a63`, finding #2 (Medium, NFR05).** Hold "≤ 1 tin/giờ" chuyển sang một key Redis `price-alerts:monitor-notice-hold` có TTL 1 giờ.
+     - Tin "không đọc được trạng thái" giành key bằng `SET NX PX` **trước** khi gửi, nên hai instance không thể cùng gửi. Nếu gửi thất bại thì trả key lại (`DEL`), để lượt sau thử lại.
+     - Tin đã gửi nhưng lưu state lỗi thì đặt key **sau** khi gửi.
+     - Một lần lưu thành công sau đó **không** còn gỡ hold.
+     - Chỉ khi Redis không nhận key thì mới dùng mốc trong bộ nhớ instance.
+     - Test service tái hiện đúng 3 probe của verifier:
+       - Redis chập chờn trong 1 giờ: trước sửa 6 tin, sau sửa 1 tin.
+       - Mỗi lượt một instance mới (cold start), 3 giờ: trước sửa 36 tin, sau sửa 3 tin.
+       - Hai instance chạy xen kẽ, 3 giờ: 3 tin.
+     - Có thêm 1 test Redis thật opt-in cho key và TTL.
+   - **`bc91f92`, finding #3 (Low, FR09b).** Run log rỗng giờ là một đợt ngừng đang diễn ra, gắn cờ `NO RUN HAS EVER BEEN LOGGED`. Mốc bắt đầu là lần bị từ chối đầu tiên, nếu có. Hàm thuần `reportOutages()`.
+   - **`32f0b04`, finding #6 (Low, NFR08).** `CronSecretGuard` và `WebhookSecretGuard` so secret bằng `secretEquals()`: hash SHA-256 cả hai phía rồi `crypto.timingSafeEqual`, nên không lộ nội dung lẫn độ dài. Giá trị rỗng, thiếu, hoặc không phải chuỗi (query lặp thành mảng) đều không khớp. Khi boot, `PriceAlertsMonitorService` log warn nếu `PRICE_ALERTS_WATCH_SECRET` trùng `CRON_SECRET_TOKEN` hoặc `PRICE_ALERTS_CRON_SECRET`. Không chặn boot, không in secret.
+   - **`9158a35`, finding #4 (Low, FR06).** Tin "đã chạy lại" lấy lượt khoẻ **đầu tiên** sau đợt ngừng làm mốc kết thúc (`firstHealthyAfter()`). Nếu lượt đó đã trôi khỏi cửa sổ 30 lượt (tin hồi phục được thử lại hơn 30 phút) thì lấy lượt mới nhất.
+   - **Ngân sách Upstash sau rev 2:** thêm tối đa 1 `EXISTS` cho mỗi tin tới hạn (down, reminder, recovered, watcher-down/recovered), và 1 `SET` (cộng 1 `DEL` nếu gửi hỏng) cho mỗi lần giữ hold. Khi bình thường không có tin nào nên **không tốn thêm lệnh nào**. Khi có sự cố thì tốn thêm dưới 30 lệnh/ngày. Ước tính ~295k (bình thường) / ~339k (xấu nhất) lệnh/tháng giữ nguyên, trong trần 400k.
+   - Số test: unit 185 → 206, e2e 23 pass (không đổi), skip opt-in Redis thật 8 → 9. Lint và build xanh ở mọi commit.
 
 ## 5. Discovered work
 
 | Item | Where it went |
 |---|---|
 | `npm run lint` (`eslint --fix`) chuyển các file CRLF (do `core.autocrlf=true` trên Windows) sang LF, làm hàng chục file không liên quan hiện là "modified", dù nội dung không đổi. Tôi chỉ commit các file của epic này | Ghi ở đây. Nên thêm `.gitattributes` (`* text=auto eol=lf`) bằng một PR chore riêng; cần owner quyết |
-| Guard so sánh secret bằng `!==` (không phải thời gian cố định) | Có từ trước, plan §7 đã loại. Ghi lại cho reviewer |
+| Guard so sánh secret bằng `!==` (không phải thời gian cố định) | Đã sửa ở rev 2 (`32f0b04`, verify finding #6), cho cả `WebhookSecretGuard` |
 | `DEPLOYMENT.md` §3a vẫn dùng `vercel env pull .env` cho `POSTGRES_URL`. Cách này có thể gặp cùng vấn đề nếu biến bị đánh dấu Sensitive | Ngoài phạm vi (spec chỉ nói về `KV_REST_API_*`). Ghi cho owner |
 
 ## 6. Known gaps
 
-- **Ngân sách Upstash chưa được đo** (R2, NFR04). Các con số khoảng 295k/339k lệnh/tháng là ước tính, chưa đối chiếu dashboard. Ngoài ra chưa rõ Upstash tính một `EVAL` (có 2 lệnh bên trong) và một `MULTI` là mấy lệnh. Sau deploy owner phải mở Upstash → Usage. Nếu số thật trên 320k thì giãn watchdog sang 10 phút và giảm `MONITOR_RUNS_WINDOW` xuống 20.
-- **Chưa chạy test Redis thật** (`test/price-alerts.redis.e2e-spec.ts`, 3 test mới cho AC04, AC15 và round-trip state, cùng 5 test cũ). Docker Desktop không chạy trên máy lúc implement. Chạy trước khi merge: `REDIS_INT_URL=http://localhost:8079 REDIS_INT_TOKEN=local npm run test:e2e -- price-alerts.redis` (setup ở đầu file).
-- **Giới hạn chống spam theo instance.** "≤ 1 ghi/phút" cho lượt bị từ chối (R3), và "≤ 1 tin/giờ khi Redis lỗi" (NFR05, AC12), đều dựa vào bộ nhớ của một instance warm. Nếu Vercel mở nhiều instance cùng lúc thì mỗi instance có giới hạn riêng. Trong thực tế watcher (5 phút/lần) và check (mỗi phút) gần như luôn trúng cùng một instance, nhưng đây là điều reviewer nên soi.
+- **Ngân sách Upstash chưa được đo** (R2, NFR04, verify xếp Medium; để sau deploy theo quyết định owner 2026-09-29). Các con số khoảng 295k/339k lệnh/tháng là ước tính, chưa đối chiếu dashboard. Ngoài ra chưa rõ Upstash tính một `EVAL` (có 2 lệnh bên trong) và một `MULTI` là mấy lệnh. Sau deploy owner phải mở Upstash → Usage. Nếu số thật trên 320k thì giãn watchdog sang 10 phút và giảm `MONITOR_RUNS_WINDOW` xuống 20.
+- **Chưa chạy test Redis thật** (`test/price-alerts.redis.e2e-spec.ts`: 3 test mới cho AC04, AC15 và round-trip state, 1 test hold/TTL mới ở rev 2, cùng 5 test cũ). Owner quyết định 2026-09-29 để việc này tới sau deploy. Docker Desktop không chạy trên máy lúc implement. Chạy trước khi merge: `REDIS_INT_URL=http://localhost:8079 REDIS_INT_TOKEN=local npm run test:e2e -- price-alerts.redis` (setup ở đầu file).
+- **Giới hạn chống spam theo instance, phần còn lại sau rev 2.**
+  - "≤ 1 ghi/phút" cho lượt bị từ chối (R3) vẫn tính theo từng instance, nên số đếm là cận dưới.
+  - "≤ 1 tin/giờ" (NFR05) giờ nằm trong Redis. Chỉ khi Redis **hỏng hẳn**, không nhận cả key hold, thì mỗi instance mới dùng bộ nhớ riêng. Khi đó nhiều instance hoặc cold start vẫn có thể gửi hơn 1 tin/giờ. Không có chỗ lưu chung nào khác để giữ.
+  - Nếu gửi tin "không đọc được trạng thái" thất bại **và** `DEL` trả key cũng thất bại, owner sẽ không nhận tin nào trong tối đa 1 giờ. Tôi chọn đổi như vậy để không bị spam.
 - **Đuôi đếm rejected có thể mất.** Các lần bị từ chối trong phút sau lần ghi chỉ được cộng vào lần ghi kế tiếp. Nếu không có lần gọi nào nữa thì phần đuôi đó mất, nên số đếm là cận dưới. Spec cho phép điều này (AC04: "không nhỏ hơn 1").
 - **"Không được gọi" trong report** được suy ra khi có một khoảng ≥ 3 phút trong đợt ngừng không có ghi nhận nào. Ngưỡng này do tôi đặt, vì lượt rejected chỉ được ghi khoảng 1 lần/phút.
 - **Hai lượt watcher chạy chồng nhau** (QStash giao trùng) có thể gửi trùng tin "down". Endpoint luôn trả 200 nên QStash không retry; rủi ro thấp và không có lock riêng.
@@ -235,6 +255,6 @@ $ npm test → 185 passed (toàn bộ 132 test cũ vẫn pass); npm run test:e2e
   2. `npx vercel deploy --prod`.
   3. `curl` endpoint watch với secret phải nhận 200, không có secret phải nhận 401.
   4. Tạo QStash schedule `*/5 * * * *` với header `Upstash-Forward-X-Cron-Secret-Token`.
-  5. Trong 5 phút, report phải thấy watcher chạy và "Owner chat: configured".
+  5. Trong 5 phút, report phải thấy watcher chạy, "Owner chat: configured", và dòng "Last 5 min: healthy" ≥ 3.
   6. Tắt cron-job.org khoảng 20 phút để thử AC17.
   7. Sau 24 giờ: không có tin giám sát nào (AC16), rồi xem Upstash Usage và Vercel Usage.
