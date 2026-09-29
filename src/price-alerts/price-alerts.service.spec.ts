@@ -25,7 +25,7 @@ const mockRedis = {
   mget: jest.fn(),
   set: jest.fn(),
   del: jest.fn(),
-  exists: jest.fn(),
+  get: jest.fn(),
   eval: jest.fn(),
   hgetall: jest.fn(),
   multi: jest.fn(() => mockTx),
@@ -276,32 +276,36 @@ describe('PriceAlertsService', () => {
   describe('owner-message hold (EPIC-002-FIX-NFR05)', () => {
     const now = new Date('2026-09-25T03:00:00.000Z');
 
-    it('claims the hold with SET NX and a TTL, true only when this call took it', async () => {
+    const hold = { at: now.toISOString(), since: '2026-09-25T02:40:00.000Z' };
+
+    it('claims the hold of one message kind with SET NX and a TTL, true only when this call took it', async () => {
       mockRedis.set.mockResolvedValueOnce('OK').mockResolvedValueOnce(null);
 
-      await expect(service.claimNoticeHold(now, 3_600_000)).resolves.toBe(true);
-      await expect(service.claimNoticeHold(now, 3_600_000)).resolves.toBe(false);
+      await expect(service.claimNoticeHold('state-unreadable', hold, 3_600_000)).resolves.toBe(
+        true,
+      );
+      await expect(service.claimNoticeHold('state-unreadable', hold, 3_600_000)).resolves.toBe(
+        false,
+      );
       expect(mockRedis.set).toHaveBeenCalledWith(
-        'price-alerts:monitor-notice-hold',
-        '2026-09-25T03:00:00.000Z',
+        'price-alerts:monitor-notice-hold:state-unreadable',
+        hold,
         { nx: true, px: 3_600_000 },
       );
     });
 
-    it('sets, reads and releases the same key', async () => {
-      mockRedis.exists.mockResolvedValue(1);
+    it('sets, reads and releases one key per message kind', async () => {
+      mockRedis.get.mockResolvedValue(hold);
 
-      await service.setNoticeHold(now, 3_600_000);
-      await expect(service.hasNoticeHold()).resolves.toBe(true);
-      await service.releaseNoticeHold();
+      await service.setNoticeHold('outage', hold, 3_600_000);
+      await expect(service.getNoticeHold('outage')).resolves.toEqual(hold);
+      await service.releaseNoticeHold('outage');
 
-      expect(mockRedis.set).toHaveBeenCalledWith(
-        'price-alerts:monitor-notice-hold',
-        '2026-09-25T03:00:00.000Z',
-        { px: 3_600_000 },
-      );
-      expect(mockRedis.exists).toHaveBeenCalledWith('price-alerts:monitor-notice-hold');
-      expect(mockRedis.del).toHaveBeenCalledWith('price-alerts:monitor-notice-hold');
+      expect(mockRedis.set).toHaveBeenCalledWith('price-alerts:monitor-notice-hold:outage', hold, {
+        px: 3_600_000,
+      });
+      expect(mockRedis.get).toHaveBeenCalledWith('price-alerts:monitor-notice-hold:outage');
+      expect(mockRedis.del).toHaveBeenCalledWith('price-alerts:monitor-notice-hold:outage');
     });
   });
 

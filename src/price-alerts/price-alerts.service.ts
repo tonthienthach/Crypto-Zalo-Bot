@@ -9,6 +9,8 @@ import {
   AlertRunSummary,
   MonitorNotice,
   MonitorState,
+  NoticeHold,
+  NoticeHoldKind,
   PriceAlert,
   WatchdogState,
 } from './interfaces/price-alert.interface';
@@ -258,30 +260,31 @@ export class PriceAlertsService {
   }
 
   /**
-   * The owner-message hold (spec EPIC-002-FIX-NFR05), shared by every
-   * instance: set when a message went out that the monitoring state couldn't
-   * record, so no instance repeats it before `holdMs` has passed. Only
-   * touched when a message is due or its state failed to save.
+   * The owner-message holds (spec EPIC-002-FIX-NFR05), shared by every
+   * instance, one per message kind: set when a message of that kind went out
+   * that the monitoring state couldn't record, so no instance repeats it
+   * before `holdMs` has passed. Only touched when a message is due or its
+   * state failed to save.
    */
-  async hasNoticeHold(): Promise<boolean> {
-    return (await this.redis.exists(REDIS_KEYS.noticeHold)) === 1;
+  async getNoticeHold(kind: NoticeHoldKind): Promise<NoticeHold | null> {
+    return this.redis.get<NoticeHold>(REDIS_KEYS.noticeHold(kind));
   }
 
   /** Takes the hold unless another instance holds it: true when this call took it. */
-  async claimNoticeHold(now: Date, holdMs: number): Promise<boolean> {
-    const result = await this.redis.set(REDIS_KEYS.noticeHold, now.toISOString(), {
+  async claimNoticeHold(kind: NoticeHoldKind, hold: NoticeHold, holdMs: number): Promise<boolean> {
+    const result = await this.redis.set(REDIS_KEYS.noticeHold(kind), hold, {
       nx: true,
       px: holdMs,
     });
     return result === 'OK';
   }
 
-  async setNoticeHold(now: Date, holdMs: number): Promise<void> {
-    await this.redis.set(REDIS_KEYS.noticeHold, now.toISOString(), { px: holdMs });
+  async setNoticeHold(kind: NoticeHoldKind, hold: NoticeHold, holdMs: number): Promise<void> {
+    await this.redis.set(REDIS_KEYS.noticeHold(kind), hold, { px: holdMs });
   }
 
-  async releaseNoticeHold(): Promise<void> {
-    await this.redis.del(REDIS_KEYS.noticeHold);
+  async releaseNoticeHold(kind: NoticeHoldKind): Promise<void> {
+    await this.redis.del(REDIS_KEYS.noticeHold(kind));
   }
 
   async recordMonitorNotice(notice: MonitorNotice): Promise<void> {

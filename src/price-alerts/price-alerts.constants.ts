@@ -1,3 +1,5 @@
+import { NoticeHoldKind } from './interfaces/price-alert.interface';
+
 /** Hard cap on alerts a single chat may hold at once (spec EPIC-002-FR04). */
 export const MAX_ALERTS_PER_CHAT = 10;
 
@@ -39,8 +41,8 @@ export const REDIS_KEYS = {
   /** The check's view of the watcher (WatchdogState). */
   watchdog: 'price-alerts:watchdog',
   monitorNotices: 'price-alerts:monitor-notices',
-  /** Set (with a TTL) after an owner message whose state couldn't be stored: holds repeats across instances. */
-  noticeHold: 'price-alerts:monitor-notice-hold',
+  /** Set (with a TTL) after an owner message whose state couldn't be stored: holds repeats of that kind across instances. */
+  noticeHold: (kind: NoticeHoldKind) => `price-alerts:monitor-notice-hold:${kind}`,
   /** Hash of rejected-call counts for one UTC day (YYYY-MM-DD), one field per UTC minute (HH:MM). */
   rejected: (day: string) => `price-alerts:rejected:${day}`,
 } as const;
@@ -109,6 +111,13 @@ export const WATCHDOG_CHECK_EVERY_MINUTES = 5;
 
 /** When the watcher can't read its state, at most one message per this window (spec EPIC-002-FIX-NFR05). */
 export const STATE_UNREADABLE_NOTICE_MS = 60 * 60_000;
+
+/**
+ * A stored watcher state older than this (1.5 watcher intervals) means the
+ * last run's save failed or the watcher was down: only then does the watcher
+ * look for an outage message it sent but could not record.
+ */
+export const WATCHER_STATE_STALE_MS = 7.5 * 60_000;
 
 /** Newest run summaries the watcher reads each time: 30 minutes at one run per minute. */
 export const MONITOR_RUNS_WINDOW = 30;

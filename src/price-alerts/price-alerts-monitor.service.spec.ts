@@ -1,7 +1,12 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ZaloService } from '../zalo/zalo.service';
-import { AlertRunSummary, MonitorState } from './interfaces/price-alert.interface';
+import {
+  AlertRunSummary,
+  MonitorState,
+  NoticeHold,
+  NoticeHoldKind,
+} from './interfaces/price-alert.interface';
 import { PriceAlertsMonitorService } from './price-alerts-monitor.service';
 import { PriceAlertsService } from './price-alerts.service';
 
@@ -36,8 +41,8 @@ describe('PriceAlertsMonitorService', () => {
   let alerts: Record<string, jest.Mock>;
   let sendTextMessage: jest.Mock;
   let stored: MonitorState | null;
-  /** The shared hold key, as Redis would keep it: expires `holdMs` after it was set. */
-  let holdUntil: number | null;
+  /** The shared hold keys, one per kind, as Redis would keep them: each expires `holdMs` after it was set. */
+  let holds: Map<NoticeHoldKind, { hold: NoticeHold; until: number }>;
   let clock: number;
 
   function create(ownerChatId: string | null = 'owner-chat') {
@@ -53,21 +58,24 @@ describe('PriceAlertsMonitorService', () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     stored = watching;
-    holdUntil = null;
+    holds = new Map();
     clock = T;
-    const held = () => holdUntil !== null && clock < holdUntil;
+    const live = (kind: NoticeHoldKind) => {
+      const entry = holds.get(kind);
+      return entry && clock < entry.until ? entry.hold : null;
+    };
     alerts = {
-      hasNoticeHold: jest.fn(async () => held()),
-      claimNoticeHold: jest.fn(async (now: Date, holdMs: number) => {
-        if (held()) return false;
-        holdUntil = now.getTime() + holdMs;
+      getNoticeHold: jest.fn(async (kind: NoticeHoldKind) => live(kind)),
+      claimNoticeHold: jest.fn(async (kind: NoticeHoldKind, hold: NoticeHold, holdMs: number) => {
+        if (live(kind)) return false;
+        holds.set(kind, { hold, until: Date.parse(hold.at) + holdMs });
         return true;
       }),
-      setNoticeHold: jest.fn(async (now: Date, holdMs: number) => {
-        holdUntil = now.getTime() + holdMs;
+      setNoticeHold: jest.fn(async (kind: NoticeHoldKind, hold: NoticeHold, holdMs: number) => {
+        holds.set(kind, { hold, until: Date.parse(hold.at) + holdMs });
       }),
-      releaseNoticeHold: jest.fn(async () => {
-        holdUntil = null;
+      releaseNoticeHold: jest.fn(async (kind: NoticeHoldKind) => {
+        holds.delete(kind);
       }),
       getMonitorState: jest.fn(async () => stored),
       setMonitorState: jest.fn(async (state: MonitorState) => {
@@ -212,7 +220,7 @@ describe('PriceAlertsMonitorService', () => {
       }
     }
 
-    it('flaky state reads (every other one fails) send at most one message an hour', async () => {
+    it('flaky state reads (every other one fails) send each message at most once an hour', async () => {
       let reads = 0;
       alerts.getMonitorState.mockImplementation(async () => {
         if (reads++ % 2 === 0) throw new Error('redis timeout');
@@ -222,8 +230,13 @@ describe('PriceAlertsMonitorService', () => {
 
       await runEveryFiveMinutes(1, () => service);
 
-      // Before the fix a successful save lifted the hold: 6 messages an hour.
-      expect(sendTextMessage).toHaveBeenCalledTimes(1);
+      // Before rev 2 a successful save lifted the hold: 6 messages an hour.
+      // Now one "can't read state" and the real "down" it must not hold back
+      // (NFR01 before NFR05, verify rev 2): one of each.
+      const texts = sendTextMessage.mock.calls.map((call) => String(call[1]));
+      expect(texts).toHaveLength(2);
+      expect(texts.filter((text) => text.includes('không đọc được trạng thái'))).toHaveLength(1);
+      expect(texts.filter((text) => text.includes('Ngừng canh giá'))).toHaveLength(1);
     });
 
     it('a fresh instance on every run (cold starts) still sends at most one an hour', async () => {
@@ -254,12 +267,87 @@ describe('PriceAlertsMonitorService', () => {
 
       clock = T + min(16);
       await service.runWatcher(at(min(16)));
-      expect(alerts.releaseNoticeHold).toHaveBeenCalledTimes(1);
+      expect(alerts.releaseNoticeHold).toHaveBeenCalledWith('state-unreadable');
       clock = T + min(21);
       await service.runWatcher(at(min(21)));
 
       expect(sendTextMessage).toHaveBeenCalledTimes(2);
-      expect(holdUntil).toBe(T + min(21) + min(60));
+      expect(holds.get('state-unreadable')?.until).toBe(T + min(21) + min(60));
+    });
+  });
+
+  describe('holds per message kind (verify rev 2)', () => {
+    async function runAt(offsetMs: number, service: PriceAlertsMonitorService) {
+      clock = T + offsetMs;
+      await service.runWatcher(at(offsetMs));
+    }
+
+    it('one failed state read at T+10 does not delay the real "down": it still arrives by T+20 (NFR01)', async () => {
+      alerts.getMonitorState.mockRejectedValueOnce(new Error('redis timeout'));
+      const service = create();
+
+      await runAt(min(10), service);
+      expect(sendTextMessage.mock.calls[0][1]).toContain('không đọc được trạng thái');
+      await runAt(min(15), service);
+
+      expect(sendTextMessage).toHaveBeenCalledTimes(2);
+      expect(sendTextMessage.mock.calls[1][1]).toContain('Ngừng canh giá');
+      expect(stored?.outage).toEqual({ since: iso(0), notifiedAt: iso(min(15)) });
+    });
+
+    it('a "can\'t read state" hold does not hold back the recovery, which carries the right end time', async () => {
+      const service = create();
+      await runAt(min(16), service); // "down"
+      alerts.getMonitorState.mockRejectedValueOnce(new Error('redis timeout'));
+      await runAt(min(37), service); // "can't read state", holds that kind for an hour
+      alerts.listRecentRuns.mockResolvedValue([healthyRun(0), healthyRun(min(42))]);
+
+      await runAt(min(42), service);
+
+      expect(sendTextMessage).toHaveBeenCalledTimes(3);
+      const recovery = String(sendTextMessage.mock.calls[2][1]);
+      expect(recovery).toContain('Canh giá đã chạy lại');
+      expect(recovery).toContain('10:42');
+      expect(stored?.outage).toBeNull();
+    });
+
+    it('a "down" delivered on a run whose state failed to save still gets its recovery', async () => {
+      alerts.setMonitorState.mockRejectedValueOnce(new Error('redis write failed'));
+      const service = create();
+      await runAt(min(16), service); // "down" delivered, state not saved
+      alerts.listRecentRuns.mockResolvedValue([healthyRun(0), healthyRun(min(20))]);
+
+      // A fresh instance: only the Redis hold remembers the "down".
+      await runAt(min(21), create());
+
+      expect(sendTextMessage).toHaveBeenCalledTimes(2);
+      expect(sendTextMessage.mock.calls[1][1]).toContain('Canh giá đã chạy lại');
+      expect(stored?.outage).toBeNull();
+    });
+
+    it('a new outage within the hour of a held one is still reported', async () => {
+      alerts.setMonitorState.mockRejectedValueOnce(new Error('redis write failed'));
+      const service = create();
+      await runAt(min(16), service); // "down" #1, held
+      alerts.listRecentRuns.mockResolvedValue([healthyRun(min(20)), healthyRun(min(25))]);
+      await runAt(min(26), service); // recovery
+      alerts.listRecentRuns.mockResolvedValue([healthyRun(min(25))]);
+
+      await runAt(min(41), service); // 16 minutes without a healthy run again
+
+      const texts = sendTextMessage.mock.calls.map((call) => String(call[1]));
+      expect(texts.filter((text) => text.includes('Ngừng canh giá'))).toHaveLength(2);
+      expect(stored?.outage).toEqual({ since: iso(min(25)), notifiedAt: iso(min(41)) });
+    });
+
+    it('a healthy watcher reads no hold at all', async () => {
+      const service = create();
+      stored = { ...watching, lastWatcherRunAt: iso(min(5)) };
+      alerts.listRecentRuns.mockResolvedValue([healthyRun(min(9))]);
+
+      await runAt(min(10), service);
+
+      expect(alerts.getNoticeHold).not.toHaveBeenCalled();
     });
   });
 

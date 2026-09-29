@@ -123,3 +123,22 @@ export interface MonitorNotice {
   at: string;
   delivered: boolean;
 }
+
+/**
+ * Which owner message a hold covers (spec EPIC-002-FIX-NFR05). Each kind has
+ * its own hold, so holding one message never delays another: a "can't read
+ * state" notice doesn't hold back a real "down" or "recovered" (NFR01).
+ * "down" and its 6-hourly "reminder" share one.
+ */
+export type NoticeHoldKind =
+  'state-unreadable' | 'outage' | 'recovered' | 'watcher-down' | 'watcher-recovered';
+
+/**
+ * A held message: sent at `at`, about the outage that began at `since`
+ * (absent for "state-unreadable"). A hold only covers the same outage, so a
+ * new outage within the hour is still reported.
+ */
+export interface NoticeHold {
+  at: string;
+  since?: string;
+}

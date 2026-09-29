@@ -221,7 +221,7 @@ $ npm test → 185 passed (toàn bộ 132 test cũ vẫn pass); npm run test:e2e
      - Chỉ khi Redis không nhận key thì mới dùng mốc trong bộ nhớ instance.
      - Test service tái hiện đúng 3 probe của verifier:
        - Redis chập chờn trong 1 giờ: trước sửa 6 tin, sau sửa 1 tin.
-       - Mỗi lượt một instance mới (cold start), 3 giờ: trước sửa 36 tin, sau sửa 3 tin.
+       - Mỗi lượt một instance mới (cold start), 3 giờ, khi Redis **vẫn nhận được key hold** (chỉ đọc state bị lỗi): trước sửa 36 tin, sau sửa 3 tin. Con số 3 tin **không** áp dụng khi Redis hỏng hẳn (không nhận cả key hold) mà mỗi lượt lại là một instance mới: khi đó mỗi instance chỉ còn bộ nhớ riêng, nên vẫn có thể 36 tin/3 giờ (xem §6). Test "cold starts" không chứng minh trường hợp đó.
        - Hai instance chạy xen kẽ, 3 giờ: 3 tin.
      - Có thêm 1 test Redis thật opt-in cho key và TTL.
    - **`bc91f92`, finding #3 (Low, FR09b).** Run log rỗng giờ là một đợt ngừng đang diễn ra, gắn cờ `NO RUN HAS EVER BEEN LOGGED`. Mốc bắt đầu là lần bị từ chối đầu tiên, nếu có. Hàm thuần `reportOutages()`.
@@ -229,6 +229,15 @@ $ npm test → 185 passed (toàn bộ 132 test cũ vẫn pass); npm run test:e2e
    - **`9158a35`, finding #4 (Low, FR06).** Tin "đã chạy lại" lấy lượt khoẻ **đầu tiên** sau đợt ngừng làm mốc kết thúc (`firstHealthyAfter()`). Nếu lượt đó đã trôi khỏi cửa sổ 30 lượt (tin hồi phục được thử lại hơn 30 phút) thì lấy lượt mới nhất.
    - **Ngân sách Upstash sau rev 2:** thêm tối đa 1 `EXISTS` cho mỗi tin tới hạn (down, reminder, recovered, watcher-down/recovered), và 1 `SET` (cộng 1 `DEL` nếu gửi hỏng) cho mỗi lần giữ hold. Khi bình thường không có tin nào nên **không tốn thêm lệnh nào**. Khi có sự cố thì tốn thêm dưới 30 lệnh/ngày. Ước tính ~295k (bình thường) / ~339k (xấu nhất) lệnh/tháng giữ nguyên, trong trần 400k.
    - Số test: unit 185 → 206, e2e 23 pass (không đổi), skip opt-in Redis thật 8 → 9. Lint và build xanh ở mọi commit.
+10. **Rev 3 (2026-09-29): sửa theo verify rev 2**, owner duyệt sửa trước deploy.
+    - **`0aba0b4`, finding Medium (hồi quy do `6b94a63`, NFR01).** Hold chung một key đã chặn mọi loại tin. Một lần đọc state lỗi (tin "không đọc được trạng thái") giữ tin "ngừng" thật tới T+70, vượt NFR01 (≤ T+20), và làm tin hồi phục trễ, sai mốc kết thúc.
+      - Giờ mỗi loại tin có key riêng `price-alerts:monitor-notice-hold:<kind>` (`state-unreadable`, `outage` dùng chung cho down và reminder, `recovered`, `watcher-down`, `watcher-recovered`). Giá trị là `{ at, since }`: hold chỉ chặn đúng tin đó **về đúng đợt ngừng đó**, nên một đợt ngừng mới trong cùng giờ vẫn được báo.
+      - Tin bị hold được coi như **đã gửi lúc `at`**: state được cập nhật (`notifiedAt = at`) mà không nhắn owner lần hai, nên mốc 6 giờ nhắc lại tính từ lúc gửi thật.
+      - Test tái hiện 2 kịch bản của verifier: Redis lỗi một lần đọc lúc T+10 thì tin ngừng vẫn tới lúc T+15; job chạy lại lúc T+42 thì tin hồi phục tới ngay, mang mốc 10:42. Thêm test "đợt ngừng mới trong giờ vẫn được báo".
+      - **Diễn giải NFR05 cần PO xác nhận:** khi Redis chập chờn (đọc lỗi xen kẽ), owner giờ có thể nhận **2** tin trong một giờ: 1 tin "không đọc được trạng thái" và 1 tin "ngừng" thật. Tôi hiểu "≤ 1 tin giám sát mỗi giờ" là **không lặp lại cùng một tin**, và NFR01 (báo ngừng ≤ 20 phút) được ưu tiên hơn, theo đúng yêu cầu owner khi duyệt sửa. AC12 (Redis hỏng hẳn 3 giờ → ≤ 3 tin) vẫn đạt, vì khi đó chỉ có tin "không đọc được trạng thái".
+    - **`a7287d2`, finding Low (FR06).** Tin "ngừng" đã gửi mà lưu state lỗi thì state không có đợt ngừng đó, nên hồi phục kết thúc im lặng. Giờ khi state đã cũ (quá 1,5 chu kỳ watcher, `WATCHER_STATE_STALE_MS` = 7,5 phút: lần lưu trước lỗi hoặc watcher từng ngừng) và state nói owner chưa được báo, watcher đọc hold `outage` để dựng lại đợt ngừng. Hold của một đợt ngừng đã kết thúc (có lượt khoẻ sau `since`) bị bỏ qua. Test: một instance mới vẫn gửi tin hồi phục chỉ nhờ hold trong Redis.
+    - **Ngân sách Upstash sau rev 3:** `GET` thay cho `EXISTS` khi có tin tới hạn (cùng số lệnh). Việc đọc hold `outage` chỉ xảy ra khi state cũ, không xảy ra khi watcher chạy đều (có test "a healthy watcher reads no hold at all"). Khi bình thường **vẫn không tốn thêm lệnh nào**; con số ~295k/~339k lệnh/tháng giữ nguyên.
+    - Số test: unit 206 → 211, e2e 23 pass (không đổi), skip opt-in Redis thật 9 (test hold được viết lại cho key theo loại tin). Lint và build xanh ở mọi commit.
 
 ## 5. Discovered work
 
@@ -244,7 +253,10 @@ $ npm test → 185 passed (toàn bộ 132 test cũ vẫn pass); npm run test:e2e
 - **Chưa chạy test Redis thật** (`test/price-alerts.redis.e2e-spec.ts`: 3 test mới cho AC04, AC15 và round-trip state, 1 test hold/TTL mới ở rev 2, cùng 5 test cũ). Owner quyết định 2026-09-29 để việc này tới sau deploy. Docker Desktop không chạy trên máy lúc implement. Chạy trước khi merge: `REDIS_INT_URL=http://localhost:8079 REDIS_INT_TOKEN=local npm run test:e2e -- price-alerts.redis` (setup ở đầu file).
 - **Giới hạn chống spam theo instance, phần còn lại sau rev 2.**
   - "≤ 1 ghi/phút" cho lượt bị từ chối (R3) vẫn tính theo từng instance, nên số đếm là cận dưới.
-  - "≤ 1 tin/giờ" (NFR05) giờ nằm trong Redis. Chỉ khi Redis **hỏng hẳn**, không nhận cả key hold, thì mỗi instance mới dùng bộ nhớ riêng. Khi đó nhiều instance hoặc cold start vẫn có thể gửi hơn 1 tin/giờ. Không có chỗ lưu chung nào khác để giữ.
+  - "≤ 1 tin/giờ" (NFR05) giờ nằm trong Redis, mỗi loại tin một key (rev 3). Chỉ khi Redis **hỏng hẳn**, không nhận cả key hold, thì mỗi instance mới dùng bộ nhớ riêng. Khi đó, nếu mỗi lượt lại chạy trên một instance mới (cold start), owner vẫn có thể nhận tới 36 tin/3 giờ; hai instance xen kẽ thì khoảng 6 tin/3 giờ. Không có chỗ lưu chung nào khác để giữ.
+  - Redis chập chờn: tối đa 1 tin **mỗi loại** mỗi giờ, nên có thể 2 tin/giờ ("không đọc được trạng thái" + "ngừng" thật). Đây là diễn giải NFR05 chờ PO xác nhận (§4 mục 10).
+  - Lỗi "tin ngừng đã gửi, lưu state lỗi" chỉ được khôi phục khi hold `outage` còn (1 giờ). Nếu lần lưu tiếp theo cũng lỗi quá 1 giờ, hoặc Redis không nhận cả hold, tin hồi phục vẫn có thể mất.
+  - `checkWatcher` (watchdog) chưa có bước dựng lại tương tự cho tin "watcher-down" đã gửi mà lưu lỗi. Ngoài phạm vi finding của verify.
   - Nếu gửi tin "không đọc được trạng thái" thất bại **và** `DEL` trả key cũng thất bại, owner sẽ không nhận tin nào trong tối đa 1 giờ. Tôi chọn đổi như vậy để không bị spam.
 - **Đuôi đếm rejected có thể mất.** Các lần bị từ chối trong phút sau lần ghi chỉ được cộng vào lần ghi kế tiếp. Nếu không có lần gọi nào nữa thì phần đuôi đó mất, nên số đếm là cận dưới. Spec cho phép điều này (AC04: "không nhỏ hơn 1").
 - **"Không được gọi" trong report** được suy ra khi có một khoảng ≥ 3 phút trong đợt ngừng không có ghi nhận nào. Ngưỡng này do tôi đặt, vì lượt rejected chỉ được ghi khoảng 1 lần/phút.
