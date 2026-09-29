@@ -134,6 +134,32 @@ describe('evaluateMonitor', () => {
     expect(after.action).toBeNull();
   });
 
+  it('dates the recovery at the FIRST healthy run after the outage, not the newest (verify finding #4)', () => {
+    const down = evaluateMonitor(state(), [run(0)], at(min(20)), noRejections).onSent;
+    // The watcher runs at 35: healthy runs at 31..34 since the check came back at 31.
+    const runs = [run(min(34)), run(min(33)), run(min(32)), run(min(31)), run(min(29), 'failed')];
+
+    const recovered = evaluateMonitor(down, runs, at(min(35)), noRejections);
+
+    expect(recovered.action).toEqual({
+      kind: 'recovered',
+      since: iso(0),
+      recoveredAt: iso(min(31)),
+      downForMs: min(31),
+    });
+    // The state still remembers the newest healthy run.
+    expect(recovered.onSent.lastHealthyAt).toBe(iso(min(34)));
+  });
+
+  it('falls back to the newest healthy run when the first one left the window', () => {
+    const down = evaluateMonitor(state(), [run(0)], at(min(20)), noRejections).onSent;
+    const stored = { ...down, lastHealthyAt: iso(min(50)) };
+
+    const recovered = evaluateMonitor(stored, [], at(min(55)), noRejections);
+
+    expect(recovered.action).toMatchObject({ kind: 'recovered', recoveredAt: iso(min(50)) });
+  });
+
   it('sends nothing for a 10-minute gap that recovers, or for an unnotified outage (FIX-AC08)', () => {
     const gap = evaluateMonitor(state(), [run(min(10))], at(min(11)), noRejections);
     expect(gap.action).toBeNull();

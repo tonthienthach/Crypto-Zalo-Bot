@@ -38,6 +38,22 @@ export function latestHealthyAt(runs: AlertRunSummary[]): string | null {
 }
 
 /**
+ * Oldest healthy run start in `runs` (any order) strictly after `since`, or
+ * null — the moment an outage ended (spec EPIC-002-FIX-FR06).
+ */
+export function firstHealthyAfter(runs: AlertRunSummary[], since: string): string | null {
+  const sinceMs = Date.parse(since);
+  let first: number | null = null;
+  for (const run of runs) {
+    const at = Date.parse(run.startedAt);
+    if (isHealthyRun(run) && at > sinceMs && (first === null || at < first)) {
+      first = at;
+    }
+  }
+  return first === null ? null : new Date(first).toISOString();
+}
+
+/**
  * What was seen after `since` (spec EPIC-002-FIX-FR04, AC09): the non-healthy
  * runs by outcome, plus the rejected calls the guard counted in that time.
  * An empty result means nothing reached the check at all.
@@ -101,12 +117,16 @@ export function evaluateMonitor(
     const cleared = { ...base, outage: null };
     // An outage the owner never heard about ends silently (spec EPIC-002-FIX-FR06).
     if (outage.notifiedAt === null) return none(cleared);
+    // It ended at the FIRST healthy run after it, not the newest one — up to
+    // a watcher interval later. Falls back to the newest when the first one
+    // is no longer in the window (a recovery message retried for 30+ min).
+    const recoveredAt = firstHealthyAfter(recentRuns, outage.since) ?? lastHealthyAt!;
     return {
       action: {
         kind: 'recovered',
         since: outage.since,
-        recoveredAt: lastHealthyAt!,
-        downForMs: Date.parse(lastHealthyAt!) - Date.parse(outage.since),
+        recoveredAt,
+        downForMs: Date.parse(recoveredAt) - Date.parse(outage.since),
       },
       onSent: cleared,
       // Kept, so the next watcher run retries the recovery message.
