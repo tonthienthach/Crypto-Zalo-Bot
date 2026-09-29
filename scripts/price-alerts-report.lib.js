@@ -116,9 +116,32 @@ function healthyStats(runs) {
   };
 }
 
+/** How far back the "right now" line looks — the deploy check of docs/DEPLOYMENT.md §8a.4. */
+const RECENT_WINDOW_MS = 5 * 60_000;
+
+/**
+ * Runs by outcome started in the last `windowMs`, plus rejected calls in
+ * that time. Unlike countOutcomes over the whole log, this keeps moving once
+ * the run log is full (MAX_RUN_LOG_ENTRIES): the confirmation right after
+ * enabling or changing the job must not depend on the log still growing.
+ */
+function recentActivity(runs, rejectedByMinute, now, windowMs = RECENT_WINDOW_MS) {
+  const from = now - windowMs;
+  const recent = runs.filter((run) => {
+    const at = Date.parse(run.startedAt);
+    return at > from && at <= now;
+  });
+  const recentRejected = new Map(
+    [...rejectedByMinute].filter(([at]) => at + 60_000 > from && at <= now),
+  );
+  return { windowMs, counts: countOutcomes(recent, recentRejected) };
+}
+
 module.exports = {
   OUTAGE_THRESHOLD_MS,
   NOT_CALLED_GAP_MS,
+  RECENT_WINDOW_MS,
+  recentActivity,
   outcomeOf,
   percentile,
   countOutcomes,

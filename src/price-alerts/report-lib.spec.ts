@@ -80,6 +80,37 @@ describe('price-alerts report lib (EPIC-002-FIX-FR09)', () => {
     expect(stats.lastHealthyAt).toBe(T + min(2));
   });
 
+  it('counts only the last 5 minutes for the deploy check, so it moves once the log is full (FIX-AC18)', () => {
+    // A full log: 1,440 healthy runs ending 1 min before `now`.
+    const now = T + min(1440);
+    const full = healthyEveryMinute(0, 1440);
+    const later = [...full.slice(3), ...healthyEveryMinute(1440, 1443)];
+    const rejected = new Map([
+      [T + min(1437), 2], // inside the window
+      [T + min(1430), 5], // before it
+    ]);
+
+    // Whole-log totals stand still (1,440 both times) ...
+    expect(lib.countOutcomes(full, new Map()).healthy).toBe(1440);
+    expect(lib.countOutcomes(later, new Map()).healthy).toBe(1440);
+    // ... the last-5-minutes line doesn't.
+    const recent = lib.recentActivity(full, rejected, now);
+    expect(recent.windowMs).toBe(min(5));
+    expect(recent.counts).toMatchObject({ healthy: 4, rejected: 2 });
+    expect(lib.recentActivity(later, new Map(), T + min(1443)).counts.healthy).toBe(4);
+  });
+
+  it('shows nothing in the last 5 minutes when the job stopped', () => {
+    const runs = healthyEveryMinute(0, 10);
+    expect(lib.recentActivity(runs, new Map(), T + min(30)).counts).toEqual({
+      healthy: 0,
+      'no-price': 0,
+      failed: 0,
+      skipped: 0,
+      rejected: 0,
+    });
+  });
+
   it('counts outcomes and flattens per-day rejection hashes', () => {
     const rejected = lib.flattenRejections({
       '2026-09-25': { '23:59': 2 },

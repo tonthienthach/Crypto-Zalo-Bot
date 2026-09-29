@@ -226,11 +226,14 @@ headers):
    ```bash
    npm run alerts:report
    ```
-   Wait 5 minutes and run it again: **"By outcome: healthy" must have grown
-   by at least 3**, and "Last healthy run" must be under 2 minutes old. If
-   not, the "Outages" lines say what was seen: `not called` (job off or
-   wrong URL), `rejected` (wrong secret), `no-price` (price source down),
-   `failed` (see Vercel logs for `Price-alert check failed`).
+   Wait 5 minutes and run it again: the **"Last 5 min" line must show
+   `healthy` 3 or more**, and "Last healthy run" must be under 2 minutes old.
+   (Don't compare "By outcome" totals between runs: the run log keeps the
+   last 1,440 runs, so once it is full that total stops growing even when the
+   job works.) If not, the same "Last 5 min" line and the "Outages" lines say
+   what was seen: nothing at all / `not called` (job off or wrong URL),
+   `rejected` (wrong secret), `no-price` (price source down), `failed` (see
+   Vercel logs for `Price-alert check failed`).
 5. After 24h, run the report again: the gap between healthy runs (p95 must be
    ≤ 90s), healthy run duration, the outages, and deliveries per chat (the
    success metric in `docs/epics/EPIC-002/artifacts/intent.md`). Delete

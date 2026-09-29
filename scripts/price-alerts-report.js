@@ -32,6 +32,7 @@ const {
   flattenRejections,
   buildOutages,
   healthyStats,
+  recentActivity,
 } = require('./price-alerts-report.lib');
 
 function loadEnvFile(filePath) {
@@ -104,7 +105,22 @@ function printReport(data, now) {
     stats.lastHealthyAt ?? -Infinity,
     monitor?.lastHealthyAt ? Date.parse(monitor.lastHealthyAt) : -Infinity,
   );
-  console.log(`Last healthy run: ${time(Number.isFinite(lastHealthy) ? lastHealthy : null)}`);
+  console.log(
+    `Last healthy run: ${
+      Number.isFinite(lastHealthy)
+        ? `${time(lastHealthy)} (${seconds(now - lastHealthy)} ago)`
+        : 'never'
+    }`,
+  );
+  // The deploy check (docs/DEPLOYMENT.md §8a.4): still moves once the run log is full.
+  const recent = recentActivity(runs, rejected, now);
+  console.log(
+    `Last ${minutes(recent.windowMs)}: healthy ${recent.counts.healthy}, no-price ${
+      recent.counts['no-price']
+    }, failed ${recent.counts.failed}, skipped ${recent.counts.skipped}, rejected ${
+      recent.counts.rejected
+    }  [~1 healthy/min expected]`,
+  );
   console.log(
     `Gap between healthy runs: p50 ${seconds(stats.gapP50)}, p95 ${seconds(stats.gapP95)}, ` +
       `max ${seconds(stats.gapMax)}  [AC18: p95 <= 90s]`,
