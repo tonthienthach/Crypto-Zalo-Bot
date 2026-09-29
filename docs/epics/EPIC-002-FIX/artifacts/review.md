@@ -46,9 +46,12 @@
 
 Toàn bộ danh sách AC01–AC20 và các defect rev 1/rev 2 đã sửa: xem `verify.md` rev 1 + rev 2. Không làm lại ở đây.
 
-## 6. Follow-up cần verify thêm trước merge
+## 6. Follow-up cần verify thêm trước merge — ĐÃ ĐÓNG (2026-09-29)
 
-- Verify độc lập nhanh cho 2 commit `0aba0b4` và `a7287d2` (chưa qua verify rev nào), trước khi coi verify là đã đóng hoàn toàn.
+Verify độc lập riêng cho `0aba0b4` và `a7287d2`, sau khi review viết xong ở trên: **pass**, cả hai đúng 2 kịch bản verify rev 2 nêu (test `price-alerts-monitor.service.spec.ts` dòng ~230–325), không thấy race giữa các hold key hay lệch thứ tự ghi/đọc Redis. Hai điểm còn lại, không chặn merge:
+
+1. Should-fix #1 ở trên (2 tin/giờ khi Redis chập chờn) — verifier xác nhận đây là đánh đổi NFR01 vs NFR05 có thật, không phải lỗi code. Vẫn cần owner chốt bằng văn bản.
+2. **Mới (Low):** hold của trạng thái "không đọc được" dùng chung TTL 1 giờ (`STATE_UNREADABLE_NOTICE_MS`, `price-alerts.constants.ts`). Nếu Redis ghi lỗi **liên tục quá 1 giờ**, hold hết hạn trước khi `withUnrecordedOutage` (`price-alerts-monitor.service.ts:130-153`) kịp dựng lại đợt ngừng — hồi phục có thể vẫn mất im lặng, chỉ dịch ngưỡng từ "1 lần lỗi" sang "lỗi liên tục > 1 giờ". Cùng nhóm rủi ro với finding #4 rev 2 (residual đã chấp nhận: Redis hỏng hẳn thì owner im lặng tới 1 giờ). Không có test riêng cho case này — ghi vào Known gaps của `implement.md`, không chặn merge.
 
 ---
 
