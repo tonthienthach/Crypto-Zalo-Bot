@@ -24,3 +24,21 @@ export const COMPARE_EPSILON = 1e-9;
 
 export const HOUR_MS = 60 * 60_000;
 export const DAY_MS = 24 * HOUR_MS;
+
+/** At most one proactive signal message per chat per this window (spec EPIC-004-FR05). */
+export const SEND_COOLDOWN_MS = HOUR_MS;
+
+/** A coin already reported in the same direction is not reported again within this window (spec EPIC-004-FR06). */
+export const REPEAT_WINDOW_MS = DAY_MS;
+
+/** ...unless the move grew by at least this many percentage points since the last report (spec EPIC-004-FR06). */
+export const REPEAT_EXTRA_PP = 5;
+
+/** A verdict is scored by the price this long after it was given (spec EPIC-004-FR10, FR11). */
+export const HORIZON_MS = 3 * DAY_MS;
+
+/** Backtest looks at no more than this many days (spec EPIC-004-FR10). */
+export const BACKTEST_DAYS = 90;
+
+/** Backtest refuses a history shorter than this many days (spec EPIC-004-AC12). */
+export const BACKTEST_MIN_DAYS = 14;

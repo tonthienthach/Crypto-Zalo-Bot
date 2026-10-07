@@ -36,3 +36,47 @@ export interface SignalResult {
   verdict: Verdict | null;
   priceUsd: number;
 }
+
+/** What a chat was last told, kept to enforce spec EPIC-004-FR05 and FR06. */
+export interface ChatSignalState {
+  /** Epoch ms of the last proactive signal message; null when none. */
+  lastSentAt: number | null;
+  /** Per coin symbol: what the last message said. */
+  coins: Record<string, { sentAt: number; direction: SwingDirection; movePct: number }>;
+}
+
+export interface CoinSignal {
+  symbol: string;
+  result: SignalResult;
+}
+
+/** A buy/sell verdict that was actually sent to a chat (spec EPIC-004-FR11). */
+export interface SignalRecord {
+  symbol: string;
+  verdict: 'buy' | 'sell';
+  priceUsd: number;
+  /** Epoch ms the verdict was given. */
+  at: number;
+}
+
+export interface VerdictTally {
+  /** Signals old enough to be scored. */
+  scored: number;
+  correct: number;
+}
+
+export interface BacktestResult {
+  /** True when the history is too short to backtest; the tallies are empty. */
+  insufficient: boolean;
+  /** Days of history actually used. */
+  days: number;
+  buy: VerdictTally;
+  sell: VerdictTally;
+}
+
+export interface Scorecard {
+  buy: VerdictTally;
+  sell: VerdictTally;
+  /** Verdicts not yet 3 days old (or with no later price to score against). */
+  pending: number;
+}
