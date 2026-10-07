@@ -31,6 +31,10 @@ import {
   PortfolioTradeNotFoundError,
   PortfolioUnavailableError,
 } from '../portfolio/portfolio.service';
+import { CoinSignal } from '../signals/interfaces/signal.interface';
+import { SignalsStateService } from '../signals/signals-state.service';
+import { SignalsSubscriptionsMirror } from '../signals/signals-subscriptions-mirror';
+import { SCORECARD_DAYS, SignalsService } from '../signals/signals.service';
 import { InvalidWatchlistError, SubscribersService } from '../subscribers/subscribers.service';
 import { DEFAULT_WATCHLIST } from '../subscribers/subscribers.constants';
 import {
@@ -69,6 +73,15 @@ import {
   formatWatchlistUpdatedReply,
   formatWatchlistViewReply,
 } from '../utils/format-message.util';
+import {
+  formatBacktestReply,
+  formatScorecardReply,
+  formatSignalInvalidReply,
+  formatSignalNoWatchlistReply,
+  formatSignalNotScoredNote,
+  formatSignalReply,
+  formatSignalToggleReply,
+} from '../utils/format-signals.util';
 import { ZaloService } from '../zalo/zalo.service';
 import { ZaloWebhookDto } from './dto/zalo-webhook.dto';
 
@@ -95,6 +108,9 @@ export class WebhookController {
     private readonly subscribersService: SubscribersService,
     private readonly priceAlertsService: PriceAlertsService,
     private readonly portfolioService: PortfolioService,
+    private readonly signalsService: SignalsService,
+    private readonly signalsState: SignalsStateService,
+    private readonly signalsMirror: SignalsSubscriptionsMirror,
   ) {
     this.usdToVndRate = this.configService.get<number>('currency.usdToVndRate')!;
   }
@@ -164,11 +180,13 @@ export class WebhookController {
             chatId,
             formatSubscribeReply(subscriber.watchlist),
           );
+          await this.signalsMirror.onSubscribed(chatId, subscriber.watchlist);
           return;
         }
         case CommandType.UNSUBSCRIBE: {
           await this.subscribersService.unsubscribe(chatId);
           await this.zaloService.sendTextMessage(chatId, formatUnsubscribeReply());
+          await this.signalsMirror.onUnsubscribed(chatId);
           return;
         }
         case CommandType.WATCHLIST: {
@@ -187,6 +205,7 @@ export class WebhookController {
               ? formatWatchlistUpdatedReply(updated.watchlist)
               : formatWatchlistNotSubscribedReply(),
           );
+          if (updated) await this.signalsMirror.onWatchlistChanged(chatId, updated.watchlist);
           return;
         }
         case CommandType.ALERT_CREATE: {
@@ -223,6 +242,39 @@ export class WebhookController {
           await this.zaloService.sendTextMessage(chatId, formatAlertInvalidReply());
           return;
         }
+        case CommandType.SIGNAL_VIEW: {
+          await this.replyWithSignals(chatId, command.symbols);
+          return;
+        }
+        case CommandType.SIGNAL_BACKTEST: {
+          const [symbol] = command.symbols;
+          // Only coins "/gia" can price are accepted: throws UnknownCoinSymbolsError otherwise.
+          await this.coingeckoService.getPricesBySymbols([symbol]);
+          const result = await this.signalsService.backtest(symbol, Date.now());
+          await this.zaloService.sendTextMessage(chatId, formatBacktestReply(symbol, result));
+          await this.noteSignalUse(chatId);
+          return;
+        }
+        case CommandType.SIGNAL_STATS: {
+          const card = await this.signalsService.scorecard(chatId, Date.now());
+          await this.zaloService.sendTextMessage(
+            chatId,
+            formatScorecardReply(card, SCORECARD_DAYS),
+          );
+          await this.noteSignalUse(chatId);
+          return;
+        }
+        case CommandType.SIGNAL_TOGGLE: {
+          const enabled = command.signal!.enabled!;
+          await this.signalsState.setEnabled(chatId, enabled);
+          await this.zaloService.sendTextMessage(chatId, formatSignalToggleReply(enabled));
+          await this.noteSignalUse(chatId);
+          return;
+        }
+        case CommandType.SIGNAL_INVALID: {
+          await this.zaloService.sendTextMessage(chatId, formatSignalInvalidReply());
+          return;
+        }
         case CommandType.UNKNOWN:
         default: {
           await this.zaloService.sendTextMessage(chatId, formatUnknownCommandReply());
@@ -231,6 +283,56 @@ export class WebhookController {
       }
     } catch (error) {
       await this.handleReplyError(chatId, error);
+    }
+  }
+
+  /**
+   * "/tinhieu [coin]" (spec EPIC-004-FR08): one coin, or the chat's whole
+   * watchlist. Verdicts are recorded for the scorecard only after the reply
+   * went out (FR11), and bookkeeping failures never turn a delivered reply
+   * into an error message.
+   */
+  private async replyWithSignals(chatId: string, symbols: string[]): Promise<void> {
+    const now = Date.now();
+    let signals: CoinSignal[];
+    let tracked = true;
+    if (symbols.length > 0) {
+      const single = await this.signalsService.getSignalFor(symbols[0], now);
+      signals = [single.signal];
+      tracked = single.tracked;
+    } else {
+      const subscriber = await this.subscribersService.findActiveByChatId(chatId);
+      if (!subscriber || subscriber.watchlist.length === 0) {
+        await this.zaloService.sendTextMessage(chatId, formatSignalNoWatchlistReply());
+        return;
+      }
+      signals = await this.signalsService.getSignalsForSymbols(subscriber.watchlist, now);
+    }
+
+    const text = formatSignalReply(signals);
+    await this.zaloService.sendTextMessage(
+      chatId,
+      tracked ? text : `${text}\n\n${formatSignalNotScoredNote()}`,
+    );
+
+    if (tracked) {
+      try {
+        await this.signalsService.recordSentVerdicts(chatId, signals, now);
+      } catch (error) {
+        this.logger.error(
+          `Could not record signal verdicts for ${chatId}: ${(error as Error).message}`,
+        );
+      }
+    }
+    await this.noteSignalUse(chatId);
+  }
+
+  /** Counts one "/tinhieu" use for the success metric (spec EPIC-004-FR12); never fails the reply. */
+  private async noteSignalUse(chatId: string): Promise<void> {
+    try {
+      await this.signalsState.recordUsage(chatId, 'command', Date.now());
+    } catch (error) {
+      this.logger.error(`Could not record signal usage for ${chatId}: ${(error as Error).message}`);
     }
   }
 

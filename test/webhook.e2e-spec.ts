@@ -41,6 +41,9 @@ import {
   AlertNotFoundError,
   PriceAlertsService,
 } from '../src/price-alerts/price-alerts.service';
+import { SignalsStateService } from '../src/signals/signals-state.service';
+import { SignalsSubscriptionsMirror } from '../src/signals/signals-subscriptions-mirror';
+import { SignalsService } from '../src/signals/signals.service';
 import { SubscribersService } from '../src/subscribers/subscribers.service';
 import { ZaloService } from '../src/zalo/zalo.service';
 
@@ -70,6 +73,16 @@ describe('WebhookController (e2e)', () => {
   const clearTrades = jest.fn();
   const listTradesForChats = jest.fn();
   const resolveSymbolToId = jest.fn((symbol: string) => symbol);
+  const getSignalFor = jest.fn();
+  const getSignalsForSymbols = jest.fn();
+  const backtest = jest.fn();
+  const scorecard = jest.fn();
+  const recordSentVerdicts = jest.fn().mockResolvedValue(undefined);
+  const setEnabled = jest.fn().mockResolvedValue(undefined);
+  const recordUsage = jest.fn().mockResolvedValue(undefined);
+  const mirrorOnSubscribed = jest.fn().mockResolvedValue(undefined);
+  const mirrorOnWatchlistChanged = jest.fn().mockResolvedValue(undefined);
+  const mirrorOnUnsubscribed = jest.fn().mockResolvedValue(undefined);
 
   const SECRET = process.env.WEBHOOK_SECRET_TOKEN as string;
 
@@ -104,6 +117,16 @@ describe('WebhookController (e2e)', () => {
         deleteTrade,
         clearTrades,
         listTradesForChats,
+      })
+      .overrideProvider(SignalsService)
+      .useValue({ getSignalFor, getSignalsForSymbols, backtest, scorecard, recordSentVerdicts })
+      .overrideProvider(SignalsStateService)
+      .useValue({ setEnabled, recordUsage })
+      .overrideProvider(SignalsSubscriptionsMirror)
+      .useValue({
+        onSubscribed: mirrorOnSubscribed,
+        onWatchlistChanged: mirrorOnWatchlistChanged,
+        onUnsubscribed: mirrorOnUnsubscribed,
       })
       .compile();
 
@@ -743,6 +766,194 @@ describe('WebhookController (e2e)', () => {
       await send('/danhmuc mua btc 1 60000');
 
       expect(reply()).toContain('Tạm thời không truy cập được dữ liệu danh mục');
+    });
+  });
+
+  describe('/tinhieu (signals, EPIC-004)', () => {
+    const send = (text: string, chatId = 'sig-chat') =>
+      request(app.getHttpServer())
+        .post('/webhook')
+        .set('x-bot-api-secret-token', SECRET)
+        .send({
+          event_name: 'message.text.received',
+          message: { text, chat: { id: chatId, chat_type: 'PRIVATE' } },
+        })
+        .expect(200);
+    const reply = () => sendTextMessage.mock.calls[0][1] as string;
+
+    const strongBtc = {
+      symbol: 'btc',
+      result: {
+        insufficientData: false,
+        change24hPct: -16,
+        change72hPct: -11.1,
+        strong: true,
+        direction: 'down',
+        movePct: -16,
+        window: '24h',
+        rangeLow: 80000,
+        rangeHigh: 120000,
+        positionPct: 10,
+        verdict: 'buy',
+        priceUsd: 84000,
+      },
+    };
+
+    it('AC10: "/tinhieu btc" replies with the verdict, reason and disclaimer, then records it', async () => {
+      getSignalFor.mockResolvedValue({ signal: strongBtc, tracked: true });
+
+      await send('/tinhieu btc');
+
+      expect(getSignalFor).toHaveBeenCalledWith('btc', expect.any(Number));
+      expect(reply()).toContain('Cân nhắc mua');
+      expect(reply()).toContain('Lý do');
+      expect(reply()).toContain('không phải lời khuyên đầu tư');
+      expect(recordSentVerdicts).toHaveBeenCalledWith('sig-chat', [strongBtc], expect.any(Number));
+      expect(recordUsage).toHaveBeenCalledWith('sig-chat', 'command', expect.any(Number));
+    });
+
+    it('does not record a verdict for a coin that could not be tracked, and says so', async () => {
+      getSignalFor.mockResolvedValue({ signal: strongBtc, tracked: false });
+
+      await send('/tinhieu btc');
+
+      expect(reply()).toContain('không được tính vào bảng điểm');
+      expect(recordSentVerdicts).not.toHaveBeenCalled();
+    });
+
+    it('AC11: shows "chưa đủ dữ liệu" and no verdict for a short history', async () => {
+      getSignalFor.mockResolvedValue({
+        signal: {
+          symbol: 'new',
+          result: { ...strongBtc.result, insufficientData: true, strong: false, verdict: null },
+        },
+        tracked: true,
+      });
+
+      await send('/tinhieu new');
+
+      expect(reply()).toContain('chưa đủ dữ liệu');
+      expect(reply()).not.toContain('Cân nhắc');
+    });
+
+    it('AC10: an unknown coin gets the "/gia" message', async () => {
+      getSignalFor.mockRejectedValue(new UnknownCoinSymbolsError(['xyzabc']));
+
+      await send('/tinhieu xyzabc');
+
+      expect(reply()).toContain('Không tìm thấy đồng coin: XYZABC');
+    });
+
+    it('AC10: a price source outage gets the "/gia" outage message, with no numbers', async () => {
+      getSignalFor.mockRejectedValue(new CoingeckoUnavailableError('down'));
+
+      await send('/tinhieu btc');
+
+      expect(reply()).toContain('Không thể lấy dữ liệu giá');
+      expect(recordSentVerdicts).not.toHaveBeenCalled();
+    });
+
+    it('"/tinhieu" for the whole watchlist uses the subscriber watchlist', async () => {
+      findActiveByChatId.mockResolvedValue({ chatId: 'sig-chat', watchlist: ['btc', 'eth'] });
+      getSignalsForSymbols.mockResolvedValue([strongBtc]);
+
+      await send('/tinhieu');
+
+      expect(getSignalsForSymbols).toHaveBeenCalledWith(['btc', 'eth'], expect.any(Number));
+      expect(reply()).toContain('BTC');
+    });
+
+    it('"/tinhieu" without a subscription points to /dangky', async () => {
+      findActiveByChatId.mockResolvedValue(null);
+
+      await send('/tinhieu');
+
+      expect(reply()).toContain('/dangky');
+      expect(getSignalsForSymbols).not.toHaveBeenCalled();
+    });
+
+    it('AC12: "/tinhieu backtest btc" shows counts, rates and the approximation note', async () => {
+      getPricesBySymbols.mockResolvedValue([{ id: 'bitcoin', symbol: 'btc', priceUsd: 1 }]);
+      backtest.mockResolvedValue({
+        insufficient: false,
+        days: 90,
+        buy: { scored: 6, correct: 4 },
+        sell: { scored: 5, correct: 2 },
+      });
+
+      await send('/tinhieu backtest btc');
+
+      expect(reply()).toContain('6 lần, đúng 4 (66.7%)');
+      expect(reply()).toContain('5 lần, đúng 2 (40.0%)');
+      expect(reply()).toContain('xấp xỉ');
+    });
+
+    it('AC12: a short history is refused with an explanation', async () => {
+      getPricesBySymbols.mockResolvedValue([{ id: 'bitcoin', symbol: 'btc', priceUsd: 1 }]);
+      backtest.mockResolvedValue({
+        insufficient: true,
+        days: 9,
+        buy: { scored: 0, correct: 0 },
+        sell: { scored: 0, correct: 0 },
+      });
+
+      await send('/tinhieu backtest btc');
+
+      expect(reply()).toContain('cần ít nhất 14 ngày');
+    });
+
+    it('AC13: "/tinhieu thongke" reports the scorecard', async () => {
+      scorecard.mockResolvedValue({
+        buy: { scored: 3, correct: 2 },
+        sell: { scored: 1, correct: 0 },
+        pending: 2,
+      });
+
+      await send('/tinhieu thongke');
+
+      expect(scorecard).toHaveBeenCalledWith('sig-chat', expect.any(Number));
+      expect(reply()).toContain('3 lần, đúng 2 (66.7%)');
+      expect(reply()).toContain('Còn chờ chấm: 2');
+    });
+
+    it('AC14: "tat" and "bat" switch proactive signals and confirm', async () => {
+      await send('/tinhieu tat');
+      expect(setEnabled).toHaveBeenLastCalledWith('sig-chat', false);
+      expect(reply()).toContain('Đã tắt');
+
+      sendTextMessage.mockClear();
+      await send('/tinhieu bat');
+      expect(setEnabled).toHaveBeenLastCalledWith('sig-chat', true);
+      expect(reply()).toContain('Đã bật');
+    });
+
+    it('shows the syntax for an invalid "/tinhieu ..."', async () => {
+      await send('/tinhieu backtest');
+      expect(reply()).toContain('Cú pháp /tinhieu chưa đúng');
+    });
+
+    it('keeps the watchlist mirror in step with /dangky, /watchlist and /huy', async () => {
+      subscribe.mockResolvedValue({ chatId: 'sig-chat', watchlist: ['btc'] });
+      updateWatchlist.mockResolvedValue({ chatId: 'sig-chat', watchlist: ['eth'] });
+
+      await send('/dangky btc');
+      await send('/watchlist eth');
+      await send('/huy');
+
+      expect(mirrorOnSubscribed).toHaveBeenCalledWith('sig-chat', ['btc']);
+      expect(mirrorOnWatchlistChanged).toHaveBeenCalledWith('sig-chat', ['eth']);
+      expect(mirrorOnUnsubscribed).toHaveBeenCalledWith('sig-chat');
+    });
+
+    it('still replies when recording the verdict or usage fails', async () => {
+      getSignalFor.mockResolvedValue({ signal: strongBtc, tracked: true });
+      recordSentVerdicts.mockRejectedValueOnce(new Error('redis down'));
+      recordUsage.mockRejectedValueOnce(new Error('redis down'));
+
+      await send('/tinhieu btc');
+
+      expect(sendTextMessage).toHaveBeenCalledTimes(1);
+      expect(reply()).toContain('Cân nhắc mua');
     });
   });
 });

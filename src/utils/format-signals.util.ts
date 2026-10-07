@@ -122,6 +122,11 @@ export function formatSignalReply(signals: CoinSignal[]): string {
   ].join('\n');
 }
 
+/** Added to a single-coin reply when the coin could not be tracked, so its verdict is not scored. */
+export function formatSignalNotScoredNote(): string {
+  return 'ℹ️ Hiện đã theo dõi tạm đủ số coin tối đa, nên nhận định này không được tính vào bảng điểm (/tinhieu thongke).';
+}
+
 /** Reply for "/tinhieu" when the chat has no watchlist (spec EPIC-004 §3.2). */
 export function formatSignalNoWatchlistReply(): string {
   return [

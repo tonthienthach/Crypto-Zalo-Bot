@@ -106,10 +106,23 @@ path — it just means fewer symbols get filled in.
 | `/danhmuc lichsu [trang]` (or `history`) | Trade history, newest first, 20 per page, with the stable trade numbers |
 | `/danhmuc xoa 3` (or `xoá`, `delete`) | Delete trade #3 (refused if a later sell would then exceed the holding) |
 | `/danhmuc xoahet` → `/danhmuc xoahet xacnhan` | Delete every trade of this chat, only after the confirmation command |
+| `/tinhieu` (or `/tínhiệu`, `/signal`) | Signals for the chat's whole watchlist: 24h / 72h change, position in the 7-day range, whether the coin is swinging strongly (≥ 8% in 24h or ≥ 15% in 72h) and, only if it is, a verdict — *Cân nhắc mua* (bottom 25% of the 7-day range), *Cân nhắc bán / chốt lời* (top 25%) or *Theo dõi* — with a one-line reason and a not-investment-advice disclaimer. Fewer than 7 days of history → "chưa đủ dữ liệu", no verdict. A chat with no watchlist is pointed to `/dangky` |
+| `/tinhieu eth` | The same for one coin (any coin `/gia` can price, even outside the watchlist; it is tracked for 4 days so its verdict can be scored) |
+| `/tinhieu backtest btc` | The same rules replayed over up to 90 days of end-of-day prices: number of buy / sell signals and how often the price 3 days later went the right way. Approximate (daily prices), consecutive days with the same verdict count once; refused below 14 days of history |
+| `/tinhieu thongke` | Scorecard of the verdicts the bot actually sent this chat in the last 30 days: scored, right, and still pending (< 3 days old) |
+| `/tinhieu tat` / `/tinhieu bat` | Turn the proactive signal messages off / on for this chat (kept across sessions). The "Tín hiệu" part of the 9am digest is not affected |
 | anything else | "I don't understand this command" reply |
 
 A fired alert re-arms (silently) once the price is back past the level by
 0.5%, and never sends more than one message per 15 minutes.
+
+Signals (`/tinhieu`) reach a chat in three places: the command above, the
+"Tín hiệu" section of the 9am digest (every subscribed chat, always shown —
+"Không có coin nào dao động mạnh" when nothing swings), and a proactive
+message from `/cron/signals` when a watchlist coin swings strongly (at most one
+per chat per hour, several coins in one message, the same coin and direction
+not repeated within 24h unless the move grew by 5 points; on by default,
+`/tinhieu tat` to stop). Every message with a verdict carries the disclaimer.
 
 ### Example reply text
 
