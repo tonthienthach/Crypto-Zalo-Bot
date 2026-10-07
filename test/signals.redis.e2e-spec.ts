@@ -9,7 +9,8 @@
  *     npm run test:e2e -- signals.redis
  *
  * WARNING: flushes the target database before each test — never point it at
- * a real Upstash instance.
+ * a real Upstash instance. price-alerts.redis flushes the same database, so run both
+ * together serially (`npm run test:e2e -- --runInBand`), never in parallel.
  */
 import { ConfigService } from '@nestjs/config';
 import { Redis } from '@upstash/redis';
