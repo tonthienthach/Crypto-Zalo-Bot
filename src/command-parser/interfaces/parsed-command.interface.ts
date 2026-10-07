@@ -22,6 +22,16 @@ export enum CommandType {
   PORTFOLIO_CLEAR = 'PORTFOLIO_CLEAR',
   /** "/danhmuc ..." with arguments that don't match any valid portfolio syntax. */
   PORTFOLIO_INVALID = 'PORTFOLIO_INVALID',
+  /** "/tinhieu" or "/tinhieu <coin>". */
+  SIGNAL_VIEW = 'SIGNAL_VIEW',
+  /** "/tinhieu backtest <coin>". */
+  SIGNAL_BACKTEST = 'SIGNAL_BACKTEST',
+  /** "/tinhieu thongke". */
+  SIGNAL_STATS = 'SIGNAL_STATS',
+  /** "/tinhieu tat" or "/tinhieu bat". */
+  SIGNAL_TOGGLE = 'SIGNAL_TOGGLE',
+  /** "/tinhieu ..." with arguments that don't match any valid signal syntax. */
+  SIGNAL_INVALID = 'SIGNAL_INVALID',
   UNKNOWN = 'UNKNOWN',
 }
 
@@ -51,17 +61,26 @@ export interface PortfolioCommandArgs {
   confirmed?: boolean;
 }
 
+/** Arguments of a "/tinhieu" command. Only set for SIGNAL_TOGGLE. */
+export interface SignalCommandArgs {
+  /** true for "bat" (on), false for "tat" (off). */
+  enabled?: boolean;
+}
+
 export interface ParsedCommand {
   type: CommandType;
   /**
    * Lowercase ticker symbols requested, e.g. ["btc", "eth"]. Empty for
    * TOP_MARKETS/HELP/UNSUBSCRIBE/UNKNOWN, and for WATCHLIST when viewing
    * (no symbols given) rather than editing. ALERT_CREATE carries exactly
-   * one symbol, and so does PORTFOLIO_TRADE.
+   * one symbol, and so do PORTFOLIO_TRADE, SIGNAL_BACKTEST and SIGNAL_VIEW
+   * with a coin (SIGNAL_VIEW without one means the whole watchlist).
    */
   symbols: string[];
   /** Set only for ALERT_CREATE / ALERT_DELETE. */
   alert?: AlertCommandArgs;
   /** Set only for the PORTFOLIO_* types that take arguments. */
   portfolio?: PortfolioCommandArgs;
+  /** Set only for SIGNAL_TOGGLE. */
+  signal?: SignalCommandArgs;
 }

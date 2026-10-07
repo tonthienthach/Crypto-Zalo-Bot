@@ -19,6 +19,12 @@ const WATCHLIST_COMMAND_ALIASES = new Set(['watchlist', 'danhsach', 'ds']);
 const ALERT_COMMAND_ALIASES = new Set(['canhbao', 'alert']);
 const ALERT_DELETE_KEYWORDS = new Set(['xoa', 'delete']);
 const PORTFOLIO_COMMAND_ALIASES = new Set(['danhmuc', 'portfolio']);
+const SIGNAL_COMMAND_ALIASES = new Set(['tinhieu', 'signal', 'signals']);
+const SIGNAL_BACKTEST_KEYWORDS = new Set(['backtest']);
+const SIGNAL_STATS_KEYWORDS = new Set(['thongke', 'stats']);
+const SIGNAL_OFF_KEYWORDS = new Set(['tat', 'off']);
+const SIGNAL_ON_KEYWORDS = new Set(['bat', 'on']);
+const SIGNAL_SYMBOL_PATTERN = /^[a-z0-9]+$/;
 const PORTFOLIO_BUY_KEYWORDS = new Set(['mua', 'buy']);
 const PORTFOLIO_SELL_KEYWORDS = new Set(['ban', 'sell']);
 const PORTFOLIO_HISTORY_KEYWORDS = new Set(['lichsu', 'history']);
@@ -95,6 +101,10 @@ export class CommandParserService {
       return this.parsePortfolio(rawSymbols);
     }
 
+    if (SIGNAL_COMMAND_ALIASES.has(command)) {
+      return this.parseSignal(rawSymbols);
+    }
+
     if (!PRICE_COMMAND_ALIASES.has(rawCommand.toLowerCase()) && command !== 'gia') {
       return { type: CommandType.UNKNOWN, symbols: [] };
     }
@@ -155,6 +165,45 @@ export class CommandParserService {
       symbols: [symbol],
       alert: { direction: operator === '>' ? 'above' : 'below', threshold: threshold.value },
     };
+  }
+
+  /**
+   * Parses the arguments of "/tinhieu" (spec EPIC-004-FR08, FR10, FR11,
+   * FR13): none -> the whole watchlist, "<coin>" -> one coin, "backtest
+   * <coin>", "thongke", "tat" / "bat". "bat" is the switch, so a coin called
+   * BAT is read with "/gia bat" instead. Anything else is SIGNAL_INVALID so
+   * the reply can show the correct syntax.
+   */
+  private parseSignal(rawArgs: string[]): ParsedCommand {
+    const invalid: ParsedCommand = { type: CommandType.SIGNAL_INVALID, symbols: [] };
+    const args = rawArgs.map((arg) => this.stripDiacritics(arg.toLowerCase()));
+    const [keyword, ...rest] = args;
+    const validSymbol = (symbol: string) =>
+      SIGNAL_SYMBOL_PATTERN.test(symbol) && symbol.length <= MAX_ALERT_SYMBOL_LENGTH;
+
+    if (!keyword) {
+      return { type: CommandType.SIGNAL_VIEW, symbols: [] };
+    }
+    if (SIGNAL_STATS_KEYWORDS.has(keyword)) {
+      return rest.length === 0 ? { type: CommandType.SIGNAL_STATS, symbols: [] } : invalid;
+    }
+    if (SIGNAL_OFF_KEYWORDS.has(keyword) || SIGNAL_ON_KEYWORDS.has(keyword)) {
+      return rest.length === 0
+        ? {
+            type: CommandType.SIGNAL_TOGGLE,
+            symbols: [],
+            signal: { enabled: SIGNAL_ON_KEYWORDS.has(keyword) },
+          }
+        : invalid;
+    }
+    if (SIGNAL_BACKTEST_KEYWORDS.has(keyword)) {
+      return rest.length === 1 && validSymbol(rest[0])
+        ? { type: CommandType.SIGNAL_BACKTEST, symbols: [rest[0]] }
+        : invalid;
+    }
+    return rest.length === 0 && validSymbol(keyword)
+      ? { type: CommandType.SIGNAL_VIEW, symbols: [keyword] }
+      : invalid;
   }
 
   /**

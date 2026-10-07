@@ -37,7 +37,7 @@ export function toVndDisplay(usdAmount: number, usdToVndRate: number): string {
   return `${VND_FORMATTER.format(usdAmount * usdToVndRate)}₫`;
 }
 
-function formatUsd(amount: number): string {
+export function formatUsd(amount: number): string {
   return USD_FORMATTER.format(amount);
 }
 
@@ -74,9 +74,11 @@ export function formatDailyDigestReply(
   usdToVndRate: number,
   cronTrackingLine?: string,
   portfolioSection?: string,
+  signalsSection?: string,
 ): string {
   const lines = coins.map((coin) => formatCoinLine(coin, usdToVndRate));
   const body = ['🌅 Bản tin giá sáng nay:', ...lines];
+  if (signalsSection) body.push('', signalsSection);
   if (portfolioSection) body.push('', portfolioSection);
   if (cronTrackingLine) body.push('', cronTrackingLine);
   return body.join('\n');
@@ -123,6 +125,8 @@ export function formatHelpReply(): string {
     '• /canhbao — xem cảnh báo, /canhbao xoa 1 để xoá cảnh báo số 1',
     '• /danhmuc mua btc 0.5 60000 — ghi mua 0.5 BTC giá $60,000 (dùng ban thay cho mua khi bán)',
     '• /danhmuc — xem danh mục và lãi/lỗ · /danhmuc lichsu — lịch sử · /danhmuc xoa 3 — xoá giao dịch #3 (chỉ trong chat riêng)',
+    '• /tinhieu — xem coin nào đang dao động mạnh, kèm nhận định mua/bán tham khảo (cả danh sách theo dõi) · /tinhieu eth — một coin',
+    '• /tinhieu backtest btc — thử quy tắc trên 90 ngày · /tinhieu thongke — bảng điểm các nhận định đã gửi · /tinhieu tat (hoặc bat) — tắt/bật tin tín hiệu chủ động',
     '',
     'Lệnh có dấu hoặc không dấu đều được hỗ trợ (vd: /giá btc = /gia btc).',
   ].join('\n');
