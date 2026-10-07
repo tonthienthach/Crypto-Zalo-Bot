@@ -97,9 +97,9 @@ describe('formatSignalDigestSection', () => {
   });
 
   it('notes coins without enough history', () => {
-    expect(formatSignalDigestSection([ethMild, solThin])).toContain(
-      'Chưa đủ dữ liệu (cần 7 ngày): SOL',
-    );
+    const text = formatSignalDigestSection([ethMild, solThin]);
+    expect(text).toBe('📡 Tín hiệu: Không có coin nào dao động mạnh (chưa đủ dữ liệu: SOL).');
+    expect(text.split('\n')).toHaveLength(1);
   });
 
   it('sits between the prices and the portfolio in the digest', () => {
@@ -122,6 +122,7 @@ describe('formatSignalReply', () => {
   it('says a mild coin has no verdict and adds no disclaimer (AC03)', () => {
     const text = formatSignalReply([ethMild]);
     expect(text).toContain('không dao động mạnh, không có nhận định');
+    expect(text).toContain('ở 10% khoảng 7 ngày ($80,000.00–$120,000.00)');
     expect(text).not.toMatch(/Cân nhắc/);
     expect(text).not.toContain(SIGNAL_DISCLAIMER);
   });

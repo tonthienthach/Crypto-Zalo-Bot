@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing';
 import { of, throwError } from 'rxjs';
 import { CoinPaprikaService } from '../coinpaprika/coinpaprika.service';
 import {
+  CoingeckoCoinNotFoundError,
   CoingeckoService,
   CoingeckoUnavailableError,
   UnknownCoinSymbolsError,
@@ -232,6 +233,28 @@ describe('CoingeckoService', () => {
       await expect(service.getMarketChart('btc', 90)).rejects.toBeInstanceOf(
         CoingeckoUnavailableError,
       );
+    });
+  });
+
+  describe('getMarketChart error kinds', () => {
+    it('reports a 404 as "CoinGecko does not know this coin"', async () => {
+      const error = Object.assign(new Error('Request failed with status code 404'), {
+        response: { status: 404 },
+      });
+      httpGet.mockReturnValueOnce(throwError(() => error));
+      await expect(service.getMarketChart('x', 90)).rejects.toBeInstanceOf(
+        CoingeckoCoinNotFoundError,
+      );
+    });
+
+    it('does not report a 429 as an unknown coin', async () => {
+      const error = Object.assign(new Error('Request failed with status code 429'), {
+        response: { status: 429 },
+      });
+      httpGet.mockReturnValueOnce(throwError(() => error));
+      const rejection = service.getMarketChart('x', 90);
+      await expect(rejection).rejects.toBeInstanceOf(CoingeckoUnavailableError);
+      await expect(rejection).rejects.not.toBeInstanceOf(CoingeckoCoinNotFoundError);
     });
   });
 });

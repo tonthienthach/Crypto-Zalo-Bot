@@ -1,5 +1,9 @@
 import { ConfigService } from '@nestjs/config';
-import { CoingeckoService, CoingeckoUnavailableError } from '../coingecko/coingecko.service';
+import {
+  CoingeckoCoinNotFoundError,
+  CoingeckoService,
+  CoingeckoUnavailableError,
+} from '../coingecko/coingecko.service';
 import { PricePoint } from './interfaces/signal.interface';
 import { SignalsHistoryService } from './signals-history.service';
 import { SignalsStateService } from './signals-state.service';
@@ -116,7 +120,7 @@ describe('SignalsService', () => {
     it('reports insufficient data, not an outage, for a coin CoinGecko has no chart for', async () => {
       getPricesBySymbols.mockResolvedValue([{ id: 'x', symbol: 'x', priceUsd: 1 }]);
       trackExtra.mockResolvedValue(false);
-      getMarketChart.mockRejectedValue(new CoingeckoUnavailableError('404'));
+      getMarketChart.mockRejectedValue(new CoingeckoCoinNotFoundError('404'));
 
       const result = await service.getSignalFor('x', NOW);
 
@@ -149,7 +153,7 @@ describe('SignalsService', () => {
 
     it('is insufficient for a coin with no chart anywhere', async () => {
       loadDaily.mockResolvedValue({ x: [] });
-      getMarketChart.mockRejectedValue(new CoingeckoUnavailableError('404'));
+      getMarketChart.mockRejectedValue(new CoingeckoCoinNotFoundError('404'));
 
       const result = await service.backtest('x', NOW);
 
@@ -204,6 +208,23 @@ describe('SignalsService', () => {
           { symbol: 'xrp', verdict: 'sell', priceUsd: 3, at: NOW },
         ],
         NOW,
+      );
+    });
+  });
+
+  describe('rate-limited history (verify finding 7)', () => {
+    it('backtest surfaces a rate limit instead of reporting 0 days', async () => {
+      loadDaily.mockResolvedValue({ btc: [] });
+      getMarketChart.mockRejectedValue(new CoingeckoUnavailableError('429'));
+      await expect(service.backtest('btc', NOW)).rejects.toBeInstanceOf(CoingeckoUnavailableError);
+    });
+
+    it('a single-coin signal surfaces a rate limit when it has to read the live chart', async () => {
+      getPricesBySymbols.mockResolvedValue([{ id: 'x', symbol: 'x', priceUsd: 1 }]);
+      trackExtra.mockResolvedValue(false);
+      getMarketChart.mockRejectedValue(new CoingeckoUnavailableError('429'));
+      await expect(service.getSignalFor('x', NOW)).rejects.toBeInstanceOf(
+        CoingeckoUnavailableError,
       );
     });
   });

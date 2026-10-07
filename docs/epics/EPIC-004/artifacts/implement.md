@@ -65,7 +65,7 @@ Mọi lệnh dưới đây đã chạy thật trong phiên này, kết quả là
 - `GET /cron/signals` lần 1: `{"event":"signals-run",...,"outcome":"healthy","coins":2,"chatsAlerted":1,"failures":0,"deferred":0,"durationMs":1455}` (gồm lấp lịch sử 90 ngày cho 2 coin). Tin gửi tới chat có BTC và ETH trong **một** tin, nhận định, lý do bằng số, câu miễn trừ, "Tắt tin này: /tinhieu tat".
 - Lần 2 ngay sau đó: `durationMs: 31`, **không gửi thêm** (giới hạn 1 giờ).
 - `/tinhieu btc`, `/tinhieu backtest btc`, `/tinhieu thongke`, `/tinhieu tat`, `/tinhieu xyzabcdef` qua webhook: đều trả lời đúng; mã lạ dùng thông báo của `/gia`.
-- **Backtest BTC 90 ngày thật: mua 9 lần, đúng 6 (66,7%); bán 7 lần, đúng 2 (28,6%).** Xem §5, rủi ro chất lượng.
+- Backtest chạy trong lần này dùng **ngưỡng đã hạ** (0,05%/0,1%), nên con số của nó (mua 9 lần đúng 6, bán 7 lần đúng 2) **không** mô tả quy tắc thật và không được dùng để đánh giá chất lượng; bản trước của tệp này đã trích nhầm con số đó (verify finding 2). Số đúng, ngưỡng mặc định 8%/15%, ở §5.
 - `npm run signals:report` trên Redis đó in: 1 chat, đã dùng `/tinhieu` 1 ngày (chưa "quay lại"), 2 nhận định chờ chấm, lượt chạy gần nhất `healthy`.
 - Lỗi thật bắt được trong lần chạy này và đã sửa: khoảng giá in tới 6 số lẻ (`$83,185.105519`); nay hiện 2 số lẻ khi giá ≥ $1 (có test).
 
@@ -85,7 +85,7 @@ Mọi lệnh dưới đây đã chạy thật trong phiên này, kết quả là
 
 Những điều tìm thấy và **chưa** làm:
 
-- **Chất lượng nhận định (nên đọc trước khi bật rộng).** Backtest BTC 90 ngày thật cho nhận định bán đúng 28,6% (2/7), thấp hơn tung đồng xu; nhận định mua đúng 66,7% (6/9). Cỡ mẫu nhỏ, quy tắc là heuristic đảo chiều đơn giản đúng như spec concern 2 đã chấp nhận. Việc cần quyết (owner): giữ nguyên, hay chỉ bật tin chủ động sau khi xem backtest của vài coin. `DEPLOYMENT.md` bước 8c.2 đặt việc này thành bước bắt buộc trước khi báo người dùng.
+- **Tần suất và chất lượng nhận định (nên đọc trước khi bật rộng).** Backtest 90 ngày dữ liệu thật CoinGecko với **ngưỡng mặc định 8%/15%** (chạy 2026-10-07, `runBacktest` trên giá cuối ngày): BTC mua 0/0, bán 0/1; ETH mua 0/0, bán 0/1; SOL mua 0/0, bán 1/3; XRP mua 1/1, bán 2/3; DOGE mua 0/0, bán 2/3 (đúng/số lần chấm được). Kết luận: với coin lớn quy tắc gần như không nổ (BTC có biến động ngày lớn nhất 8,0% trong 90 ngày), nên tin chủ động sẽ rất thưa và tỉ lệ đúng ở cỡ mẫu 0–3 lần chưa nói được gì. Với coin nhỏ hơn có vài tín hiệu nhưng cũng chưa đủ mẫu. Việc cần quyết (owner): giữ ngưỡng, hay hạ (`SIGNAL_SWING_24H_PCT`/`SIGNAL_SWING_72H_PCT`) sau khi xem backtest vài coin. `DEPLOYMENT.md` bước 8c.2 đặt việc này thành bước bắt buộc trước khi báo người dùng.
 - **Hai suite e2e Redis dẫm lên nhau.** `price-alerts.redis` và `signals.redis` đều `flushdb` cùng một database; chạy song song thì 4 test lỗi ngẫu nhiên (đã xác nhận: tuần tự thì 84/84). CI không bị ảnh hưởng (cả hai tự bỏ qua khi không có URL). Đã ghi vào header test; cách sửa gọn hơn (mỗi suite một số database, hoặc tiền tố khoá) để thành việc riêng.
 - **`/tinhieu bat` trùng mã coin BAT.** Spec FR13 quy định `bat`/`tat` là công tắc; muốn xem coin BAT dùng `/gia bat`. Đã ghi ở comment parser và câu cú pháp sai; không đổi spec.
 - **Coin chỉ CoinPaprika biết không có lịch sử.** Không lấp được, tích luỹ từ lượt đầu, hiện "chưa đủ dữ liệu" 7 ngày (đúng plan §1).
@@ -105,6 +105,23 @@ Những điều tìm thấy và **chưa** làm:
 7. **Cách đếm tín hiệu liên tiếp trong backtest** (các ngày liên tiếp cùng nhận định tính một lần) là lựa chọn của kế hoạch, spec chưa nói; bước verify nên kiểm lại và nếu owner muốn cách khác thì chỉ đổi một hàm (`runBacktest`).
 8. Backtest tính cả ngày hiện tại (chưa đủ ngày) là một điểm cuối; không ảnh hưởng tín hiệu đã chấm vì cần đủ 3 ngày sau.
 
-## 7. Next step
+## 7. Rework after verify (revision 2)
+
+Báo cáo verify rev 1 (`verify.md`): fail, 16/18 pass, AC10 fail, AC04 untested. Đã sửa trong vòng này:
+
+| Finding | Việc đã làm | Kiểm bằng |
+|---|---|---|
+| 1 (AC10) | `/tinhieu <coin>` cho coin không mạnh in thêm "ở N% khoảng 7 ngày ($thấp–$cao)" | `format-signals.util.spec.ts` |
+| 2 | Sửa §3.2 và §5 của tệp này bằng backtest ngưỡng mặc định (bảng ở §5) | chạy `runBacktest` trên dữ liệu thật, 5 coin |
+| 6 | Giá hiện tại ≤ 0 hoặc không hữu hạn → `insufficientData`, không còn "mua −100%" | `signal-evaluator.spec.ts` (4 giá xấu) |
+| 7 | `getMarketChart` phân biệt 404 (`CoingeckoCoinNotFoundError`: CoinGecko không biết coin) với 429/lỗi khác; chỉ 404 mới ra "chưa đủ lịch sử", 429 ra thông báo "tạm thời không lấy được giá" | `coingecko.service.spec.ts`, `signals.service.spec.ts` |
+| 9 | Phần bản tin khi không coin nào mạnh luôn **một dòng** (coin thiếu dữ liệu nằm trong ngoặc); chat không có coin nào có giá thì không có phần "Tín hiệu" thay vì nói "không có coin nào dao động mạnh" | `format-signals.util.spec.ts`, `digest.controller.spec.ts` |
+| 10 | Bản ghi nhận định dùng `HSETNX` trên hash theo chat (field `coin:nhận-định:ngày`), không phải `ZADD NX` như plan §2; hành vi tương đương, test Redis thật xác nhận | `signals.redis.e2e-spec.ts` |
+
+**Không sửa, có chủ đích:** #3 (vòng phản hồi không phủ AC04 ≤ 30 phút, NFR01/02/04, ngân sách Upstash, Lua trên Upstash thật: chỉ kiểm được sau deploy), #4 và #5 (lấp lịch sử thêm lệnh `market_chart` và tin đầu tiên của chat nhiều coin mới chưa gộp đủ: plan §1 đã chấp nhận), #8 (chat chặn bot bị thử lại mỗi lượt: quy mô nhỏ, nên cân nhắc đánh dấu sau N lần từ chối nếu có nhiều chat), #11 (`/tinhieu tatt` gõ nhầm bị hiểu là coin).
+
+Sau vòng sửa: `npx jest` 33 suite, 485 test pass; `tsc`, `eslint` (thư mục đã sửa) không lỗi.
+
+## 8. Next step
 
 Bấm **"Mark step done"** cho `implement` để chuyển sang `verify`. Trước đó, nếu muốn: mở PR bằng liên kết ở §1.

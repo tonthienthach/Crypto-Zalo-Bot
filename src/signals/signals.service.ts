@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CoingeckoService, CoingeckoUnavailableError } from '../coingecko/coingecko.service';
+import { CoingeckoCoinNotFoundError, CoingeckoService } from '../coingecko/coingecko.service';
 import { pricesBySymbol } from '../portfolio/portfolio-prices';
 import {
   BacktestResult,
@@ -151,7 +151,11 @@ export class SignalsService {
     return scoreRecords(records, merged, now);
   }
 
-  /** CoinGecko's chart as kept points; none for a coin CoinGecko does not know (e.g. CoinPaprika-only). */
+  /**
+   * CoinGecko's chart as kept points; none for a coin CoinGecko does not know (404, e.g.
+   * CoinPaprika-only). A rate limit or outage is not swallowed: the caller says "try later"
+   * instead of reporting a history of 0 days.
+   */
   private async chartPoints(
     symbol: string,
     now: number,
@@ -162,7 +166,7 @@ export class SignalsService {
         now,
       );
     } catch (error) {
-      if (!(error instanceof CoingeckoUnavailableError)) throw error;
+      if (!(error instanceof CoingeckoCoinNotFoundError)) throw error;
       return { hourly: [], daily: [] };
     }
   }

@@ -69,6 +69,9 @@ export function evaluateSignal(
     priceUsd: nowPrice,
   };
 
+  // A price of 0 (a dead coin, a bad feed) would read as a -100% swing and a "buy".
+  if (!Number.isFinite(nowPrice) || nowPrice <= 0) return empty;
+
   const oldest = points.reduce((min, point) => Math.min(min, point.t), Number.POSITIVE_INFINITY);
   const covered = oldest <= now - MIN_HISTORY_DAYS * DAY_MS + REFERENCE_TOLERANCE_MS;
   const change24hPct = changePct(priceNear(points, now - 24 * HOUR_MS), nowPrice);

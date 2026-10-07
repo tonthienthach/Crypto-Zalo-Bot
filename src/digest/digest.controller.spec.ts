@@ -442,6 +442,16 @@ describe('DigestController', () => {
       jest.restoreAllMocks();
     });
 
+    it('has no signals part for a chat none of whose coins were priced (verify finding 9)', async () => {
+      listActive.mockResolvedValue([sub('chat-a', ['btc']), sub('chat-b', ['eth'])]);
+      getSignalsForSymbols.mockResolvedValue([signal('eth', false)]);
+
+      await controller.sendDailyDigest();
+
+      expect(messageTo('chat-a')).toBe(formatDailyDigestReply([coin('btc', 100)], 25400));
+      expect(messageTo('chat-b')).toContain('Không có coin nào dao động mạnh');
+    });
+
     it('a chat that is not subscribed gets no digest and no signals (AC08)', async () => {
       listActive.mockResolvedValue([]);
 

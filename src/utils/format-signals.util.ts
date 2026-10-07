@@ -56,6 +56,13 @@ function positionPhrase(result: SignalResult): string {
   return `giá ${formatSignalUsd(result.priceUsd)} nằm ${where} khoảng 7 ngày (${position}, khoảng ${range})`;
 }
 
+/** Where the price sits in the 7-day range, e.g. "ở 40% khoảng 7 ngày ($80,000.00–$120,000.00)". */
+function formatRangePosition(result: SignalResult): string {
+  const position = `${Math.round(result.positionPct ?? 0)}%`;
+  const range = `${formatSignalUsd(result.rangeLow ?? 0)}–${formatSignalUsd(result.rangeHigh ?? 0)}`;
+  return `ở ${position} khoảng 7 ngày (${range})`;
+}
+
 /** The "why" of one verdict: the numbers it was built from (spec EPIC-004-FR02). */
 export function formatSignalReason(result: SignalResult): string {
   return `Lý do: ${formatSignedPercent(result.movePct)} trong ${windowLabel(result.window)}; ${positionPhrase(result)}.`;
@@ -96,7 +103,11 @@ export function formatSignalDigestSection(signals: CoinSignal[]): string {
         ]
       : [];
   if (strong.length === 0) {
-    return ['📡 Tín hiệu: Không có coin nào dao động mạnh.', ...lackingLine].join('\n');
+    const lackingNote =
+      lacking.length > 0
+        ? ` (chưa đủ dữ liệu: ${lacking.map((s) => s.symbol.toUpperCase()).join(', ')})`
+        : '';
+    return `📡 Tín hiệu: Không có coin nào dao động mạnh${lackingNote}.`;
   }
   return [
     '📡 Tín hiệu: coin đang dao động mạnh',
@@ -114,7 +125,7 @@ function formatSignalLine(signal: CoinSignal): string[] {
   }
   if (!isStrong(signal)) {
     return [
-      `➖ ${symbol}: ${formatSignalUsd(result.priceUsd)} · ${formatSignedPercent(result.change24hPct)} (24h) · ${formatSignedPercent(result.change72hPct)} (72h) — không dao động mạnh, không có nhận định.`,
+      `➖ ${symbol}: ${formatSignalUsd(result.priceUsd)} · ${formatSignedPercent(result.change24hPct)} (24h) · ${formatSignedPercent(result.change72hPct)} (72h) · ${formatRangePosition(result)} — không dao động mạnh, không có nhận định.`,
     ];
   }
   return formatStrongSignal(signal);

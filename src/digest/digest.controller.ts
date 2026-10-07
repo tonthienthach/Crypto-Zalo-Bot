@@ -207,6 +207,9 @@ export class DigestController {
       const shown = subscriber.watchlist
         .map((symbol) => signalsBySymbol.get(symbol))
         .filter((signal): signal is CoinSignal => signal !== undefined);
+      if (shown.length === 0) {
+        return { shown };
+      }
       return { section: formatSignalDigestSection(shown), shown };
     } catch (error) {
       run.signalFailures++;

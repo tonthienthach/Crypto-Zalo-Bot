@@ -25,6 +25,9 @@ import {
  */
 export class CoingeckoUnavailableError extends Error {}
 
+/** CoinGecko answered 404 for a coin id: it does not know the coin (it may still be known to CoinPaprika). */
+export class CoingeckoCoinNotFoundError extends CoingeckoUnavailableError {}
+
 /** Raised when none of the requested symbols could be resolved to a known coin id. */
 export class UnknownCoinSymbolsError extends Error {
   constructor(public readonly symbols: string[]) {
@@ -160,6 +163,10 @@ export class CoingeckoService {
       this.logger.error(
         `CoinGecko market_chart call failed for ${id}: ${(error as Error).message}`,
       );
+      const status = (error as { response?: { status?: number } }).response?.status;
+      if (status === 404) {
+        throw new CoingeckoCoinNotFoundError(`CoinGecko has no price history for ${id}`);
+      }
       throw new CoingeckoUnavailableError(`Failed to fetch price history for ${id} from CoinGecko`);
     }
   }

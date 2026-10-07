@@ -143,4 +143,20 @@ describe('evaluateSignal', () => {
     });
     expect(result.strong).toBe(true);
   });
+
+  describe('bad current price (verify finding 6)', () => {
+    it.each([0, -5, Number.NaN, Number.POSITIVE_INFINITY])(
+      'gives no verdict for a price of %s',
+      (price) => {
+        const result = evaluateSignal(
+          history(8, () => 100_000),
+          price,
+          NOW,
+        );
+        expect(result.insufficientData).toBe(true);
+        expect(result.strong).toBe(false);
+        expect(result.verdict).toBeNull();
+      },
+    );
+  });
 });
