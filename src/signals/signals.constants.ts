@@ -71,6 +71,9 @@ export const RUN_LOCK_TTL_SECONDS = 120;
 
 export const MAX_RUN_LOG_ENTRIES = 200;
 
+/** The send phase of one check run stops after this long; chats not reached get their message on the next run. */
+export const SIGNALS_SEND_BUDGET_MS = 20_000;
+
 export const REDIS_KEYS = {
   /** Sorted set per coin: score = hour bucket start, member = "<sample ms>:<usd>". */
   hourly: (symbol: string) => `signals:hour:${symbol}`,

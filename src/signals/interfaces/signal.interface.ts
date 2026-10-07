@@ -83,7 +83,8 @@ export interface Scorecard {
 
 export type SignalUsageKind = 'alert' | 'digest' | 'command';
 
-export type SignalRunOutcome = 'healthy' | 'degraded' | 'skipped' | 'failed';
+/** healthy: the run priced the coins and evaluated every chat; failed: the price lookup or a store failed; skipped: another run held the lock. */
+export type SignalRunOutcome = 'healthy' | 'skipped' | 'failed';
 
 /** One line in the capped run log; carries counts only, never a chat's verdicts (spec EPIC-004-AC17). */
 export interface SignalRunSummary {
@@ -91,6 +92,9 @@ export interface SignalRunSummary {
   outcome: SignalRunOutcome;
   coins: number;
   chatsAlerted: number;
+  /** Chats whose send failed or that errored; does not make the run unhealthy (a blocked chat would otherwise page the owner forever). */
   failures: number;
+  /** Chats left for the next run because the send budget ran out. */
+  deferred: number;
   durationMs: number;
 }

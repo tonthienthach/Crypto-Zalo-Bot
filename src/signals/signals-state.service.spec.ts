@@ -103,6 +103,7 @@ describe('SignalsStateService', () => {
       at: '2026-10-07T12:00:00.000Z',
       coins: 1,
       chatsAlerted: 0,
+      deferred: 0,
       failures: 0,
       durationMs: 5,
     };

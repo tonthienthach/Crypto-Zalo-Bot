@@ -18,6 +18,7 @@ process.env.KV_REST_API_URL = 'https://test-redis.upstash.io';
 process.env.KV_REST_API_TOKEN = 'test-redis-token';
 process.env.PRICE_ALERTS_CRON_SECRET = 'test-price-alerts-secret-1234';
 process.env.PRICE_ALERTS_WATCH_SECRET = 'test-price-alerts-watch-secret-1234';
+process.env.SIGNALS_CRON_SECRET = 'test-signals-cron-secret-1234';
 // OWNER_CHAT_ID deliberately unset: the app must boot without it (EPIC-002-FIX-AC11).
 delete process.env.OWNER_CHAT_ID;
 
@@ -80,6 +81,8 @@ describe('WebhookController (e2e)', () => {
   const recordSentVerdicts = jest.fn().mockResolvedValue(undefined);
   const setEnabled = jest.fn().mockResolvedValue(undefined);
   const recordUsage = jest.fn().mockResolvedValue(undefined);
+  const signalsAcquireRunLock = jest.fn();
+  const signalsRecordRun = jest.fn().mockResolvedValue(undefined);
   const mirrorOnSubscribed = jest.fn().mockResolvedValue(undefined);
   const mirrorOnWatchlistChanged = jest.fn().mockResolvedValue(undefined);
   const mirrorOnUnsubscribed = jest.fn().mockResolvedValue(undefined);
@@ -121,7 +124,12 @@ describe('WebhookController (e2e)', () => {
       .overrideProvider(SignalsService)
       .useValue({ getSignalFor, getSignalsForSymbols, backtest, scorecard, recordSentVerdicts })
       .overrideProvider(SignalsStateService)
-      .useValue({ setEnabled, recordUsage })
+      .useValue({
+        setEnabled,
+        recordUsage,
+        acquireRunLock: signalsAcquireRunLock,
+        recordRun: signalsRecordRun,
+      })
       .overrideProvider(SignalsSubscriptionsMirror)
       .useValue({
         onSubscribed: mirrorOnSubscribed,
@@ -766,6 +774,42 @@ describe('WebhookController (e2e)', () => {
       await send('/danhmuc mua btc 1 60000');
 
       expect(reply()).toContain('Tạm thời không truy cập được dữ liệu danh mục');
+    });
+  });
+
+  describe('GET /cron/signals (EPIC-004)', () => {
+    it('rejects a call with no secret or a wrong secret, running nothing', async () => {
+      await request(app.getHttpServer()).get('/cron/signals').expect(401);
+      await request(app.getHttpServer())
+        .get('/cron/signals')
+        .set('x-cron-secret-token', 'wrong-secret-0000')
+        .expect(401);
+      // Neither the digest secret nor the price-alert secret opens it (separate secrets).
+      await request(app.getHttpServer())
+        .get('/cron/signals')
+        .set('x-cron-secret-token', process.env.CRON_SECRET_TOKEN as string)
+        .expect(401);
+      await request(app.getHttpServer())
+        .get('/cron/signals')
+        .set('x-cron-secret-token', process.env.PRICE_ALERTS_CRON_SECRET as string)
+        .expect(401);
+
+      expect(signalsAcquireRunLock).not.toHaveBeenCalled();
+      expect(signalsRecordRun).not.toHaveBeenCalled();
+    });
+
+    it('runs for the scheduler secret and always answers 200 (skipped when the lock is held)', async () => {
+      signalsAcquireRunLock.mockResolvedValue(null);
+
+      const response = await request(app.getHttpServer())
+        .get('/cron/signals')
+        .set('x-cron-secret-token', process.env.SIGNALS_CRON_SECRET as string)
+        .expect(200);
+
+      expect(response.body).toEqual({ ok: true });
+      expect(signalsRecordRun).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: 'skipped' }),
+      );
     });
   });
 

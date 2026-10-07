@@ -231,6 +231,7 @@ describeIfRedis('Signals stores against a real Redis (integration)', () => {
         outcome,
         coins: 3,
         chatsAlerted: 1,
+        deferred: 0,
         failures: 0,
         durationMs: 900,
       });

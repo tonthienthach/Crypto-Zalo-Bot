@@ -147,6 +147,25 @@ that arrives while a previous run still holds the run lock is skipped.
 Every authenticated call is logged with its outcome (`healthy`, `no-price`,
 `failed`, `skipped`); rejected calls are counted, at most one write a minute.
 
+## `GET /cron/signals`
+
+Machine-triggered proactive signal check (EPIC-004), called every 30 minutes
+by cron-job.org (see docs/DEPLOYMENT.md). Any HTTP method is accepted. Each run
+reads only Redis (the watchlist mirror, price history, per-chat state), prices
+every watched coin with one lookup, saves the hour's sample, backfills history
+for coins seen for the first time, and sends each chat with a strongly swinging
+coin one merged message (see "Signals" above for the rules).
+
+**Authentication:** its **own** secret, `SIGNALS_CRON_SECRET` (not
+`CRON_SECRET_TOKEN` or `PRICE_ALERTS_CRON_SECRET`), as header
+`X-Cron-Secret-Token: <secret>` or `Authorization: Bearer <secret>`.
+Missing/incorrect, or the env var unset → `401`.
+
+**Response:** always `200 { "ok": true }` once authenticated, even when the
+price source, Zalo or Redis fail during the run (logged server-side as a
+`signals-run` line with counts only — never a chat's verdicts). A call that
+arrives while a previous run holds the run lock is skipped.
+
 ## `GET /cron/price-alerts-watch`
 
 The watcher for the price-alert check (EPIC-002-FIX), called every 5
