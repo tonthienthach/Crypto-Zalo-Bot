@@ -4,6 +4,7 @@ import { CoingeckoModule } from '../coingecko/coingecko.module';
 import { SignalsCronSecretGuard } from '../common/guards/signals-cron-secret.guard';
 import { ZaloModule } from '../zalo/zalo.module';
 import { SignalsController } from './signals.controller';
+import { SignalsMonitorService } from './signals-monitor.service';
 import { SignalsHistoryService } from './signals-history.service';
 import { SignalsStateService } from './signals-state.service';
 import { SignalsSubscriptionsMirror } from './signals-subscriptions-mirror';
@@ -17,8 +18,9 @@ import { SignalsService } from './signals.service';
     SignalsHistoryService,
     SignalsStateService,
     SignalsService,
+    SignalsMonitorService,
     SignalsSubscriptionsMirror,
   ],
-  exports: [SignalsService, SignalsStateService, SignalsSubscriptionsMirror],
+  exports: [SignalsService, SignalsStateService, SignalsSubscriptionsMirror, SignalsMonitorService],
 })
 export class SignalsModule {}

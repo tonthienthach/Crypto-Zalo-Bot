@@ -246,6 +246,26 @@ describeIfRedis('Signals stores against a real Redis (integration)', () => {
       expect(await state.getLastHealthyAt()).toBe('2026-10-07T12:00:00.000Z');
     });
 
+    it('records an outage once, updates it, and hands it to exactly one taker', async () => {
+      const outage = { since: '2026-10-07T10:00:00.000Z', notifiedAt: '2026-10-07T11:30:00.000Z' };
+      expect(await state.getOutage()).toBeNull();
+      expect(await state.claimOutage(outage)).toBe(true);
+      expect(await state.claimOutage({ ...outage, notifiedAt: 'later' })).toBe(false);
+      expect(await state.getOutage()).toEqual(outage);
+
+      const reminded = { ...outage, notifiedAt: '2026-10-07T17:30:00.000Z' };
+      await state.setOutage(reminded);
+      expect(await state.getOutage()).toEqual(reminded);
+
+      expect(await state.takeOutage()).toEqual(reminded);
+      expect(await state.takeOutage()).toBeNull();
+      expect(await state.getOutage()).toBeNull();
+
+      await state.claimOutage(outage);
+      await state.clearOutage();
+      expect(await state.getOutage()).toBeNull();
+    });
+
     it('counts usage per chat and kind per day', async () => {
       await state.recordUsage('c1', 'command', NOW);
       await state.recordUsage('c1', 'command', NOW);

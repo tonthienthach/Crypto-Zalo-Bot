@@ -6,8 +6,8 @@ import {
   formatScorecardReply,
   formatSignalAlertMessage,
   formatSignalDigestSection,
-  formatSignalDigestUnavailableSection,
   formatSignalInvalidReply,
+  formatSignalsMonitorMessage,
   formatSignalNoWatchlistReply,
   formatSignalReply,
   formatSignalToggleReply,
@@ -100,10 +100,6 @@ describe('formatSignalDigestSection', () => {
     expect(formatSignalDigestSection([ethMild, solThin])).toContain(
       'Chưa đủ dữ liệu (cần 7 ngày): SOL',
     );
-  });
-
-  it('has an unavailable line', () => {
-    expect(formatSignalDigestUnavailableSection()).toContain('tạm thời không có số liệu');
   });
 
   it('sits between the prices and the portfolio in the digest', () => {
@@ -218,5 +214,40 @@ describe('other replies', () => {
     expect(help).toContain('/tinhieu backtest');
     expect(help).toContain('/tinhieu thongke');
     expect(help).toContain('/tinhieu tat');
+  });
+});
+
+describe('formatSignalsMonitorMessage', () => {
+  const lastHealthyAt = '2026-10-07T10:00:00.000Z';
+
+  it('tells the owner since when the check is silent, for how long, and where to look', () => {
+    const text = formatSignalsMonitorMessage(
+      { kind: 'down', lastHealthyAt, silentForMs: 95 * 60_000 },
+      'failed',
+    );
+    expect(text).toContain('ngừng chạy');
+    expect(text).toContain('17:00 07/10');
+    expect(text).toContain('1 giờ 35 phút');
+    expect(text).toContain('/cron/signals');
+  });
+
+  it('words a reminder and a recovery differently', () => {
+    expect(
+      formatSignalsMonitorMessage(
+        { kind: 'reminder', since: lastHealthyAt, lastHealthyAt, silentForMs: 7 * 3_600_000 },
+        null,
+      ),
+    ).toContain('vẫn chưa chạy lại');
+    expect(
+      formatSignalsMonitorMessage(
+        {
+          kind: 'recovered',
+          since: lastHealthyAt,
+          recoveredAt: lastHealthyAt,
+          downForMs: 3_600_000,
+        },
+        null,
+      ),
+    ).toContain('đã chạy lại');
   });
 });

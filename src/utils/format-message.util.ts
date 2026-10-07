@@ -609,7 +609,7 @@ export function formatGenericErrorReply(): string {
 }
 
 /** "14:05 25/09" in Vietnam time, for monitoring messages. */
-function formatIctDateTime(isoTimestamp: string): string {
+export function formatIctDateTime(isoTimestamp: string): string {
   const ict = new Date(Date.parse(isoTimestamp) + ICT_OFFSET_MS);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(ict.getUTCHours())}:${pad(ict.getUTCMinutes())} ${pad(ict.getUTCDate())}/${pad(

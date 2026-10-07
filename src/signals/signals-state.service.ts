@@ -6,6 +6,7 @@ import {
   ChatSignalState,
   SignalRecord,
   SignalRunSummary,
+  SignalsOutage,
   SignalUsageKind,
 } from './interfaces/signal.interface';
 import {
@@ -17,6 +18,7 @@ import {
   RECORD_TTL_DAYS,
   REDIS_KEYS,
   RUN_LOCK_TTL_SECONDS,
+  SIGNALS_OUTAGE_TTL_SECONDS,
   USAGE_TTL_SECONDS,
 } from './signals.constants';
 
@@ -274,6 +276,36 @@ export class SignalsStateService {
     return raw
       .map((entry) => parseJson<SignalRunSummary>(entry))
       .filter((entry): entry is SignalRunSummary => entry !== null);
+  }
+
+  // ---- owner monitoring --------------------------------------------------
+
+  async getOutage(): Promise<SignalsOutage | null> {
+    return parseJson<SignalsOutage>(await this.redis.get<string>(REDIS_KEYS.outage));
+  }
+
+  /** Records a new outage unless one is already recorded: true for the one caller that wins. */
+  async claimOutage(outage: SignalsOutage): Promise<boolean> {
+    const result = await this.redis.set(REDIS_KEYS.outage, JSON.stringify(outage), {
+      nx: true,
+      ex: SIGNALS_OUTAGE_TTL_SECONDS,
+    });
+    return result === 'OK';
+  }
+
+  async setOutage(outage: SignalsOutage): Promise<void> {
+    await this.redis.set(REDIS_KEYS.outage, JSON.stringify(outage), {
+      ex: SIGNALS_OUTAGE_TTL_SECONDS,
+    });
+  }
+
+  async clearOutage(): Promise<void> {
+    await this.redis.del(REDIS_KEYS.outage);
+  }
+
+  /** Removes and returns the outage in one step, so only one caller sends the "recovered" message. */
+  async takeOutage(): Promise<SignalsOutage | null> {
+    return parseJson<SignalsOutage>(await this.redis.getdel<string>(REDIS_KEYS.outage));
   }
 
   /** ISO time of the last healthy run, or null when there has never been one. */

@@ -1,9 +1,10 @@
-import { formatUsd } from './format-message.util';
+import { formatDurationVi, formatIctDateTime, formatUsd } from './format-message.util';
 import {
   BacktestResult,
   CoinSignal,
   Scorecard,
   SignalResult,
+  SignalsMonitorAction,
   Verdict,
   VerdictTally,
 } from '../signals/interfaces/signal.interface';
@@ -91,11 +92,6 @@ export function formatSignalDigestSection(signals: CoinSignal[]): string {
     ...lackingLine,
     SIGNAL_DISCLAIMER,
   ].join('\n');
-}
-
-/** Digest line when the signals could not be computed (spec EPIC-004-AC09). */
-export function formatSignalDigestUnavailableSection(): string {
-  return '📡 Tín hiệu: tạm thời không có số liệu.';
 }
 
 function formatSignalLine(signal: CoinSignal): string[] {
@@ -190,6 +186,35 @@ export function formatSignalToggleReply(enabled: boolean): string {
   return enabled
     ? '🔔 Đã bật tin tín hiệu chủ động (tối đa 1 tin mỗi giờ). Tắt lại: /tinhieu tat'
     : '🔕 Đã tắt tin tín hiệu chủ động. Phần "Tín hiệu" trong bản tin 9h sáng vẫn còn. Bật lại: /tinhieu bat';
+}
+
+const RUN_OUTCOME_HINTS: Record<string, string> = {
+  failed: 'lượt gần nhất bị lỗi (thường là nguồn giá hoặc Redis)',
+  skipped: 'lượt gần nhất bị bỏ qua vì lượt trước còn giữ lock',
+  healthy: 'lượt gần nhất chạy bình thường nhưng đã quá cũ',
+};
+
+/** Owner message about the signals check stopping or coming back (spec EPIC-004-NFR07). */
+export function formatSignalsMonitorMessage(
+  action: SignalsMonitorAction,
+  lastRunOutcome: string | null,
+): string {
+  if (action.kind === 'recovered') {
+    return [
+      '✅ Tín hiệu: lượt kiểm tra đã chạy lại.',
+      `Lượt chạy tốt gần nhất: ${formatIctDateTime(action.recoveredAt)} (ICT). Gián đoạn khoảng ${formatDurationVi(action.downForMs)}.`,
+    ].join('\n');
+  }
+  const hint = lastRunOutcome
+    ? (RUN_OUTCOME_HINTS[lastRunOutcome] ?? `lượt gần nhất: ${lastRunOutcome}`)
+    : 'không có lượt nào được ghi gần đây (job cron-job.org có thể đã dừng hoặc sai secret)';
+  return [
+    action.kind === 'down'
+      ? '⚠️ Tín hiệu: lượt kiểm tra ngừng chạy.'
+      : '⚠️ Tín hiệu: lượt kiểm tra vẫn chưa chạy lại.',
+    `Không có lượt chạy tốt nào từ ${formatIctDateTime(action.lastHealthyAt)} (ICT), đã ${formatDurationVi(action.silentForMs)}.`,
+    `Gợi ý: ${hint}. Xem job /cron/signals trên cron-job.org và log trên Vercel.`,
+  ].join('\n');
 }
 
 /** Reply for "/tinhieu ..." with arguments that match no valid syntax. */

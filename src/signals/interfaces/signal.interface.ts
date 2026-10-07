@@ -81,6 +81,19 @@ export interface Scorecard {
   pending: number;
 }
 
+/** An outage of the signals check the owner was told about. */
+export interface SignalsOutage {
+  /** The last healthy run before the silence started. */
+  since: string;
+  /** When the owner was last messaged about it. */
+  notifiedAt: string;
+}
+
+export type SignalsMonitorAction =
+  | { kind: 'down'; lastHealthyAt: string; silentForMs: number }
+  | { kind: 'reminder'; since: string; lastHealthyAt: string; silentForMs: number }
+  | { kind: 'recovered'; since: string; recoveredAt: string; downForMs: number };
+
 export type SignalUsageKind = 'alert' | 'digest' | 'command';
 
 /** healthy: the run priced the coins and evaluated every chat; failed: the price lookup or a store failed; skipped: another run held the lock. */

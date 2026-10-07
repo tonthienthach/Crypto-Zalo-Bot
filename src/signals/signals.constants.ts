@@ -71,6 +71,15 @@ export const RUN_LOCK_TTL_SECONDS = 120;
 
 export const MAX_RUN_LOG_ENTRIES = 200;
 
+/** The owner is told when no healthy signals run has happened for this long: three missed 30-minute runs (spec EPIC-004-NFR07). */
+export const SIGNALS_STALE_MS = 90 * 60_000;
+
+/** While the check stays down the owner gets at most one reminder per this window. */
+export const SIGNALS_REMINDER_MS = 6 * 60 * 60_000;
+
+/** The recorded outage is dropped by Redis after this long if nothing clears it. */
+export const SIGNALS_OUTAGE_TTL_SECONDS = 30 * 86_400;
+
 /** The send phase of one check run stops after this long; chats not reached get their message on the next run. */
 export const SIGNALS_SEND_BUDGET_MS = 20_000;
 
@@ -96,4 +105,6 @@ export const REDIS_KEYS = {
   runLock: 'signals:run-lock',
   runs: 'signals:runs',
   lastHealthy: 'signals:last-healthy',
+  /** JSON SignalsOutage while the owner has been told the check is down. */
+  outage: 'signals:outage',
 } as const;
