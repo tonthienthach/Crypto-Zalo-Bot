@@ -251,3 +251,52 @@ describe('formatSignalsMonitorMessage', () => {
     ).toContain('đã chạy lại');
   });
 });
+
+describe('price formatting in signal messages', () => {
+  it('shows whole cents for ordinary prices, not six decimals', () => {
+    const text = formatSignalAlertMessage([
+      {
+        symbol: 'btc',
+        result: {
+          insufficientData: false,
+          change24hPct: -2.8,
+          change72hPct: -2.2,
+          strong: true,
+          direction: 'down',
+          movePct: -2.8,
+          window: '24h',
+          rangeLow: 83185.105519,
+          rangeHigh: 86789.894787,
+          positionPct: 5,
+          verdict: 'buy',
+          priceUsd: 83369,
+        },
+      },
+    ]);
+    expect(text).toContain('$83,185.11–$86,789.89');
+    expect(text).not.toContain('105519');
+  });
+
+  it('keeps precision for sub-dollar coins', () => {
+    const text = formatSignalReply([
+      {
+        symbol: 'shib',
+        result: {
+          insufficientData: false,
+          change24hPct: 1,
+          change72hPct: 1,
+          strong: false,
+          direction: null,
+          movePct: null,
+          window: null,
+          rangeLow: 0.000012,
+          rangeHigh: 0.000013,
+          positionPct: 50,
+          verdict: null,
+          priceUsd: 0.0000125,
+        },
+      },
+    ]);
+    expect(text).toContain('$0.0000');
+  });
+});

@@ -23,6 +23,18 @@ const VERDICT_LABELS: Record<Verdict, string> = {
 const SIGNAL_SYNTAX_EXAMPLE =
   'Ví dụ: /tinhieu · /tinhieu eth · /tinhieu backtest btc · /tinhieu thongke · /tinhieu tat';
 
+const SIGNAL_USD_FORMATTER = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/** Whole cents for ordinary prices (a range like $83,185.105519 reads badly); full precision below $1. */
+function formatSignalUsd(amount: number): string {
+  return amount >= 1 ? SIGNAL_USD_FORMATTER.format(amount) : formatUsd(amount);
+}
+
 function formatSignedPercent(percent: number | null): string {
   if (percent === null || Number.isNaN(percent)) return 'N/A';
   return `${percent >= 0 ? '+' : ''}${percent.toFixed(1)}%`;
@@ -38,10 +50,10 @@ function windowLabel(window: SignalResult['window']): string {
 
 function positionPhrase(result: SignalResult): string {
   const position = `${Math.round(result.positionPct ?? 0)}%`;
-  const range = `${formatUsd(result.rangeLow ?? 0)}–${formatUsd(result.rangeHigh ?? 0)}`;
+  const range = `${formatSignalUsd(result.rangeLow ?? 0)}–${formatSignalUsd(result.rangeHigh ?? 0)}`;
   const where =
     result.verdict === 'buy' ? 'gần đáy' : result.verdict === 'sell' ? 'gần đỉnh' : 'ở giữa';
-  return `giá ${formatUsd(result.priceUsd)} nằm ${where} khoảng 7 ngày (${position}, khoảng ${range})`;
+  return `giá ${formatSignalUsd(result.priceUsd)} nằm ${where} khoảng 7 ngày (${position}, khoảng ${range})`;
 }
 
 /** The "why" of one verdict: the numbers it was built from (spec EPIC-004-FR02). */
@@ -102,7 +114,7 @@ function formatSignalLine(signal: CoinSignal): string[] {
   }
   if (!isStrong(signal)) {
     return [
-      `➖ ${symbol}: ${formatUsd(result.priceUsd)} · ${formatSignedPercent(result.change24hPct)} (24h) · ${formatSignedPercent(result.change72hPct)} (72h) — không dao động mạnh, không có nhận định.`,
+      `➖ ${symbol}: ${formatSignalUsd(result.priceUsd)} · ${formatSignedPercent(result.change24hPct)} (24h) · ${formatSignedPercent(result.change72hPct)} (72h) — không dao động mạnh, không có nhận định.`,
     ];
   }
   return formatStrongSignal(signal);
