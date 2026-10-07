@@ -4,6 +4,10 @@ import { Test } from '@nestjs/testing';
 import { CoingeckoService, UnknownCoinSymbolsError } from '../coingecko/coingecko.service';
 import { PortfolioTrade } from '../portfolio/interfaces/portfolio.interface';
 import { PortfolioService } from '../portfolio/portfolio.service';
+import { CoinSignal } from '../signals/interfaces/signal.interface';
+import { SignalsStateService } from '../signals/signals-state.service';
+import { SignalsSubscriptionsMirror } from '../signals/signals-subscriptions-mirror';
+import { SignalsService } from '../signals/signals.service';
 import { SubscribersService } from '../subscribers/subscribers.service';
 import { formatDailyDigestReply } from '../utils/format-message.util';
 import { ZaloService } from '../zalo/zalo.service';
@@ -15,6 +19,10 @@ describe('DigestController', () => {
   let sendTextMessage: jest.Mock;
   let listActive: jest.Mock;
   let listTradesForChats: jest.Mock;
+  let getSignalsForSymbols: jest.Mock;
+  let recordSentVerdicts: jest.Mock;
+  let recordUsage: jest.Mock;
+  let syncAll: jest.Mock;
 
   const config: Record<string, unknown> = {
     'currency.usdToVndRate': 25400,
@@ -26,6 +34,12 @@ describe('DigestController', () => {
     sendTextMessage = jest.fn().mockResolvedValue(true);
     listActive = jest.fn();
     listTradesForChats = jest.fn().mockResolvedValue(new Map());
+    // Signals are off unless a test turns them on, so the older tests still see the digest as before.
+    getSignalsForSymbols = jest.fn().mockRejectedValue(new Error('signals not under test'));
+    jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    recordSentVerdicts = jest.fn().mockResolvedValue(undefined);
+    recordUsage = jest.fn().mockResolvedValue(undefined);
+    syncAll = jest.fn().mockResolvedValue(undefined);
 
     const moduleRef = await Test.createTestingModule({
       controllers: [DigestController],
@@ -38,6 +52,9 @@ describe('DigestController', () => {
         { provide: ConfigService, useValue: { get: (key: string) => config[key] } },
         { provide: SubscribersService, useValue: { listActive } },
         { provide: PortfolioService, useValue: { listTradesForChats } },
+        { provide: SignalsService, useValue: { getSignalsForSymbols, recordSentVerdicts } },
+        { provide: SignalsSubscriptionsMirror, useValue: { syncAll } },
+        { provide: SignalsStateService, useValue: { recordUsage } },
       ],
     }).compile();
 
@@ -273,6 +290,165 @@ describe('DigestController', () => {
 
       expect(sendTextMessage).not.toHaveBeenCalled();
       jest.restoreAllMocks();
+    });
+  });
+
+  describe('signals section (EPIC-004)', () => {
+    const sub = (chatId: string, watchlist: string[]) => ({
+      chatId,
+      watchlist,
+      isActive: true,
+      createdAt: new Date(),
+    });
+    const coin = (symbol: string, priceUsd: number) => ({
+      id: symbol,
+      symbol,
+      name: symbol.toUpperCase(),
+      priceUsd,
+      changePercent24h: 1,
+    });
+    const signal = (symbol: string, strong: boolean): CoinSignal => ({
+      symbol,
+      result: {
+        insufficientData: false,
+        change24hPct: strong ? -16 : 1,
+        change72hPct: strong ? -12 : 1,
+        strong,
+        direction: strong ? 'down' : null,
+        movePct: strong ? -16 : null,
+        window: strong ? '24h' : null,
+        rangeLow: 80_000,
+        rangeHigh: 120_000,
+        positionPct: 10,
+        verdict: strong ? 'buy' : null,
+        priceUsd: 84_000,
+      },
+    });
+    const messageTo = (chatId: string): string =>
+      sendTextMessage.mock.calls.find(([id]) => id === chatId)?.[1] as string;
+
+    beforeEach(() => {
+      getSignalsForSymbols.mockResolvedValue([]);
+      getPricesBySymbols.mockImplementation(async (symbols: string[]) =>
+        symbols.map((symbol) => coin(symbol, 100)),
+      );
+    });
+
+    it('AC08: adds the "Tín hiệu" part with the verdict for a strong coin, after the prices', async () => {
+      listActive.mockResolvedValue([sub('chat-a', ['btc'])]);
+      getSignalsForSymbols.mockResolvedValue([signal('btc', true)]);
+
+      await controller.sendDailyDigest();
+
+      const text = messageTo('chat-a');
+      expect(text).toContain('📡 Tín hiệu');
+      expect(text).toContain('Cân nhắc mua');
+      expect(text.indexOf('Giá') === -1 || text.indexOf('📡') > text.indexOf('BTC (BTC)')).toBe(
+        true,
+      );
+    });
+
+    it('AC08: says "Không có coin nào dao động mạnh" in one line when nothing swings', async () => {
+      listActive.mockResolvedValue([sub('chat-a', ['btc'])]);
+      getSignalsForSymbols.mockResolvedValue([signal('btc', false)]);
+
+      await controller.sendDailyDigest();
+
+      expect(messageTo('chat-a')).toContain('Không có coin nào dao động mạnh');
+      expect(recordSentVerdicts).toHaveBeenCalledWith(
+        'chat-a',
+        [expect.anything()],
+        expect.any(Number),
+      );
+    });
+
+    it('AC08: looks signals up once for all chats, over the union of their watchlists', async () => {
+      listActive.mockResolvedValue([sub('chat-a', ['btc', 'eth']), sub('chat-b', ['eth', 'sol'])]);
+
+      await controller.sendDailyDigest();
+
+      expect(getSignalsForSymbols).toHaveBeenCalledTimes(1);
+      expect(getSignalsForSymbols).toHaveBeenCalledWith(['btc', 'eth', 'sol'], expect.any(Number));
+    });
+
+    it('syncs the watchlist mirror from the active subscribers', async () => {
+      const subscribers = [sub('chat-a', ['btc'])];
+      listActive.mockResolvedValue(subscribers);
+
+      await controller.sendDailyDigest();
+
+      expect(syncAll).toHaveBeenCalledWith(subscribers);
+    });
+
+    it('AC09: when signals cannot be computed the prices still go out, without the part', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      listActive.mockResolvedValue([sub('chat-a', ['btc']), sub('chat-b', ['eth'])]);
+      getSignalsForSymbols.mockRejectedValue(new Error('redis down'));
+
+      await controller.sendDailyDigest();
+
+      expect(messageTo('chat-a')).toBe(formatDailyDigestReply([coin('btc', 100)], 25400));
+      expect(messageTo('chat-b')).toBe(formatDailyDigestReply([coin('eth', 100)], 25400));
+      expect(recordSentVerdicts).not.toHaveBeenCalled();
+      jest.restoreAllMocks();
+    });
+
+    it('AC09: a failure while building one chat part never touches another chat', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      listActive.mockResolvedValue([sub('chat-a', ['btc']), sub('chat-b', ['eth'])]);
+      const broken = signal('btc', true);
+      (broken as unknown as { result: unknown }).result = null;
+      getSignalsForSymbols.mockResolvedValue([broken, signal('eth', true)]);
+
+      await controller.sendDailyDigest();
+
+      expect(messageTo('chat-a')).toBe(formatDailyDigestReply([coin('btc', 100)], 25400));
+      expect(messageTo('chat-b')).toContain('📡 Tín hiệu');
+      jest.restoreAllMocks();
+    });
+
+    it('records the verdicts and the use only after the digest was delivered', async () => {
+      listActive.mockResolvedValue([sub('chat-a', ['btc'])]);
+      getSignalsForSymbols.mockResolvedValue([signal('btc', true)]);
+
+      sendTextMessage.mockResolvedValueOnce(false);
+      await controller.sendDailyDigest();
+      expect(recordSentVerdicts).not.toHaveBeenCalled();
+      expect(recordUsage).not.toHaveBeenCalled();
+
+      sendTextMessage.mockResolvedValueOnce(true);
+      await controller.sendDailyDigest();
+      expect(recordSentVerdicts).toHaveBeenCalledWith(
+        'chat-a',
+        [expect.anything()],
+        expect.any(Number),
+      );
+      expect(recordUsage).toHaveBeenCalledWith('chat-a', 'digest', expect.any(Number));
+    });
+
+    it('does not count a delivered digest as failed when the bookkeeping throws', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      listActive.mockResolvedValue([sub('chat-a', ['btc'])]);
+      getSignalsForSymbols.mockResolvedValue([signal('btc', true)]);
+      recordSentVerdicts.mockRejectedValue(new Error('redis'));
+      const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+
+      await controller.sendDailyDigest();
+
+      const summary = log.mock.calls
+        .map(([message]) => String(message))
+        .find((message) => message.includes('daily-digest-run'))!;
+      expect(JSON.parse(summary)).toMatchObject({ sent: 1, failed: 0, signalSections: 1 });
+      jest.restoreAllMocks();
+    });
+
+    it('a chat that is not subscribed gets no digest and no signals (AC08)', async () => {
+      listActive.mockResolvedValue([]);
+
+      await controller.sendDailyDigest();
+
+      expect(sendTextMessage).not.toHaveBeenCalled();
+      expect(getSignalsForSymbols).not.toHaveBeenCalled();
     });
   });
 });

@@ -11,6 +11,10 @@ import { PortfolioTrade } from '../portfolio/interfaces/portfolio.interface';
 import { computeHoldings, computePortfolio } from '../portfolio/portfolio-calculator';
 import { pricesBySymbol } from '../portfolio/portfolio-prices';
 import { PortfolioService } from '../portfolio/portfolio.service';
+import { CoinSignal } from '../signals/interfaces/signal.interface';
+import { SignalsStateService } from '../signals/signals-state.service';
+import { SignalsSubscriptionsMirror } from '../signals/signals-subscriptions-mirror';
+import { SignalsService } from '../signals/signals.service';
 import { Subscriber } from '../subscribers/interfaces/subscriber.interface';
 import { SubscribersService } from '../subscribers/subscribers.service';
 import {
@@ -19,6 +23,7 @@ import {
   formatPortfolioDigestSection,
   formatPortfolioDigestUnavailableSection,
 } from '../utils/format-message.util';
+import { formatSignalDigestSection } from '../utils/format-signals.util';
 import { ZaloService } from '../zalo/zalo.service';
 
 /** One line per digest run, logged as JSON (spec EPIC-003-NFR09). */
@@ -32,6 +37,12 @@ interface DigestRunSummary {
   portfolioFailures: number;
   /** The one query loading every portfolio failed: no chat got a portfolio part. */
   portfolioLoadFailed: boolean;
+  /** Digests that carried a "Tín hiệu" part. */
+  signalSections: number;
+  /** Chats whose signals part could not be built (their prices still went out). */
+  signalFailures: number;
+  /** The one signals lookup failed: no chat got a signals part. */
+  signalLoadFailed: boolean;
 }
 
 /** Drift beyond this many minutes from the expected 09:00 ICT slot logs a warning, not just a log line. */
@@ -56,6 +67,9 @@ export class DigestController {
     private readonly configService: ConfigService,
     private readonly subscribersService: SubscribersService,
     private readonly portfolioService: PortfolioService,
+    private readonly signalsService: SignalsService,
+    private readonly signalsMirror: SignalsSubscriptionsMirror,
+    private readonly signalsState: SignalsStateService,
   ) {
     this.usdToVndRate = this.configService.get<number>('currency.usdToVndRate')!;
     this.cronTrackingEnabled = this.configService.get<boolean>('digest.cronTrackingEnabled')!;
@@ -79,11 +93,17 @@ export class DigestController {
       portfolioSections: 0,
       portfolioFailures: 0,
       portfolioLoadFailed: false,
+      signalSections: 0,
+      signalFailures: 0,
+      signalLoadFailed: false,
     };
     try {
       const subscribers = await this.subscribersService.listActive();
       run.subscribers = subscribers.length;
       const tradesByChat = await this.loadTrades(subscribers, run);
+      // Heals the Redis copy of the watchlists the signals check reads (never throws).
+      await this.signalsMirror.syncAll(subscribers);
+      const signalsBySymbol = await this.loadSignals(subscribers, run, invokedAt.getTime());
       // Sequential, not Promise.all: each subscriber's watchlist is fetched
       // and sent independently, so one subscriber's unknown-symbol typo or a
       // single failed send doesn't block or fail the rest of the run.
@@ -92,6 +112,8 @@ export class DigestController {
           subscriber,
           tradesByChat.get(subscriber.chatId) ?? [],
           run,
+          signalsBySymbol,
+          invokedAt.getTime(),
           cronTrackingLine,
         );
       }
@@ -141,10 +163,85 @@ export class DigestController {
     }
   }
 
+  /**
+   * Signals for every coin on any watchlist, in one lookup (spec
+   * EPIC-004-FR03, NFR03): no per-chat price call. If it fails, the digests
+   * go out with prices only; undefined means "no signals part for anyone".
+   */
+  private async loadSignals(
+    subscribers: Subscriber[],
+    run: DigestRunSummary,
+    now: number,
+  ): Promise<Map<string, CoinSignal> | undefined> {
+    const symbols = Array.from(new Set(subscribers.flatMap((s) => s.watchlist)));
+    if (symbols.length === 0) {
+      return new Map();
+    }
+    try {
+      const signals = await this.signalsService.getSignalsForSymbols(symbols, now);
+      return new Map(signals.map((signal) => [signal.symbol, signal]));
+    } catch (error) {
+      run.signalLoadFailed = true;
+      this.logger.error(
+        `Daily digest: signals not computed, sending prices only: ${
+          error instanceof Error ? error.name : String(error)
+        }`,
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * The "Tín hiệu" part of one chat's digest, in its own try/catch: a failure
+   * only drops this part (spec EPIC-004-AC09, NFR07).
+   */
+  private signalsPart(
+    subscriber: Subscriber,
+    signalsBySymbol: Map<string, CoinSignal> | undefined,
+    run: DigestRunSummary,
+  ): { section?: string; shown: CoinSignal[] } {
+    if (!signalsBySymbol) {
+      return { shown: [] };
+    }
+    try {
+      const shown = subscriber.watchlist
+        .map((symbol) => signalsBySymbol.get(symbol))
+        .filter((signal): signal is CoinSignal => signal !== undefined);
+      return { section: formatSignalDigestSection(shown), shown };
+    } catch (error) {
+      run.signalFailures++;
+      this.logger.error(
+        `Daily digest: signals of ${subscriber.chatId} not built: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return { shown: [] };
+    }
+  }
+
+  /**
+   * Once the digest went out: records the verdicts it carried (spec
+   * EPIC-004-FR11) and the use (FR12). Bookkeeping never fails the digest.
+   */
+  private async recordSignalsSent(chatId: string, shown: CoinSignal[], now: number): Promise<void> {
+    try {
+      await this.signalsService.recordSentVerdicts(chatId, shown, now);
+      await this.signalsState.recordUsage(chatId, 'digest', now);
+    } catch (error) {
+      this.logger.error(
+        `Daily digest: signal bookkeeping for ${chatId} failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
   private async sendToSubscriber(
     subscriber: Subscriber,
     trades: PortfolioTrade[],
     run: DigestRunSummary,
+    signalsBySymbol: Map<string, CoinSignal> | undefined,
+    now: number,
     cronTrackingLine?: string,
   ): Promise<void> {
     try {
@@ -168,6 +265,7 @@ export class DigestController {
         heldSymbols === undefined
           ? formatPortfolioDigestUnavailableSection()
           : this.portfolioSection(subscriber.chatId, trades, heldSymbols, coins, run);
+      const signals = this.signalsPart(subscriber, signalsBySymbol, run);
       const delivered = await this.zaloService.sendTextMessage(
         subscriber.chatId,
         formatDailyDigestReply(
@@ -175,11 +273,16 @@ export class DigestController {
           this.usdToVndRate,
           cronTrackingLine,
           portfolioSection,
+          signals.section,
         ),
       );
       // ZaloService never throws; a failed send resolves false (already logged there).
       if (delivered) {
         run.sent++;
+        if (signals.section) {
+          run.signalSections++;
+          await this.recordSignalsSent(subscriber.chatId, signals.shown, now);
+        }
       } else {
         run.failed++;
       }
