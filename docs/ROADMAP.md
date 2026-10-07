@@ -155,9 +155,24 @@ channels. Manual entry only (no exchange/wallet sync) for this epic.
 
 ## Initiative 4: Simple signals (volatility / basic indicators)
 
-**Status:** Idea
-**Why:** Differentiates from "just a price lookup" bot. Could reuse
-CoinGecko historical data or the existing CoinPaprika fallback.
+**Status:** In implementation on `feature/epic-004-simple-signals` (not merged,
+not deployed). `/tinhieu` shows which watchlist coins swing strongly (≥ 8% in
+24h or ≥ 15% in 72h) with a rule-based buy / sell / watch note from the 7-day
+range and a disclaimer; a "Tín hiệu" section in the 9am digest; a proactive
+message from `/cron/signals` (every 30 min, ≤ 1 per chat per hour, default on,
+`/tinhieu tat` to stop); `/tinhieu backtest <coin>` and `/tinhieu thongke`
+(scorecard of the verdicts actually sent).
+**Tracked as:** [`EPIC-004`](../docs/epics/EPIC-004/EPIC-004.md) — the owner's own
+need (the bot only shows price, not trend). Success metric: ≥ 1 non-owner chat
+uses `/tinhieu` on two different days within 30 days (`npm run signals:report`).
+Out of scope: paid tiers, non-Zalo channels, coins outside the watchlist for
+proactive messages, RSI/MACD, personal thresholds.
+**Decided:** all data in Upstash Redis (not Postgres) to keep Neon asleep; price
+history back-filled once per coin from CoinGecko `market_chart` (verified).
+**Deploy still needed (after merge):** set `SIGNALS_CRON_SECRET`, deploy, call
+`/cron/signals` once by hand, read `/tinhieu backtest btc`, then add the
+cron-job.org job (`docs/DEPLOYMENT.md` step 8c). No Postgres migration.
+**Why:** Differentiates from a "just a price lookup" bot.
 
 ## Initiative 5: Multi-channel (Telegram, Messenger)
 

@@ -280,8 +280,13 @@ export class SignalsStateService {
 
   // ---- owner monitoring --------------------------------------------------
 
-  async getOutage(): Promise<SignalsOutage | null> {
-    return parseJson<SignalsOutage>(await this.redis.get<string>(REDIS_KEYS.outage));
+  /** The last healthy run and the recorded outage in one command, for the watcher's look every 5 minutes. */
+  async getHealthAndOutage(): Promise<[string | null, SignalsOutage | null]> {
+    const [lastHealthy, outage] = await this.redis.mget<(string | null)[]>(
+      REDIS_KEYS.lastHealthy,
+      REDIS_KEYS.outage,
+    );
+    return [lastHealthy ?? null, parseJson<SignalsOutage>(outage)];
   }
 
   /** Records a new outage unless one is already recorded: true for the one caller that wins. */

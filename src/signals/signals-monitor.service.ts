@@ -30,14 +30,11 @@ export class SignalsMonitorService {
   /**
    * One look at the check's health. The outage is recorded before a "down" is
    * sent (SET NX), so two overlapping watcher calls can't both send it; a
-   * failed send gives the claim back so the next call retries. Reads cost two
-   * Redis commands per call while healthy.
+   * failed send gives the claim back so the next call retries. Reads cost one
+   * Redis command per call while healthy.
    */
   async check(now: Date = new Date()): Promise<void> {
-    const [lastHealthyAt, outage] = await Promise.all([
-      this.state.getLastHealthyAt(),
-      this.state.getOutage(),
-    ]);
+    const [lastHealthyAt, outage] = await this.state.getHealthAndOutage();
     const action = evaluateSignalsMonitor(lastHealthyAt, outage, now);
     if (!action) return;
     if (!this.ownerChatId) {

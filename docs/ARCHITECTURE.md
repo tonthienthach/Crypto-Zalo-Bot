@@ -46,6 +46,7 @@ the reply is never carried in the webhook's own response body.
 | `command-parser/` | Pure text-parsing service: turns a raw chat message into a `ParsedCommand` (`PRICE`, `TOP_MARKETS`, `HELP`, `SUBSCRIBE`, `UNSUBSCRIBE`, `WATCHLIST`, `ALERT_CREATE`/`ALERT_LIST`/`ALERT_DELETE`/`ALERT_INVALID`, `UNKNOWN`). No I/O, fully unit-testable, handles accented/unaccented Vietnamese. |
 | `subscribers/` | `SubscribersService` — CRUD over the `subscribers` table (Vercel Postgres / Neon) backing `/dangky`, `/huy`, `/watchlist`, and the daily digest recipient list. See "Persistence" below. |
 | `price-alerts/` | `PriceAlertsService` — alert storage in Upstash Redis (`/canhbao`); `PriceAlertsController` — `/cron/price-alerts`, the per-minute check, guarded by `PriceAlertsCronSecretGuard`; `evaluateAlert()` — the pure fire / re-arm / cooldown rules; `PriceAlertsWatchController` — `/cron/price-alerts-watch`, the watcher that tells the owner when the check stops, guarded by `PriceAlertsWatchSecretGuard`; `evaluateMonitor()` / `evaluateWatchdog()` — the pure monitoring rules. See "Price alerts" below. |
+| `signals/` | `SignalsService` / `SignalsController` — `/tinhieu` and `/cron/signals`, the 30-minute proactive check, guarded by `SignalsCronSecretGuard`; `evaluateSignal()` — the pure strong-swing and buy/sell/watch rules; `selectCoinsToAlert()` — the pure 1-per-hour and no-repeat rules; `runBacktest()` / `scoreRecords()` — the pure backtest and scorecard; `SignalsHistoryService` / `SignalsStateService` — price history and small state in Upstash Redis; `SignalsSubscriptionsMirror` — keeps a Redis copy of each chat's watchlist; `SignalsMonitorService` — tells the owner when the check stops. See "Signals" below. |
 | `portfolio/` | `PortfolioService` — each chat's manually entered trades in Postgres (`portfolio_trades`, `portfolio_usage`) backing `/danhmuc`; `computeHoldings()` / `computePortfolio()` — the pure weighted-average cost and valuation rules; `pricesBySymbol()` — matches one price lookup back to held symbols. See "Portfolio" below. |
 | `zalo/` | Talks to the Zalo Bot "send message" API. Never throws — a failed send is logged and swallowed so an outbound Zalo outage can't turn into an unhandled webhook exception. Resolves `true`/`false` so callers that care (the alert check) know whether the send landed. |
 | `webhook/` | `WebhookController` — the only place that wires parsing + CoinGecko + Zalo + Subscribers together. Guarded by `WebhookSecretGuard`, DTO-validated by `ZaloWebhookDto`. Always acknowledges 200 to Zalo. |
@@ -340,6 +341,30 @@ Upstash QStash (every 5 min) --> /cron/price-alerts-watch  reads monitor state +
   normally, ~339k worst case, under the 400k target (80% of the free 500k).
   These are estimates from the per-run command count, not dashboard figures:
   check Upstash → Usage after deploy. Postgres is never touched.
+
+### Signals (Upstash Redis + external 30-minute scheduler)
+
+`/tinhieu` says which watchlist coins are swinging strongly (≥ 8% in 24h or ≥ 15% in 72h) and, only then, gives a rule-based buy / sell / watch note from the coin's position in its 7-day range (bottom 25% → buy, top 25% → sell, otherwise watch), always with a not-investment-advice disclaimer. The same rules feed three places: the command, a "Tín hiệu" section in the 9am digest, and a proactive message from `/cron/signals` (at most one per chat per hour; the same coin and direction not repeated within 24h unless the move grew by 5 points). Full spec and plan: `docs/epics/EPIC-004/`.
+
+```
+cron-job.org (every 30 min)
+   |  GET /cron/signals   X-Cron-Secret-Token: <SIGNALS_CRON_SECRET>
+   v
+SignalsController --> run lock (SET NX EX 120)
+                  --> Redis: watchlist mirror, tracked extras, off-set, per-chat sent state  (4 reads)
+                  --> CoingeckoService.getPricesBySymbols()   (ONE call, every watched coin)
+                  --> SignalsHistoryService: snapshot (1 EVAL), backfill new coins, load 8d hourly (1 EVAL)
+                  --> evaluateSignal() per coin; selectCoinsToAlert() per chat
+                  --> ZaloService.sendTextMessage() true? -> sent state + verdict records
+```
+
+- **Why Redis, not Postgres**: same reason as price alerts — a run every 30 minutes would keep the Neon compute awake. The watchlists live in Postgres (`subscribers`), so a Redis **mirror** (hash chatId → symbols) is updated by `/dangky`, `/watchlist` and `/huy`, and re-synced in full by every 9am digest run, which already reads the subscribers. A missed update is therefore wrong for at most a day. The check itself never queries Postgres.
+- **History**: per coin, hourly points for 8 days and the last point of each day for 90 days (sorted sets; the Lua scripts replace the same hour/day so a double run is idempotent). A coin seen for the first time is back-filled once from CoinGecko `/coins/{id}/market_chart?days=90` (hourly points, verified keyless, ~223 KB per coin; at most 5 coins per run, a failed coin is held for 2h). CoinPaprika's free tier has no history, so a coin only CoinPaprika knows accumulates from its first run and shows "chưa đủ dữ liệu" for 7 days.
+- **Scorecard computed on read**: each verdict that was really sent is stored once per chat, coin, verdict and day. `/tinhieu thongke` and `npm run signals:report` score them against stored prices when asked — right if the first price at or after +72h is higher (buy) / lower (sell). No scoring cron. Coins asked about outside any watchlist are tracked for 4 days (max 50) so their verdicts can be scored too.
+- **Backtest**: `/tinhieu backtest <coin>` replays the rules over daily closes, a daily approximation of the hourly rules; consecutive days with the same verdict count once. It uses stored history when long enough, otherwise one unstored CoinGecko call, so a backtest of an arbitrary coin never grows what we keep.
+- **Delivery**: state and verdict records are written only after Zalo accepted the message; a failed send leaves the chat eligible on the next run, and one chat's failure never blocks another.
+- **Monitoring**: each run logs a `signals-run` line (counts only, never verdicts) and stamps `signals:last-healthy`. The existing QStash watcher tick (`/cron/price-alerts-watch`, every 5 min) also calls `SignalsMonitorService`: no healthy run for 90 minutes → one message to `OWNER_CHAT_ID`, a reminder every 6h, one recovery message. It has its own Redis state and does not touch the price-alert monitoring rules. Never-healthy (job not scheduled yet) is not an outage.
+- **Budget**: about 14 Redis commands per run (~20k/month at 48 runs/day) and 1 per watcher tick for the signals look (~9k/month), plus commands from users and the digest — roughly +30k/month on top of the ~295k–339k of price alerts, still under the 400k target. These are counts from the code, not dashboard figures: read Upstash → Usage after deploy. Postgres is not touched by the check.
 
 ### Error handling philosophy
 

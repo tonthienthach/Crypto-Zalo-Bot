@@ -83,8 +83,7 @@ describe('WebhookController (e2e)', () => {
   const recordUsage = jest.fn().mockResolvedValue(undefined);
   const signalsAcquireRunLock = jest.fn();
   const signalsRecordRun = jest.fn().mockResolvedValue(undefined);
-  const signalsGetLastHealthyAt = jest.fn();
-  const signalsGetOutage = jest.fn();
+  const signalsGetHealthAndOutage = jest.fn();
   const mirrorOnSubscribed = jest.fn().mockResolvedValue(undefined);
   const mirrorOnWatchlistChanged = jest.fn().mockResolvedValue(undefined);
   const mirrorOnUnsubscribed = jest.fn().mockResolvedValue(undefined);
@@ -131,8 +130,7 @@ describe('WebhookController (e2e)', () => {
         recordUsage,
         acquireRunLock: signalsAcquireRunLock,
         recordRun: signalsRecordRun,
-        getLastHealthyAt: signalsGetLastHealthyAt,
-        getOutage: signalsGetOutage,
+        getHealthAndOutage: signalsGetHealthAndOutage,
       })
       .overrideProvider(SignalsSubscriptionsMirror)
       .useValue({
@@ -514,15 +512,14 @@ describe('WebhookController (e2e)', () => {
     it('also looks at the signals check on the same tick (EPIC-004-NFR07), and a failure there never breaks the watcher', async () => {
       getMonitorState.mockResolvedValue(null);
       listRecentRuns.mockResolvedValue([]);
-      signalsGetLastHealthyAt.mockRejectedValue(new Error('redis down'));
-      signalsGetOutage.mockResolvedValue(null);
+      signalsGetHealthAndOutage.mockRejectedValue(new Error('redis down'));
 
       await request(app.getHttpServer())
         .get('/cron/price-alerts-watch')
         .set('x-cron-secret-token', process.env.PRICE_ALERTS_WATCH_SECRET as string)
         .expect(200, { ok: true });
 
-      expect(signalsGetLastHealthyAt).toHaveBeenCalledTimes(1);
+      expect(signalsGetHealthAndOutage).toHaveBeenCalledTimes(1);
       expect(setMonitorState).toHaveBeenCalled();
     });
 

@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Simple signals (Initiative 4 / EPIC-004, on `feature/epic-004-simple-signals`,
+  not yet merged or deployed; see `docs/ROADMAP.md`): new `/tinhieu [coin]`
+  (strong swings ≥ 8%/24h or ≥ 15%/72h with a rule-based buy / sell / watch note
+  and a disclaimer), `/tinhieu backtest <coin>`, `/tinhieu thongke`,
+  `/tinhieu tat|bat`; a "Tín hiệu" section in the 9am digest; proactive messages
+  from `GET /cron/signals` (cron-job.org every 30 min, ≤ 1 per chat per hour,
+  on by default). Price history and state in Upstash Redis (no Postgres
+  migration); history back-filled once per coin from CoinGecko `market_chart`;
+  the existing QStash watcher now also tells the owner when the signals check
+  stops (90 min). New env `SIGNALS_CRON_SECRET` and optional
+  `SIGNAL_SWING_24H_PCT` / `SIGNAL_SWING_72H_PCT` / `SIGNAL_BAND_PCT`;
+  `npm run signals:report`. See `docs/DEPLOYMENT.md` step 8c.
 - Portfolio tracking (Initiative 3 / EPIC-003, merged to `master`
   2026-09-29, not yet deployed; see `docs/ROADMAP.md`): new
   `/danhmuc mua|ban <coin> <qty> <price>` records a manually entered trade
