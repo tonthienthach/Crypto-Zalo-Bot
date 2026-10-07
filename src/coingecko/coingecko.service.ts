@@ -11,9 +11,11 @@ import {
   VS_CURRENCY,
 } from './coingecko.constants';
 import {
+  CoinGeckoMarketChartResponse,
   CoinGeckoMarketCoin,
   CoinGeckoSimplePriceResponse,
   CoinMarketData,
+  MarketChartPoint,
 } from './interfaces/coingecko-response.interface';
 
 /**
@@ -127,6 +129,39 @@ export class CoingeckoService {
       changePercent24h: coin.price_change_percentage_24h,
       marketCapUsd: coin.market_cap,
     }));
+  }
+
+  /**
+   * Price history for one symbol, oldest first. CoinGecko returns hourly
+   * points for 2-90 days. Not cached (the response is large and callers
+   * ask once per coin) and CoinGecko-only: CoinPaprika's free tier has no
+   * history. Any failure — including an unknown coin or a rate limit —
+   * throws CoingeckoUnavailableError.
+   */
+  async getMarketChart(symbol: string, days: number): Promise<MarketChartPoint[]> {
+    const id = this.resolveSymbolToId(symbol);
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get<CoinGeckoMarketChartResponse>(
+          `${this.baseUrl}/coins/${encodeURIComponent(id)}/market_chart`,
+          {
+            params: { vs_currency: VS_CURRENCY, days },
+            headers: this.apiKeyHeaders(),
+            timeout: 8000,
+          },
+        ),
+      );
+      const prices = response.data?.prices;
+      if (!Array.isArray(prices) || prices.length === 0) {
+        throw new Error('empty price history');
+      }
+      return prices.map(([t, p]) => ({ t, p }));
+    } catch (error) {
+      this.logger.error(
+        `CoinGecko market_chart call failed for ${id}: ${(error as Error).message}`,
+      );
+      throw new CoingeckoUnavailableError(`Failed to fetch price history for ${id} from CoinGecko`);
+    }
   }
 
   private async fetchSimplePrice(ids: string[]): Promise<CoinGeckoSimplePriceResponse> {

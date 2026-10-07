@@ -192,4 +192,46 @@ describe('CoingeckoService', () => {
       ]);
     });
   });
+
+  describe('getMarketChart', () => {
+    it('maps prices to oldest-first points and calls the right URL', async () => {
+      httpGet.mockReturnValueOnce(
+        of({
+          data: {
+            prices: [
+              [1000, 10],
+              [2000, 11],
+            ],
+          },
+        }),
+      );
+
+      const result = await service.getMarketChart('btc', 90);
+
+      expect(result).toEqual([
+        { t: 1000, p: 10 },
+        { t: 2000, p: 11 },
+      ]);
+      expect(httpGet).toHaveBeenCalledWith(
+        'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart',
+        expect.objectContaining({ params: { vs_currency: 'usd', days: 90 } }),
+      );
+    });
+
+    it('throws CoingeckoUnavailableError on an HTTP error (e.g. 429)', async () => {
+      httpGet.mockReturnValueOnce(
+        throwError(() => new Error('Request failed with status code 429')),
+      );
+      await expect(service.getMarketChart('btc', 90)).rejects.toBeInstanceOf(
+        CoingeckoUnavailableError,
+      );
+    });
+
+    it('throws CoingeckoUnavailableError on an empty history', async () => {
+      httpGet.mockReturnValueOnce(of({ data: { prices: [] } }));
+      await expect(service.getMarketChart('btc', 90)).rejects.toBeInstanceOf(
+        CoingeckoUnavailableError,
+      );
+    });
+  });
 });
