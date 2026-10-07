@@ -1,0 +1,42 @@
+{
+  "epic": "EPIC-004",
+  "summary": "Simple signals (Initiative 4). Scaffolded manually 2026-09-30; intent in progress. Artifacts in Vietnamese.",
+  "entries": [
+    {
+      "at": "2026-09-30T15:43:42.022Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Owner (own need): bot only shows price, not trend; signals used to decide buy/sell. Out of scope: paid tiers, non-Zalo channels, coins outside the watchlist."
+    },
+    {
+      "at": "2026-09-30T15:43:42.022Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Answers 2026-09-30: may give buy/sell advice as reference; trend = strong swings over a few days; shown in morning digest AND proactive alert on strong move; watchlist coins only; backtest wanted. Threshold, disclaimer, alert frequency left to spec."
+    },
+    {
+      "at": "2026-09-30T15:47:37.801Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Proactive alert max once per hour on strong swing. Owner wants price history stored to evaluate past recommendations (how = spec)."
+    },
+    {
+      "at": "2026-09-30T15:55:19.651Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Spec draft: swing = >=8%/24h or >=15%/72h; advice by position in 7d range (bottom25% buy, top25% sell, else watch); max 1 signal msg/hour/chat, no repeat 24h per coin unless +5pp; default-on with /tinhieu tat; backtest 90d + live scorecard, 3-day hit criterion. Storage of price history deferred to plan (free-tier limits)."
+    },
+    {
+      "at": "2026-09-30T16:13:57.789Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Plan draft: all signals data in Upstash Redis (not Neon) to keep Neon asleep; new /cron/signals every 30min via cron-job.org; watchlist mirrored to Redis (write-through + daily resync in digest); history backfill via CoinGecko market_chart (UNVERIFIED, verify in step 2); scorecard/backtest computed on read; watcher extended for signals health."
+    },
+    {
+      "at": "2026-10-07T15:15:39.179Z",
+      "author": "Claude",
+      "kind": "decision",
+      "text": "Verified CoinGecko market_chart days=90 keyless: HTTP 200, 2161 hourly points, ~223KB/coin. Rate limit for backfill of 5 coins still unmeasured (implement step 2). plan.md updated; awaiting human review."
+    }
+  ]
+}

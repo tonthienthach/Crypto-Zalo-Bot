@@ -1,0 +1,124 @@
+{
+  "id": "EPIC-004",
+  "title": "Simple signals (volatility / basic indicators)",
+  "description": "Initiative 4 (docs/ROADMAP.md): simple signals — volatility and basic indicators that differentiate the bot from a plain price lookup. Scaffolded manually (AIDLC UI not used).",
+  "pipeline": "ai-native-full",
+  "agent": null,
+  "agents": [
+    "aidlc-native-originator",
+    "aidlc-native-product-owner",
+    "aidlc-native-engineer",
+    "aidlc-native-engineer",
+    "aidlc-native-verifier",
+    "aidlc-native-reviewer",
+    "aidlc-native-operator"
+  ],
+  "currentStep": 3,
+  "status": "in_progress",
+  "strict_mode": true,
+  "createdAt": "2026-09-30T00:00:00.000Z",
+  "stepStates": [
+    {
+      "agent": "aidlc-native-originator",
+      "name": "intent",
+      "status": "approved",
+      "revision": 1,
+      "runStatus": "approved",
+      "startedAt": "2026-09-30T00:00:00.000Z",
+      "finishedAt": "2026-09-30T15:53:09.226Z",
+      "history": [
+        {
+          "at": "2026-09-30T15:53:09.226Z",
+          "action": "approved",
+          "note": "Approved by originator (Thach) 2026-09-30. Open questions 1-7 answered in chat; remaining (disclaimer, threshold, merge with price alerts, history storage) deferred to spec."
+        }
+      ],
+      "artifactsProduced": [
+        "docs/epics/EPIC-004/artifacts/intent.md"
+      ]
+    },
+    {
+      "agent": "aidlc-native-product-owner",
+      "name": "spec",
+      "status": "approved",
+      "revision": 1,
+      "runStatus": "approved",
+      "startedAt": "2026-09-30T15:53:09.226Z",
+      "finishedAt": "2026-09-30T16:11:05.876Z",
+      "history": [
+        {
+          "at": "2026-09-30T16:11:05.876Z",
+          "action": "approved",
+          "note": "Approved by originator (Thach) 2026-09-30 with proposed thresholds (8%/24h, 15%/72h, 25% band), default-on proactive alerts, and success metric. History storage deferred to build-plan."
+        }
+      ],
+      "artifactsProduced": [
+        "docs/epics/EPIC-004/artifacts/spec.md"
+      ]
+    },
+    {
+      "agent": "aidlc-native-engineer",
+      "name": "build-plan",
+      "status": "approved",
+      "revision": 1,
+      "runStatus": "approved",
+      "startedAt": "2026-09-30T16:11:05.876Z",
+      "finishedAt": "2026-10-07T15:18:18.516Z",
+      "history": [
+        {
+          "at": "2026-10-07T15:18:18.516Z",
+          "action": "approved",
+          "note": "Approved by originator (Thach) 2026-10-07. CoinGecko market_chart verified (hourly, keyless); rate limit to be measured in implement step 2."
+        }
+      ],
+      "artifactsProduced": [
+        "docs/epics/EPIC-004/artifacts/plan.md"
+      ]
+    },
+    {
+      "agent": "aidlc-native-engineer",
+      "name": "implement",
+      "status": "in_progress",
+      "revision": 1,
+      "runStatus": "in_progress",
+      "startedAt": "2026-10-07T15:18:18.516Z",
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-verifier",
+      "name": "verify",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-reviewer",
+      "name": "review",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    },
+    {
+      "agent": "aidlc-native-operator",
+      "name": "maintain",
+      "status": "pending",
+      "revision": 1,
+      "runStatus": "pending",
+      "startedAt": null,
+      "finishedAt": null,
+      "history": [],
+      "artifactsProduced": []
+    }
+  ],
+  "updatedAt": "2026-10-07T15:18:18.516Z"
+}
