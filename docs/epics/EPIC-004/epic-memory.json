@@ -37,6 +37,12 @@
       "author": "Claude",
       "kind": "decision",
       "text": "Verified CoinGecko market_chart days=90 keyless: HTTP 200, 2161 hourly points, ~223KB/coin. Rate limit for backfill of 5 coins still unmeasured (implement step 2). plan.md updated; awaiting human review."
+    },
+    {
+      "at": "2026-10-07T16:06:14.715Z",
+      "author": "Claude",
+      "kind": "decision",
+      "text": "Implement done on feature/epic-004-simple-signals (pushed, PR not opened: no gh). Monitoring is a separate SignalsMonitorService hooked on the QStash watcher tick, not an extension of evaluateMonitor. Signals Redis clients use automaticDeserialization:false (HGETALL then returns a flat list). Real BTC 90d backtest: buy 6/9 right, sell 2/7 right: owner should read backtests before enabling proactive alerts widely. The two *.redis e2e suites flush the same DB: run them with --runInBand. Pending after merge: set SIGNALS_CRON_SECRET, deploy, one manual /cron/signals, then cron-job.org job (DEPLOYMENT step 8c)."
     }
   ]
 }
