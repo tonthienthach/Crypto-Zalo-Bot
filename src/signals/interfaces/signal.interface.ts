@@ -80,3 +80,17 @@ export interface Scorecard {
   /** Verdicts not yet 3 days old (or with no later price to score against). */
   pending: number;
 }
+
+export type SignalUsageKind = 'alert' | 'digest' | 'command';
+
+export type SignalRunOutcome = 'healthy' | 'degraded' | 'skipped' | 'failed';
+
+/** One line in the capped run log; carries counts only, never a chat's verdicts (spec EPIC-004-AC17). */
+export interface SignalRunSummary {
+  at: string;
+  outcome: SignalRunOutcome;
+  coins: number;
+  chatsAlerted: number;
+  failures: number;
+  durationMs: number;
+}

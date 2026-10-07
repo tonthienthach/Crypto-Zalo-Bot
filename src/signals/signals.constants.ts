@@ -42,3 +42,55 @@ export const BACKTEST_DAYS = 90;
 
 /** Backtest refuses a history shorter than this many days (spec EPIC-004-AC12). */
 export const BACKTEST_MIN_DAYS = 14;
+
+/** Hourly price points are kept this long: 7 days of range plus slack for the 7-day coverage check. */
+export const HOURLY_RETENTION_MS = 8 * DAY_MS;
+
+/** End-of-day price points are kept this long (spec EPIC-004-NFR04). */
+export const DAILY_RETENTION_MS = 90 * DAY_MS;
+
+/** A coin is backfilled from CoinGecko at most this many per run, to stay inside the free tier. */
+export const MAX_BACKFILL_PER_RUN = 5;
+
+/** After a failed backfill the coin is not retried for this long (an unknown coin would fail forever). */
+export const BACKFILL_RETRY_HOLD_SECONDS = 2 * 60 * 60;
+
+/** Coins asked about with /tinhieu but on nobody's watchlist, tracked so their verdicts can be scored (spec EPIC-004-FR11). */
+export const MAX_EXTRA_TRACKED = 50;
+export const EXTRA_TRACK_TTL_MS = 4 * DAY_MS;
+
+/** Verdict records kept per chat, and for how long (spec EPIC-004-NFR09, NFR04). */
+export const MAX_RECORDS_PER_CHAT = 1000;
+export const RECORD_TTL_DAYS = 90;
+
+/** Usage counters are kept for the 45-day success-metric window plus slack (spec EPIC-004-FR12). */
+export const USAGE_TTL_SECONDS = 60 * 86_400;
+
+/** The run lock only matters if a run dies before releasing it. */
+export const RUN_LOCK_TTL_SECONDS = 120;
+
+export const MAX_RUN_LOG_ENTRIES = 200;
+
+export const REDIS_KEYS = {
+  /** Sorted set per coin: score = hour bucket start, member = "<sample ms>:<usd>". */
+  hourly: (symbol: string) => `signals:hour:${symbol}`,
+  /** Sorted set per coin: score = UTC day start, member = "<sample ms>:<usd>" (the day's last sample). */
+  daily: (symbol: string) => `signals:day:${symbol}`,
+  backfilled: (symbol: string) => `signals:bf:${symbol}`,
+  backfillFailed: (symbol: string) => `signals:bf-fail:${symbol}`,
+  /** Hash: chatId -> JSON array of watchlist symbols (a mirror of Postgres). */
+  watchlists: 'signals:watch',
+  /** Set of chatIds that turned proactive signals off. */
+  disabled: 'signals:off',
+  /** Hash: chatId -> JSON ChatSignalState. */
+  sent: 'signals:sent',
+  /** Hash per chat: "<symbol>:<verdict>:<day>" -> "<usd>:<ms>". */
+  records: (chatId: string) => `signals:rec:${chatId}`,
+  /** Sorted set: score = expiry ms, member = symbol. */
+  extra: 'signals:extra',
+  /** Hash per UTC day: "<chatId>|<kind>" -> count. */
+  usage: (day: string) => `signals:use:${day}`,
+  runLock: 'signals:run-lock',
+  runs: 'signals:runs',
+  lastHealthy: 'signals:last-healthy',
+} as const;
