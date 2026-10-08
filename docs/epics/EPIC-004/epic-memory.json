@@ -1,6 +1,6 @@
 {
   "epic": "EPIC-004",
-  "summary": "Simple signals (Initiative 4). Scaffolded manually 2026-09-30; intent in progress. Artifacts in Vietnamese.",
+  "summary": "Simple signals (Initiative 4). Review approved 2026-10-08 (ship with follow-ups). 487 tests pass. Ready for PR merge to master and deployment (DEPLOYMENT step 8c). Artifacts in Vietnamese.",
   "entries": [
     {
       "at": "2026-09-30T15:43:42.022Z",
@@ -43,6 +43,19 @@
       "author": "Claude",
       "kind": "decision",
       "text": "Implement done on feature/epic-004-simple-signals (pushed, PR not opened: no gh). Monitoring is a separate SignalsMonitorService hooked on the QStash watcher tick, not an extension of evaluateMonitor. Signals Redis clients use automaticDeserialization:false (HGETALL then returns a flat list). Real BTC 90d backtest: buy 6/9 right, sell 2/7 right: owner should read backtests before enabling proactive alerts widely. The two *.redis e2e suites flush the same DB: run them with --runInBand. Pending after merge: set SIGNALS_CRON_SECRET, deploy, one manual /cron/signals, then cron-job.org job (DEPLOYMENT step 8c)."
+    },
+    {
+      "at": "2026-10-08T17:00:00.000Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Verify approved (rev 2). AC01-AC03, AC05-AC18 pass. AC04 (<=30min proactive alert) and NFRs deferred to post-deploy observation. Finding #12 (non-positive prices in history/snapshot) and #14 fixed in a657a08 (487 tests pass)."
+    },
+    {
+      "at": "2026-10-08T17:05:00.000Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Review approved (ship with follow-ups). All policy checklists pass. No should-fix blockers. Ready for PR merge to master, Vercel deployment, and cron-job.org setup."
     }
-  ]
+  ],
+  "updatedAt": "2026-10-08T17:05:00.000Z"
 }

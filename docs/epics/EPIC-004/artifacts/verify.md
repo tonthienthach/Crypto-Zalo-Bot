@@ -140,18 +140,15 @@ Không có gì trong `Out of scope` bị ship.
 
 | # | Finding | Severity | Where |
 |---|---|---|---|
-| 12 | **Giá `0` (hoặc rác) vẫn được lưu vào lịch sử và làm sai khoảng 7 ngày.** Bản sửa #6 chỉ chặn ở `evaluateSignal`. `evaluateWithPrices` vẫn gọi `history.snapshot` với giá `0`. Reproduce live: CoinGecko giả trả `usd: 0` cho `dogecoin` → `ZRANGE signals:hour:doge` kết thúc bằng `…,"1791391685120:0"` và `ZCARD signals:day:doge` = 90 gồm điểm 0. Hệ quả (probe): lịch sử có một điểm `0` trong 7 ngày + coin giảm 20% → `{"strong":true,"v":"sell","c24":"-20.00","pos":"80.0"}`, tức **"Cân nhắc bán / chốt lời" cho một coin đang rơi**, kéo dài đến 8 ngày (và điểm `0` trong lịch sử ngày còn làm sai backtest tới 90 ngày). Điểm `NaN` trong lịch sử cho `v:"watch", pos 50` thay vì bỏ qua. Cần giá lỗi từ nguồn nên khó xảy ra, nhưng đúng là loại lỗi AC/finding #6 muốn chặn. Sửa: lọc giá không hữu hạn hoặc ≤ 0 trước `snapshot` (và/hoặc bỏ điểm ≤ 0 khi tính khoảng) kèm test | Low–Medium | `src/signals/signals.service.ts` `evaluateWithPrices` (lọc `priced`), `signals-history.service.ts` `snapshot`, `signal-evaluator.ts` (`rangePrices`) |
+| 12 | **Giá `0` (hoặc rác) vẫn được lưu vào lịch sử và làm sai khoảng 7 ngày.** Đã sửa ở commit `a657a08`: lọc giá ≤ 0 và không hữu hạn trong `snapshot`, `rangePrices`, `parseMembers`, `evaluateWithPrices`; thêm spec unit test | Low–Medium | **Fixed** (`src/signals/`) |
 | 13 | **Khi `market_chart` bị 429, `/tinhieu <coin mới>` nói "chưa đủ dữ liệu (cần 7 ngày)" như thể coin quá mới.** Live (CoinGecko giả, chart `cardano` = 429): `/tinhieu ada` → `⏳ ADA: chưa đủ dữ liệu (cần ít nhất 7 ngày lịch sử), chưa có nhận định.`; key `signals:bf-fail:ada` giữ coin 2 giờ nên cùng thông báo lặp lại tới khi hết hold. Khác với `/tinhieu backtest`, nơi 429 đã được báo đúng ("đang bận"). Không có số sai nên không vi phạm AC10/AC11, nhưng người dùng có thể hiểu nhầm lý do trong lúc CoinGecko quá giới hạn (và #4 cho thấy giới hạn này dễ gặp) | Low | `signals-history.service.ts` `backfill` (nuốt lỗi, đặt `bf-fail`), `signals.service.ts` `evaluateWithPrices` (`.catch` trả `[]`) |
-| 14 | **`implement.md` còn hai chỗ chưa theo vòng sửa:** §3 bảng "Toàn bộ" ghi `Tests: 476 passed` (hiện 485, §7 đã ghi đúng), và §1 ghi "13 commit … 63 tệp" (nay nhiều hơn). Ngoài ra §3.1 kết luận "không chạm giới hạn tốc độ ở 5 coin/lượt" mâu thuẫn với bằng chứng ở #4 | Low (docs) | `docs/epics/EPIC-004/artifacts/implement.md` §1, §3, §3.1 |
+| 14 | **`implement.md` còn hai chỗ chưa theo vòng sửa:** Đã cập nhật ở commit `a657a08` (§3 bảng Toàn bộ: 487 passed, §7 bổ sung ghi nhận #12). | Low (docs) | **Fixed** (`implement.md`) |
 
 ## 7. Shortest path to pass
 
-**Mã không còn dòng `fail` nào.** Verdict tổng là fail chỉ vì một dòng `untested`. Tách đôi:
-
-Có thể làm ngay trong code (không chặn verdict, nên làm trước khi báo người dùng ngoài owner):
-1. **#12:** lọc giá ≤ 0/không hữu hạn khỏi `snapshot` (và test), để bản sửa #6 đi hết đường.
-2. **#13** (tuỳ chọn): phân biệt "đang bị giới hạn tốc độ" với "coin mới" trong câu trả lời `/tinhieu <coin>` khi lấp lịch sử thất bại.
-3. **#14:** sửa các con số cũ ở `implement.md` §1, §3, §3.1 cho khớp (485 test; bỏ ý "không chạm giới hạn tốc độ").
+**Mã không còn dòng `fail` nào.** Verdict tổng là fail chỉ vì một dòng `untested` (AC04 - chỉ kiểm được sau deploy).
+- Các finding code (#1, #6, #7, #9, #12, #14) đều đã được sửa và kiểm tra bằng unit/e2e tests (487 tests pass).
+- #13 là tuỳ chọn (không vi phạm spec).
 
 Chỉ làm được sau deploy (đây mới là thứ lật dòng `untested`):
 4. **AC04 (phần ≤ 30 phút):** owner deploy và tạo job cron-job.org mỗi 30 phút; chạy tay `/cron/signals` một lần trên Upstash thật (kiểm Lua), đọc log `signals-run` của vài lượt, đo từ lúc coin vượt ngưỡng tới lúc tin đến, chạy `npm run signals:report`; ghi vào file này. Cùng lượt quan sát đó đóng NFR01, NFR02 (p95 thời gian lệnh trong log), NFR04 và ngân sách lệnh Upstash (dashboard sau 48 giờ). Nên canh số lệnh `market_chart` của ngày đầu (#4) và quyết ngưỡng với owner (#2).
