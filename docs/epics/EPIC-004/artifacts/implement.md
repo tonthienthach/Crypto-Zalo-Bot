@@ -46,7 +46,7 @@ Mọi lệnh dưới đây đã chạy thật trong phiên này, kết quả là
 | `AC13` `AC14` `AC05` | `REDIS_INT_URL=http://localhost:8079 REDIS_INT_TOKEN=local npx jest --config ./test/jest-e2e.json signals.redis` | Test Suites: 1 passed; Tests: 17 passed (script Lua thật: ghi idempotent theo giờ, cắt điểm quá cũ, khoá chạy chỉ một chủ, cùng coin-nhận định-ngày ghi một lần, tắt/bật còn sau khi tạo lại service) |
 | `AC17` | `npx jest scripts src/signals/report-lib`; `signals:report` trên Redis scratch | Tests: 10 passed (gồm kiểm tra `scoreAll` của script khớp `scoreRecords` của app). Chạy script thật in đúng chỉ số thành công, chấm điểm, lượt chạy gần nhất (đầu ra ở §3.2); log `signals-run` không chứa nhận định (test trong `signals.controller.spec.ts`) |
 | `NFR07` | `npx jest src/signals/signals-monitor` và `npx jest src/price-alerts` | 16 passed; và 100 passed, 6 suites (toàn bộ spec cảnh báo giá cũ vẫn xanh, không sửa spec nào) |
-| Toàn bộ | `npx jest` | Test Suites: 33 passed; Tests: 476 passed |
+| Toàn bộ | `npx jest` | Test Suites: 33 passed; Tests: 487 passed |
 | Toàn bộ e2e | `REDIS_INT_URL=... npx jest --config ./test/jest-e2e.json --runInBand` | 3 passed, 1 skipped (Postgres); Tests: 84 passed, 18 skipped |
 | Như CI | `npx jest --config ./test/jest-e2e.json` (không có URL Redis) | 1 passed, 3 skipped; Tests: 58 passed, 44 skipped |
 | Chất lượng | `npx eslint` (các thư mục đã sửa), `npx tsc --noEmit`, `npm run build` | không lỗi |
@@ -117,10 +117,11 @@ Báo cáo verify rev 1 (`verify.md`): fail, 16/18 pass, AC10 fail, AC04 untested
 | 7 | `getMarketChart` phân biệt 404 (`CoingeckoCoinNotFoundError`: CoinGecko không biết coin) với 429/lỗi khác; chỉ 404 mới ra "chưa đủ lịch sử", 429 ra thông báo "tạm thời không lấy được giá" | `coingecko.service.spec.ts`, `signals.service.spec.ts` |
 | 9 | Phần bản tin khi không coin nào mạnh luôn **một dòng** (coin thiếu dữ liệu nằm trong ngoặc); chat không có coin nào có giá thì không có phần "Tín hiệu" thay vì nói "không có coin nào dao động mạnh" | `format-signals.util.spec.ts`, `digest.controller.spec.ts` |
 | 10 | Bản ghi nhận định dùng `HSETNX` trên hash theo chat (field `coin:nhận-định:ngày`), không phải `ZADD NX` như plan §2; hành vi tương đương, test Redis thật xác nhận | `signals.redis.e2e-spec.ts` |
+| 12 | Lọc giá ≤ 0 và không hữu hạn khỏi `priceNear`, `rangePrices`, `parseMembers`, `snapshot` và `evaluateWithPrices`; thêm spec | `signal-evaluator.spec.ts`, `signals-history.service.spec.ts` |
 
-**Không sửa, có chủ đích:** #3 (vòng phản hồi không phủ AC04 ≤ 30 phút, NFR01/02/04, ngân sách Upstash, Lua trên Upstash thật: chỉ kiểm được sau deploy), #4 và #5 (lấp lịch sử thêm lệnh `market_chart` và tin đầu tiên của chat nhiều coin mới chưa gộp đủ: plan §1 đã chấp nhận), #8 (chat chặn bot bị thử lại mỗi lượt: quy mô nhỏ, nên cân nhắc đánh dấu sau N lần từ chối nếu có nhiều chat), #11 (`/tinhieu tatt` gõ nhầm bị hiểu là coin).
+**Không sửa, có chủ đích:** #3 (vòng phản hồi không phủ AC04 ≤ 30 phút, NFR01/02/04, ngân sách Upstash, Lua trên Upstash thật: chỉ kiểm được sau deploy), #4 và #5 (lấp lịch sử thêm lệnh `market_chart` và tin đầu tiên của chat nhiều coin mới chưa gộp đủ: plan §1 đã chấp nhận), #8 (chat chặn bot bị thử lại mỗi lượt: quy mô nhỏ, nên cân nhắc đánh dấu sau N lần từ chối nếu có nhiều chat), #11 (`/tinhieu tatt` gõ nhầm bị hiểu là coin), #13 (thông báo 429 khi lấp lịch sử /tinhieu).
 
-Sau vòng sửa: `npx jest` 33 suite, 485 test pass; `tsc`, `eslint` (thư mục đã sửa) không lỗi.
+Sau vòng sửa: `npx jest` 33 suite, 487 test pass; `tsc`, `eslint` (thư mục đã sửa) không lỗi.
 
 ## 8. Next step
 

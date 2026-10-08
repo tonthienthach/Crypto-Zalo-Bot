@@ -76,7 +76,9 @@ export class SignalsService {
     prices: Record<string, number>,
     now: number,
   ): Promise<CoinSignal[]> {
-    const priced = symbols.filter((symbol) => prices[symbol] !== undefined);
+    const priced = symbols.filter(
+      (symbol) => Number.isFinite(prices[symbol]) && prices[symbol] > 0,
+    );
     if (priced.length === 0) return [];
     await this.history.snapshot(
       Object.fromEntries(priced.map((symbol) => [symbol, prices[symbol]])),

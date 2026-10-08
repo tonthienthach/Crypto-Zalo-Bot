@@ -55,7 +55,7 @@ export function parseMembers(members: unknown, bucketMs: number): PricePoint[] {
   for (const member of members) {
     const [t, p] = String(member).split(':');
     const point = { t: Number(t), p: Number(p) };
-    if (!Number.isFinite(point.t) || !Number.isFinite(point.p)) continue;
+    if (!Number.isFinite(point.t) || !Number.isFinite(point.p) || point.p <= 0) continue;
     const bucket = Math.floor(point.t / bucketMs);
     const existing = byBucket.get(bucket);
     if (!existing || point.t > existing.t) byBucket.set(bucket, point);
@@ -114,7 +114,9 @@ export class SignalsHistoryService {
 
   /** Records `prices` (symbol -> USD) as of `now`. Two samples in one hour keep the later one. */
   async snapshot(prices: Record<string, number>, now: number): Promise<void> {
-    const symbols = Object.keys(prices);
+    const symbols = Object.keys(prices).filter(
+      (symbol) => Number.isFinite(prices[symbol]) && prices[symbol] > 0,
+    );
     if (symbols.length === 0) return;
     const hourBucket = Math.floor(now / HOUR_MS) * HOUR_MS;
     const dayBucket = Math.floor(now / DAY_MS) * DAY_MS;

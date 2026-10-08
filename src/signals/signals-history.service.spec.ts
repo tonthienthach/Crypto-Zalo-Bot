@@ -32,6 +32,12 @@ describe('parseMembers', () => {
     expect(parseMembers(['junk', 'x:y', `${NOW}:5`], HOUR_MS)).toEqual([{ t: NOW, p: 5 }]);
     expect(parseMembers(null, HOUR_MS)).toEqual([]);
   });
+
+  it('skips members with prices <= 0 or not finite (verify finding 12)', () => {
+    expect(
+      parseMembers([`${NOW}:0`, `${NOW + 1}:-10`, `${NOW + 2}:NaN`, `${NOW + 3}:100`], HOUR_MS),
+    ).toEqual([{ t: NOW + 3, p: 100 }]);
+  });
 });
 
 describe('buildBackfillPoints', () => {
@@ -82,8 +88,9 @@ describe('SignalsHistoryService', () => {
     expect(args.slice(-2)).toEqual(['84000', '2500']);
   });
 
-  it('does not touch Redis for an empty snapshot', async () => {
+  it('does not touch Redis for an empty snapshot or only non-positive prices', async () => {
     await service.snapshot({}, NOW);
+    await service.snapshot({ btc: 0, eth: -5, sol: Number.NaN }, NOW);
     expect(mockRedis.eval).not.toHaveBeenCalled();
   });
 

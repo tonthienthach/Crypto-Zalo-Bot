@@ -159,4 +159,20 @@ describe('evaluateSignal', () => {
       },
     );
   });
+
+  describe('bad history points (verify finding 12)', () => {
+    it('ignores 0 or non-finite prices in history when computing range and reference prices', () => {
+      const points = history(8, (h) => (h >= 24 ? 100_000 : 100_000));
+      // Inject a 0 point in 7d range
+      points.push({ t: NOW - 12 * HOUR_MS, p: 0 });
+      points.push({ t: NOW - 10 * HOUR_MS, p: -50 });
+      points.push({ t: NOW - 8 * HOUR_MS, p: Number.NaN });
+
+      // Dropping 16% should still give buy (near bottom of 80k-100k, not distorted by 0)
+      const result = evaluateSignal(points, 84_000, NOW);
+      expect(result.strong).toBe(true);
+      expect(result.rangeLow).toBe(84_000);
+      expect(result.verdict).toBe('buy');
+    });
+  });
 });

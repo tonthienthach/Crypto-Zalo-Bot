@@ -21,6 +21,7 @@ export const DEFAULT_THRESHOLDS: SignalThresholds = {
 function priceNear(points: PricePoint[], targetMs: number): number | null {
   let best: PricePoint | null = null;
   for (const point of points) {
+    if (!Number.isFinite(point.p) || point.p <= 0) continue;
     const gap = Math.abs(point.t - targetMs);
     if (gap > REFERENCE_TOLERANCE_MS) continue;
     if (best === null || gap < Math.abs(best.t - targetMs)) best = point;
@@ -86,7 +87,7 @@ export function evaluateSignal(
 
   const rangeStart = now - RANGE_DAYS * DAY_MS;
   const rangePrices = points
-    .filter((point) => point.t >= rangeStart)
+    .filter((point) => point.t >= rangeStart && Number.isFinite(point.p) && point.p > 0)
     .map((point) => point.p)
     .concat(nowPrice);
   const rangeLow = Math.min(...rangePrices);
