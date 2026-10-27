@@ -120,6 +120,7 @@ export class SignalsController {
     // blocks the rest. The budget starts after the lookup so a slow price
     // source delays this run instead of starving every chat.
     const sendsStartedAt = Date.now();
+    const refused: { chatId: string; previous: ChatSignalState }[] = [];
     for (const [chatId, watchlist] of Object.entries(watchlists)) {
       if (disabled.has(chatId)) continue;
       const chatSignals = watchlist
@@ -134,8 +135,11 @@ export class SignalsController {
         summary.deferred++;
         continue;
       }
+      const previous = sentStates[chatId] ?? FRESH_STATE;
       try {
-        await this.alertChat(chatId, picked, sentStates[chatId] ?? FRESH_STATE, startedAt, summary);
+        if ((await this.alertChat(chatId, picked, previous, startedAt, summary)) === 'refused') {
+          refused.push({ chatId, previous });
+        }
       } catch (error) {
         summary.failures++;
         this.logger.error(
@@ -144,8 +148,37 @@ export class SignalsController {
       }
     }
 
+    await this.recordRefusals(refused, startedAt, summary);
+
     summary.durationMs = Date.now() - startedAt;
     return summary;
+  }
+
+  /**
+   * Counts refused sends against their chats, but only in a run where some
+   * other message was accepted: that proves Zalo itself works, so the refusal
+   * is about the chat (it blocked the bot). When nothing at all went out, Zalo
+   * may be down, and no chat is pushed into the 6-hour backoff for it.
+   */
+  private async recordRefusals(
+    refused: { chatId: string; previous: ChatSignalState }[],
+    now: number,
+    summary: SignalRunSummary,
+  ): Promise<void> {
+    if (refused.length === 0) return;
+    if (summary.chatsAlerted === 0) {
+      this.logger.warn(
+        `Every signal send was refused this run (${refused.length} chats): not counting it against the chats, Zalo may be down`,
+      );
+      return;
+    }
+    for (const { chatId, previous } of refused) {
+      try {
+        await this.state.setSentState(chatId, recordFailed(previous, now));
+      } catch (error) {
+        this.logger.error(`Could not record the failed send for ${chatId}: ${String(error)}`);
+      }
+    }
   }
 
   /**
@@ -159,19 +192,14 @@ export class SignalsController {
     previous: ChatSignalState,
     now: number,
     summary: SignalRunSummary,
-  ): Promise<void> {
+  ): Promise<'sent' | 'refused'> {
     const delivered = await this.zaloService.sendTextMessage(
       chatId,
       formatSignalAlertMessage(picked),
     );
     if (!delivered) {
       summary.failures++;
-      try {
-        await this.state.setSentState(chatId, recordFailed(previous, now));
-      } catch (error) {
-        this.logger.error(`Could not record the failed send for ${chatId}: ${String(error)}`);
-      }
-      return;
+      return 'refused';
     }
     summary.chatsAlerted++;
 
@@ -183,6 +211,7 @@ export class SignalsController {
       // The message went out; losing its scorecard entry or usage count must not undo that.
       this.logger.error(`Could not record signal bookkeeping for ${chatId}: ${String(error)}`);
     }
+    return 'sent';
   }
 }
 

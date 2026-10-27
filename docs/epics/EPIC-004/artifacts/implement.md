@@ -10,7 +10,7 @@
 
 ## 1. Branch / PR
 
-- **Nhánh:** `feature/epic-004-simple-signals`, tạo từ `master`, đã đẩy lên `origin`. 13 commit (1 commit tài liệu epic + 12 commit theo các bước của plan), 63 tệp, +5.847/−10 dòng (49 tệp trong `src/`, `test/`, `scripts/`).
+- **Nhánh:** `feature/epic-004-simple-signals`, tạo từ `master`, đã đẩy lên `origin`. 23 commit (1 commit tài liệu epic, 12 commit theo các bước của plan, 5 commit kết quả verify/review, 5 commit sửa theo verify rev 1–4), 69 tệp, +6.696/−26 dòng so với `master` (số liệu sau rev 4; đếm bằng `git diff master --stat` trên `src/`, `test/`, `scripts/`, `docs/`, `CHANGELOG.md`, `.env.example`, `package.json`).
 - **PR: chưa mở.** Máy này không có `gh` (GitHub CLI). Mở PR bằng liên kết: `https://github.com/tonthienthach/Crypto-Zalo-Bot/pull/new/feature/epic-004-simple-signals`. Nội dung PR gợi ý: tóm tắt §2 dưới đây, liên kết `spec.md` và tệp này, và danh sách việc cần làm sau deploy ở §6.
 - Chưa merge, chưa deploy, chưa đặt env var nào trên Vercel, chưa tạo job cron-job.org (đúng mục "Deliberately not doing" của plan).
 
@@ -41,12 +41,12 @@ Mọi lệnh dưới đây đã chạy thật trong phiên này, kết quả là
 | `AC04` `AC05` `AC06` `AC07` `AC15` `AC16` | `npx jest src/signals/signal-repeat src/signals/signals.controller` | Test Suites: 2 passed; Tests: 26 passed. Gồm: 10:00 gửi, 10:20 và 10:50 không gửi, 11:00 gửi ETH; chạy hai lần liền chỉ một tin; BTC/ETH/SOL một tin; −18% không báo, −21% báo, đổi chiều báo ngay; nguồn giá lỗi không gửi, một chat lỗi không chặn chat khác; 50 chat × 30 coin → `getPricesBySymbols` ≤ 2 lần |
 | `AC08` `AC09` | `npx jest src/digest` | Tests: 20 passed (9 ca tín hiệu: có coin mạnh, một dòng khi không có, một lần tải cho mọi chat, lỗi tính tín hiệu vẫn gửi phần giá, chat khác không bị ảnh hưởng) |
 | `AC10` `AC18` | `npx jest src/utils` | Tests: 70 passed (formatter, `/help` liệt kê `/tinhieu`) |
-| `AC10` `AC11` `AC12` `AC13` `AC14` | `npx jest --config ./test/jest-e2e.json webhook` | Tests: 58 passed, gồm 14 ca `/tinhieu`, 2 ca `/cron/signals` (401 với bốn loại secret sai, 200 với secret đúng), 1 ca nhịp watcher |
+| `AC10` `AC11` `AC12` `AC13` `AC14` | `npx jest --config ./test/jest-e2e.json webhook` | Tests: 58 passed (suite webhook; trong lần chạy e2e đầy đủ cùng hai suite Redis: 84 passed), gồm 14 ca `/tinhieu`, 2 ca `/cron/signals` (401 với bốn loại secret sai, 200 với secret đúng), 1 ca nhịp watcher |
 | `AC12` | `npx jest src/signals/signal-backtest` | Tests: 9 passed. Chuỗi dựng tay cho đúng mua 6 lần (đúng 4), bán 5 lần (đúng 2); dưới 14 ngày bị từ chối |
 | `AC13` `AC14` `AC05` | `REDIS_INT_URL=http://localhost:8079 REDIS_INT_TOKEN=local npx jest --config ./test/jest-e2e.json signals.redis` | Test Suites: 1 passed; Tests: 17 passed (script Lua thật: ghi idempotent theo giờ, cắt điểm quá cũ, khoá chạy chỉ một chủ, cùng coin-nhận định-ngày ghi một lần, tắt/bật còn sau khi tạo lại service) |
 | `AC17` | `npx jest scripts src/signals/report-lib`; `signals:report` trên Redis scratch | Tests: 10 passed (gồm kiểm tra `scoreAll` của script khớp `scoreRecords` của app). Chạy script thật in đúng chỉ số thành công, chấm điểm, lượt chạy gần nhất (đầu ra ở §3.2); log `signals-run` không chứa nhận định (test trong `signals.controller.spec.ts`) |
 | `NFR07` | `npx jest src/signals/signals-monitor` và `npx jest src/price-alerts` | 16 passed; và 100 passed, 6 suites (toàn bộ spec cảnh báo giá cũ vẫn xanh, không sửa spec nào) |
-| Toàn bộ | `npx jest` | Test Suites: 33 passed; Tests: 487 passed |
+| Toàn bộ | `npx jest` | Test Suites: 33 passed; Tests: 502 passed (số sau rev 4; bản đầu của tệp này ghi 476) |
 | Toàn bộ e2e | `REDIS_INT_URL=... npx jest --config ./test/jest-e2e.json --runInBand` | 3 passed, 1 skipped (Postgres); Tests: 84 passed, 18 skipped |
 | Như CI | `npx jest --config ./test/jest-e2e.json` (không có URL Redis) | 1 passed, 3 skipped; Tests: 58 passed, 44 skipped |
 | Chất lượng | `npx eslint` (các thư mục đã sửa), `npx tsc --noEmit`, `npm run build` | không lỗi |
@@ -134,7 +134,19 @@ Sau khi review kết luận "ship with follow-ups", bốn case còn mở của v
 
 Báo cáo `verify.md` (rev 2) và `review.md` có trước các thay đổi này; chúng không đổi hành vi đã được duyệt (AC01–AC18) nhưng nên chạy lại `/verify` hoặc ít nhất đọc diff nếu muốn một bản xác nhận độc lập mới.
 
-Sau vòng sửa: `npx jest` 33 suite, 487 test pass (500 sau rev 3, §7.1; e2e tuần tự trên Redis thật 84 pass); `tsc`, `eslint` (thư mục đã sửa) không lỗi.
+Sau vòng sửa: `npx jest` 33 suite, 487 test pass (500 sau rev 3, 502 sau rev 4; e2e tuần tự trên Redis thật 84 pass); `tsc`, `eslint` (thư mục đã sửa) không lỗi.
+
+### 7.2 Rework after verify rev 3 (revision 4)
+
+Verify rev 3: 17/18 AC pass, chỉ AC04 chưa kiểm được (cần production). Ba finding mức thấp mới, đã sửa theo yêu cầu của owner trước khi chuyển sang `maintain`:
+
+| Finding | Việc đã làm | Kiểm bằng |
+|---|---|---|
+| 15 | Số liệu ở §1 và §3 cập nhật theo nhánh thực tế (23 commit, 69 tệp, 502 test) | `git log master..HEAD`, `git diff master --stat`, `npx jest` |
+| 16 | Một lần gửi bị từ chối chỉ tính vào chuỗi lỗi của chat khi **cùng lượt có ít nhất một tin khác được Zalo nhận** (chứng tỏ Zalo hoạt động). Lượt mà mọi lần gửi đều bị từ chối: không chat nào bị đẩy vào chế độ nghỉ 6 giờ, log cảnh báo "Zalo may be down". Đánh đổi: một chat bị chặn mà lượt đó không có chat nào khác nhận tin thì vẫn được thử lại mỗi lượt (hành vi cũ, rẻ ở quy mô nhỏ) | `signals.controller.spec.ts` (2 ca: chat bị chặn + chat bình thường; mọi chat bị từ chối 4 lượt liền không chat nào có chuỗi lỗi) |
+| 17 | Bỏ các bí danh tiếng Anh `on`, `off`, `stats` của `/tinhieu`: chúng che mất mã coin thật (ví dụ ON). Công tắc chỉ còn `tat`/`bat`, bảng điểm chỉ còn `thongke`. Danh sách gõ nhầm vẫn là danh sách cố định, không so khớp mờ (chủ ý, #11) | `command-parser.service.spec.ts` |
+
+Sau rev 4: `npx jest` 33 suite, 502 test pass; e2e tuần tự trên Redis thật 84 pass, 18 skip (Postgres); `tsc`, `eslint`, `npm run build` không lỗi. `verify.md` rev 3 có trước các thay đổi #16/#17; chúng chỉ thu hẹp hành vi (không đổi AC01–AC18).
 
 ## 8. Next step
 

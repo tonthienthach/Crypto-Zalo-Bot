@@ -346,6 +346,15 @@ describe('CommandParserService', () => {
       });
     });
 
+    it('reads ON, OFF and STATS as coins, not as English aliases of the switch (verify finding 17)', () => {
+      for (const symbol of ['on', 'off', 'stats']) {
+        expect(parser.parse(`/tinhieu ${symbol}`)).toEqual({
+          type: CommandType.SIGNAL_VIEW,
+          symbols: [symbol],
+        });
+      }
+    });
+
     it('parses "tat" and "bat" as the proactive switch', () => {
       expect(parser.parse('/tinhieu tat')).toEqual({
         type: CommandType.SIGNAL_TOGGLE,

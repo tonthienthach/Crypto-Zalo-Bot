@@ -213,27 +213,48 @@ describe('SignalsController', () => {
     expect(sendTextMessage.mock.calls[0][0]).toBe('chat1');
   });
 
-  it('backs off a chat whose last three sends were refused, then tries it again after 6 hours (verify finding 8)', async () => {
-    getWatchlists.mockResolvedValue({ chat1: ['btc'] });
-    sendTextMessage.mockResolvedValue(false);
-
-    for (let i = 0; i < 3; i++) {
-      jest.setSystemTime(T0 + i * 30 * 60_000);
+  describe('blocked chats (verify findings 8 and 16)', () => {
+    // chat2 can always be told something new: its move grows by 6 points every hour.
+    const runAt = async (offsetMs: number, move: number) => {
+      evaluateWithPrices.mockResolvedValue([signal('btc', move)]);
+      jest.setSystemTime(T0 + offsetMs);
       await controller.checkSignals();
-    }
-    expect(sendTextMessage).toHaveBeenCalledTimes(3);
-    expect(sentStates.chat1.failures).toBe(3);
+    };
 
-    jest.setSystemTime(T0 + 3 * HOUR_MS);
-    await controller.checkSignals();
-    expect(sendTextMessage).toHaveBeenCalledTimes(3);
-    expect(lastRun()).toMatchObject({ outcome: 'healthy', failures: 0 });
+    beforeEach(() => {
+      getWatchlists.mockResolvedValue({ chat1: ['btc'], chat2: ['btc'] });
+      sendTextMessage.mockImplementation(async (chatId: string) => chatId !== 'chat1');
+    });
 
-    sendTextMessage.mockResolvedValue(true);
-    jest.setSystemTime(T0 + 30 * 60_000 * 2 + 6 * HOUR_MS);
-    await controller.checkSignals();
-    expect(sendTextMessage).toHaveBeenCalledTimes(4);
-    expect(sentStates.chat1.failures).toBeUndefined();
+    it('backs off a chat whose last three sends were refused while others still get theirs, then retries after 6 hours', async () => {
+      await runAt(0, -16);
+      await runAt(HOUR_MS, -22);
+      await runAt(2 * HOUR_MS, -28);
+      expect(sendTextMessage.mock.calls.filter(([id]) => id === 'chat1')).toHaveLength(3);
+      expect(sentStates.chat1.failures).toBe(3);
+
+      sendTextMessage.mockClear();
+      await runAt(3 * HOUR_MS, -34);
+      expect(sendTextMessage.mock.calls.map(([id]) => id)).toEqual(['chat2']);
+      expect(lastRun()).toMatchObject({ outcome: 'healthy', failures: 0, chatsAlerted: 1 });
+
+      sendTextMessage.mockClear();
+      sendTextMessage.mockResolvedValue(true);
+      await runAt(2 * HOUR_MS + 6 * HOUR_MS, -40);
+      expect(sendTextMessage.mock.calls.map(([id]) => id)).toContain('chat1');
+      expect(sentStates.chat1.failures).toBeUndefined();
+    });
+
+    it('does not count refusals against any chat in a run where nothing went out (Zalo may be down)', async () => {
+      sendTextMessage.mockResolvedValue(false);
+
+      for (let i = 0; i < 4; i++) await runAt(i * HOUR_MS, -16 - 6 * i);
+
+      expect(sentStates.chat1?.failures).toBeUndefined();
+      expect(sentStates.chat2?.failures).toBeUndefined();
+      expect(sendTextMessage).toHaveBeenCalledTimes(8);
+      expect(lastRun()).toMatchObject({ outcome: 'healthy', chatsAlerted: 0, failures: 2 });
+    });
   });
 
   it('AC15: a chat that throws is counted and the others still get their message', async () => {

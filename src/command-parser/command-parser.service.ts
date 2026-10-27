@@ -21,9 +21,9 @@ const ALERT_DELETE_KEYWORDS = new Set(['xoa', 'delete']);
 const PORTFOLIO_COMMAND_ALIASES = new Set(['danhmuc', 'portfolio']);
 const SIGNAL_COMMAND_ALIASES = new Set(['tinhieu', 'signal', 'signals']);
 const SIGNAL_BACKTEST_KEYWORDS = new Set(['backtest']);
-const SIGNAL_STATS_KEYWORDS = new Set(['thongke', 'stats']);
-const SIGNAL_OFF_KEYWORDS = new Set(['tat', 'off']);
-const SIGNAL_ON_KEYWORDS = new Set(['bat', 'on']);
+const SIGNAL_STATS_KEYWORDS = new Set(['thongke']);
+const SIGNAL_OFF_KEYWORDS = new Set(['tat']);
+const SIGNAL_ON_KEYWORDS = new Set(['bat']);
 const SIGNAL_SYMBOL_PATTERN = /^[a-z0-9]+$/;
 /** Slips of the keywords that must show the syntax, not be read as a coin called "tatt". Short real tickers (TAO, BAT) are never matched fuzzily. */
 const SIGNAL_KEYWORD_TYPOS = new Set([
