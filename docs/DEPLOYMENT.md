@@ -40,6 +40,16 @@ vercel env add CRON_SECRET production           # SAME value as CRON_SECRET_TOKE
 vercel env add DIGEST_CRON_TRACKING production  # optional, defaults to "true" — see step 8
 ```
 
+Signals (EPIC-004) add one secret for the job and three optional
+thresholds — set them before step 8c:
+
+```bash
+vercel env add SIGNALS_CRON_SECRET production    # mark it Sensitive; its OWN secret (>= 16 chars), different from CRON_SECRET_TOKEN and PRICE_ALERTS_*
+vercel env add SIGNAL_SWING_24H_PCT production   # optional, default 8
+vercel env add SIGNAL_SWING_72H_PCT production   # optional, default 15
+vercel env add SIGNAL_BAND_PCT production        # optional, default 25
+```
+
 `POSTGRES_URL` (step 3a below) and `DIGEST_CHAT_ID`/`DIGEST_COIN_SYMBOLS`
 (legacy, one-off migration only — see step 3a) are set separately.
 
@@ -334,6 +344,47 @@ the same `X-Cron-Secret-Token` header works without any code change.
 
 **Rollback:** pause the QStash schedule, then `vercel rollback` (step 7).
 The previous build ignores the new Redis keys and the `outcome` field.
+
+## 8c. Enable the signals check (cron-job.org)
+
+`/cron/signals` (EPIC-004) sends proactive signal messages and keeps the price
+history. It must run **every 30 minutes**, from a **second** cron-job.org job
+(same account as step 8a). It needs `KV_REST_API_*` (step 3b) and
+`SIGNALS_CRON_SECRET` (step 3); `OWNER_CHAT_ID` (step 8b) makes the owner
+hear when it stops. **No Postgres migration**: everything lives in Redis.
+
+1. Deploy first (step 4). Then **call it once by hand before scheduling it**,
+   so the first run (history back-fill for every watched coin) can be read:
+   ```bash
+   curl "https://zalo-crypto-bot.vercel.app/cron/signals" \
+     -H "X-Cron-Secret-Token: <SIGNALS_CRON_SECRET value>"
+   # -> {"ok":true}; a missing/wrong secret -> 401
+   ```
+   Vercel logs show one `signals-run` line: `outcome` must be `healthy`.
+   Chats with a strong swing may get a message at this point.
+2. Before telling users: run `/tinhieu backtest btc` (and eth, sol) in your
+   own chat and read the hit rates — the verdict rules are a simple reversal
+   heuristic and may be wrong often. The proactive messages are **on by
+   default** for every subscribed chat; `/tinhieu tat` turns them off per chat.
+3. Create the cron job: URL `https://zalo-crypto-bot.vercel.app/cron/signals`,
+   method **GET**, schedule **every 30 minutes**, header
+   `X-Cron-Secret-Token: <SIGNALS_CRON_SECRET value>`.
+4. After an hour, `npm run signals:report` (same `.env.alerts` as step 8a.4,
+   plus optionally `OWNER_CHAT_ID` to leave yourself out) shows the latest runs
+   and the success metric. Expect two healthy runs per hour.
+5. Read the Upstash dashboard after 48h: this adds about 30k commands/month
+   (see `docs/ARCHITECTURE.md` "Signals"); the target is to stay under 400k in
+   total. If it does not fit, make the job hourly: the 90-minute outage rule
+   then needs raising too (`SIGNALS_STALE_MS`).
+6. **Success metric** (`docs/epics/EPIC-004/artifacts/intent.md`): within 30
+   days, at least one chat other than yours uses `/tinhieu` on two different
+   days. `npm run signals:report` prints it.
+
+**To stop signals:** disable the cron-job.org job (proactive messages stop;
+`/tinhieu` and the digest section still work). Data in Redis expires on its
+own (hourly history 8 days, daily 90 days), nothing to clean. With the watcher
+set up you will get a "check stopped" message after 90 minutes and a reminder
+every 6 hours; pause the QStash schedule too to silence it.
 
 ## 9. Ongoing deploys
 

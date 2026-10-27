@@ -57,6 +57,14 @@ export const envValidationSchema = Joi.object({
   // (Upstash QStash — a different provider than the check's). Its own secret,
   // like PRICE_ALERTS_CRON_SECRET. Optional: unset rejects every call (401).
   PRICE_ALERTS_WATCH_SECRET: Joi.string().min(16).max(256).optional(),
+  // Secret for /cron/signals (cron-job.org, every 30 minutes) — its own secret,
+  // like PRICE_ALERTS_CRON_SECRET. Optional: unset rejects every call (401).
+  SIGNALS_CRON_SECRET: Joi.string().min(16).max(256).optional(),
+  // Strong-swing thresholds (percent) and the buy/sell band of the 7-day range
+  // (spec EPIC-004-FR01, FR02). Optional: the spec's defaults apply.
+  SIGNAL_SWING_24H_PCT: Joi.number().positive().max(100).default(8),
+  SIGNAL_SWING_72H_PCT: Joi.number().positive().max(100).default(15),
+  SIGNAL_BAND_PCT: Joi.number().positive().max(50).default(25),
   // Zalo chat that gets price-alert monitoring messages (EPIC-002-FIX).
   // Its own setting, not the retired DIGEST_CHAT_ID. Optional: unset means
   // monitoring still runs and records, it just can't message anyone.

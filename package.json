@@ -27,6 +27,7 @@
     "db:seed-digest-subscriber": "node scripts/db-seed-digest-subscriber.js",
     "prepare": "husky install",
     "alerts:report": "node scripts/price-alerts-report.js",
+    "signals:report": "node scripts/signals-report.js",
     "portfolio:report": "node scripts/portfolio-usage-report.js"
   },
   "dependencies": {

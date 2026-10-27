@@ -320,4 +320,68 @@ describe('CommandParserService', () => {
       expect(parser.parse('/gia btc').type).toBe(CommandType.PRICE);
     });
   });
+
+  describe('/tinhieu (EPIC-004)', () => {
+    it('parses "/tinhieu" as the whole watchlist', () => {
+      expect(parser.parse('/tinhieu')).toEqual({ type: CommandType.SIGNAL_VIEW, symbols: [] });
+    });
+
+    it('accepts accents, upper case and the english alias', () => {
+      for (const text of ['/tínhiệu eth', '/TINHIEU ETH', '/signal eth']) {
+        expect(parser.parse(text)).toEqual({ type: CommandType.SIGNAL_VIEW, symbols: ['eth'] });
+      }
+    });
+
+    it('parses "/tinhieu backtest btc"', () => {
+      expect(parser.parse('/tinhieu backtest BTC')).toEqual({
+        type: CommandType.SIGNAL_BACKTEST,
+        symbols: ['btc'],
+      });
+    });
+
+    it('parses "/tinhieu thongke"', () => {
+      expect(parser.parse('/tinhieu thongke')).toEqual({
+        type: CommandType.SIGNAL_STATS,
+        symbols: [],
+      });
+    });
+
+    it('reads ON, OFF and STATS as coins, not as English aliases of the switch (verify finding 17)', () => {
+      for (const symbol of ['on', 'off', 'stats']) {
+        expect(parser.parse(`/tinhieu ${symbol}`)).toEqual({
+          type: CommandType.SIGNAL_VIEW,
+          symbols: [symbol],
+        });
+      }
+    });
+
+    it('parses "tat" and "bat" as the proactive switch', () => {
+      expect(parser.parse('/tinhieu tat')).toEqual({
+        type: CommandType.SIGNAL_TOGGLE,
+        symbols: [],
+        signal: { enabled: false },
+      });
+      expect(parser.parse('/tinhieu bat')).toEqual({
+        type: CommandType.SIGNAL_TOGGLE,
+        symbols: [],
+        signal: { enabled: true },
+      });
+    });
+
+    it.each([
+      '/tinhieu backtest',
+      '/tinhieu tatt',
+      '/tinhieu batt',
+      '/tinhieu bactest btc',
+      '/tinhieu thongkee',
+      '/tinhieu backtest btc eth',
+      '/tinhieu btc eth',
+      '/tinhieu thongke btc',
+      '/tinhieu tat btc',
+      '/tinhieu b!tc',
+      '/tinhieu aaaaaaaaaaaaaaaaaaaaa',
+    ])('treats "%s" as invalid syntax', (text) => {
+      expect(parser.parse(text).type).toBe(CommandType.SIGNAL_INVALID);
+    });
+  });
 });

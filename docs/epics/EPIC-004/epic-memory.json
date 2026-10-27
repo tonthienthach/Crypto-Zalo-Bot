@@ -1,0 +1,61 @@
+{
+  "epic": "EPIC-004",
+  "summary": "Simple signals (Initiative 4). Review approved 2026-10-08 (ship with follow-ups). 487 tests pass. Ready for PR merge to master and deployment (DEPLOYMENT step 8c). Artifacts in Vietnamese.",
+  "entries": [
+    {
+      "at": "2026-09-30T15:43:42.022Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Owner (own need): bot only shows price, not trend; signals used to decide buy/sell. Out of scope: paid tiers, non-Zalo channels, coins outside the watchlist."
+    },
+    {
+      "at": "2026-09-30T15:43:42.022Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Answers 2026-09-30: may give buy/sell advice as reference; trend = strong swings over a few days; shown in morning digest AND proactive alert on strong move; watchlist coins only; backtest wanted. Threshold, disclaimer, alert frequency left to spec."
+    },
+    {
+      "at": "2026-09-30T15:47:37.801Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Proactive alert max once per hour on strong swing. Owner wants price history stored to evaluate past recommendations (how = spec)."
+    },
+    {
+      "at": "2026-09-30T15:55:19.651Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Spec draft: swing = >=8%/24h or >=15%/72h; advice by position in 7d range (bottom25% buy, top25% sell, else watch); max 1 signal msg/hour/chat, no repeat 24h per coin unless +5pp; default-on with /tinhieu tat; backtest 90d + live scorecard, 3-day hit criterion. Storage of price history deferred to plan (free-tier limits)."
+    },
+    {
+      "at": "2026-09-30T16:13:57.789Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Plan draft: all signals data in Upstash Redis (not Neon) to keep Neon asleep; new /cron/signals every 30min via cron-job.org; watchlist mirrored to Redis (write-through + daily resync in digest); history backfill via CoinGecko market_chart (UNVERIFIED, verify in step 2); scorecard/backtest computed on read; watcher extended for signals health."
+    },
+    {
+      "at": "2026-10-07T15:15:39.179Z",
+      "author": "Claude",
+      "kind": "decision",
+      "text": "Verified CoinGecko market_chart days=90 keyless: HTTP 200, 2161 hourly points, ~223KB/coin. Rate limit for backfill of 5 coins still unmeasured (implement step 2). plan.md updated; awaiting human review."
+    },
+    {
+      "at": "2026-10-07T16:06:14.715Z",
+      "author": "Claude",
+      "kind": "decision",
+      "text": "Implement done on feature/epic-004-simple-signals (pushed, PR not opened: no gh). Monitoring is a separate SignalsMonitorService hooked on the QStash watcher tick, not an extension of evaluateMonitor. Signals Redis clients use automaticDeserialization:false (HGETALL then returns a flat list). Real BTC 90d backtest: buy 6/9 right, sell 2/7 right: owner should read backtests before enabling proactive alerts widely. The two *.redis e2e suites flush the same DB: run them with --runInBand. Pending after merge: set SIGNALS_CRON_SECRET, deploy, one manual /cron/signals, then cron-job.org job (DEPLOYMENT step 8c)."
+    },
+    {
+      "at": "2026-10-08T17:00:00.000Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Verify approved (rev 2). AC01-AC03, AC05-AC18 pass. AC04 (<=30min proactive alert) and NFRs deferred to post-deploy observation. Finding #12 (non-positive prices in history/snapshot) and #14 fixed in a657a08 (487 tests pass)."
+    },
+    {
+      "at": "2026-10-08T17:05:00.000Z",
+      "author": "Thach",
+      "kind": "decision",
+      "text": "Review approved (ship with follow-ups). All policy checklists pass. No should-fix blockers. Ready for PR merge to master, Vercel deployment, and cron-job.org setup."
+    }
+  ],
+  "updatedAt": "2026-10-08T17:05:00.000Z"
+}

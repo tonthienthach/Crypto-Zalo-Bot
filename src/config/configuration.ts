@@ -67,6 +67,16 @@ export default () => ({
     watchSecretToken: process.env.PRICE_ALERTS_WATCH_SECRET,
   },
 
+  signals: {
+    // Secret for /cron/signals (cron-job.org, every 30 minutes). Its own
+    // secret, like priceAlerts.cronSecretToken; unset rejects every call.
+    cronSecretToken: process.env.SIGNALS_CRON_SECRET,
+    // Strong-swing thresholds (spec EPIC-004-FR01); defaults are the spec's.
+    swing24hPct: parseFloat(process.env.SIGNAL_SWING_24H_PCT ?? '8'),
+    swing72hPct: parseFloat(process.env.SIGNAL_SWING_72H_PCT ?? '15'),
+    bandPct: parseFloat(process.env.SIGNAL_BAND_PCT ?? '25'),
+  },
+
   monitoring: {
     // Chat that gets price-alert outage/recovery messages (EPIC-002-FIX).
     ownerChatId: process.env.OWNER_CHAT_ID,

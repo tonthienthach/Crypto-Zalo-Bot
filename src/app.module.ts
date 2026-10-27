@@ -12,6 +12,7 @@ import { CommandParserModule } from './command-parser/command-parser.module';
 import { DigestModule } from './digest/digest.module';
 import { HealthModule } from './health/health.module';
 import { PriceAlertsModule } from './price-alerts/price-alerts.module';
+import { SignalsModule } from './signals/signals.module';
 import { WebhookModule } from './webhook/webhook.module';
 import { ZaloModule } from './zalo/zalo.module';
 
@@ -39,6 +40,7 @@ import { ZaloModule } from './zalo/zalo.module';
     WebhookModule,
     DigestModule,
     PriceAlertsModule,
+    SignalsModule,
     HealthModule,
   ],
   providers: [

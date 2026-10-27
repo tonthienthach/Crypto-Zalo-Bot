@@ -1,5 +1,6 @@
 import { All, Controller, HttpCode, HttpStatus, Logger, UseGuards } from '@nestjs/common';
 import { PriceAlertsWatchSecretGuard } from '../common/guards/price-alerts-watch-secret.guard';
+import { SignalsMonitorService } from '../signals/signals-monitor.service';
 import { PriceAlertsMonitorService } from './price-alerts-monitor.service';
 
 /**
@@ -13,7 +14,10 @@ import { PriceAlertsMonitorService } from './price-alerts-monitor.service';
 export class PriceAlertsWatchController {
   private readonly logger = new Logger(PriceAlertsWatchController.name);
 
-  constructor(private readonly monitorService: PriceAlertsMonitorService) {}
+  constructor(
+    private readonly monitorService: PriceAlertsMonitorService,
+    private readonly signalsMonitor: SignalsMonitorService,
+  ) {}
 
   @All('price-alerts-watch')
   @UseGuards(PriceAlertsWatchSecretGuard)
@@ -24,6 +28,15 @@ export class PriceAlertsWatchController {
     } catch (error) {
       this.logger.error(
         `Price-alert watcher failed: ${error instanceof Error ? error.stack : String(error)}`,
+      );
+    }
+    // The signals check (EPIC-004) is watched from the same tick, on its own: a
+    // failure on either side never skips the other.
+    try {
+      await this.signalsMonitor.check();
+    } catch (error) {
+      this.logger.error(
+        `Signals watcher failed: ${error instanceof Error ? error.stack : String(error)}`,
       );
     }
     // Always 200, like the other machine-triggered endpoints.

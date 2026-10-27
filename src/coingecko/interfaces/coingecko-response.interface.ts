@@ -18,6 +18,17 @@ export interface CoinGeckoMarketCoin {
   price_change_percentage_24h: number | null;
 }
 
+/** Shape of /coins/{id}/market_chart: `prices` is a list of [epoch ms, usd]. */
+export interface CoinGeckoMarketChartResponse {
+  prices: [number, number][];
+}
+
+/** One history sample: epoch milliseconds and USD price. */
+export interface MarketChartPoint {
+  t: number;
+  p: number;
+}
+
 /** Normalized, app-internal representation used everywhere outside CoingeckoService. */
 export interface CoinMarketData {
   id: string;
