@@ -8,12 +8,42 @@ work progresses or new direction is decided, rather than starting a new doc.
 Status legend: `Idea` (not committed) · `Planned` (scoped, not started) ·
 `In progress` · `Shipped` · `Dropped` (with reason).
 
-## Current state (2026-09-29)
+## Current state (2026-10-27)
 
-**Merged to `master`, not yet deployed:** Initiative 2's `EPIC-002-FIX`
-(price-alert watcher) and Initiative 3's `EPIC-003` (portfolio tracking) —
-see their sections below for what's still needed before/after
-`vercel deploy --prod`.
+**Merged to `master`:** `EPIC-002-FIX` (price-alert watcher), `EPIC-003`
+(portfolio tracking) and `EPIC-004` (simple signals, PR #4). Probed
+2026-10-27: `/cron/signals` → 404 (EPIC-004 **not deployed**);
+`/cron/price-alerts-watch` → 401 (EPIC-002-FIX **is live**; whether its QStash
+schedule exists is unchecked); EPIC-003 deploy state unverified. Tick the
+checklist below only for steps you have confirmed. Code is done; the rest is
+owner-side deployment. `EPIC-004`'s maintain step found no production signal yet and
+closed (`docs/epics/EPIC-004/artifacts/incident.md`).
+
+### Deploy checklist (in this order — details in `docs/DEPLOYMENT.md`)
+
+1. ✅ **Migrate Postgres first** (§3a "Portfolio tables"): `npm run db:migrate`
+   with the production `POSTGRES_URL`. Adds tables only; the old build keeps
+   working. Check: `npm run portfolio:report` → `Chats that used /danhmuc: 0`.
+2. ✅ **Env vars on Vercel** (Production): `PRICE_ALERTS_WATCH_SECRET` and
+   `OWNER_CHAT_ID` (§8b); `SIGNALS_CRON_SECRET` (§3, its own secret,
+   Sensitive). `SIGNAL_SWING_24H_PCT` / `SIGNAL_SWING_72H_PCT` /
+   `SIGNAL_BAND_PCT` are optional.
+3. ✅ **Deploy**: `vercel deploy --prod`; `/health` must return `ok`.
+4. ⬜ **Smoke-test `/danhmuc`** in a private chat (§3a): `mua btc 0.001 1`,
+   list, `lichsu`, `xoahet` + `xoahet xacnhan`.
+5. ✅ **Price-alert watcher** (§8b): curl `/cron/price-alerts-watch`, *then*
+   create the QStash schedule (`*/5 * * * *`), then run the 20-minute outage
+   test.
+6. ✅ **Signals** (§8c): call `/cron/signals` once by hand (log `outcome` must
+   be `healthy`), read `/tinhieu backtest btc|eth|sol`, *then* add the
+   cron-job.org job (every 30 min).
+7. ⬜ **After 24–48h**: Vercel Active CPU, Upstash commands/month (target
+   < 400k total), `npm run alerts:report`, `npm run signals:report`.
+8. ⬜ **Close the deferred verify items**: EPIC-003 AC17 / AC19 / AC20,
+   EPIC-002-FIX's 5 post-deploy checks, EPIC-004 AC04 (delivery ≤ 30 min).
+
+Then revisit each initiative's 30-day success metric and the first real 9am
+digest under the per-subscriber path (Initiative 1).
 
 ## Current state (2026-09-22)
 
@@ -155,8 +185,8 @@ channels. Manual entry only (no exchange/wallet sync) for this epic.
 
 ## Initiative 4: Simple signals (volatility / basic indicators)
 
-**Status:** In implementation on `feature/epic-004-simple-signals` (not merged,
-not deployed). `/tinhieu` shows which watchlist coins swing strongly (≥ 8% in
+**Status:** Merged to `master` 2026-10-27 (PR #4), **not yet deployed**. Verify
+rev 3: 17/18 pass, 0 fail, 1 untested (AC04, needs a deployed cron). `/tinhieu` shows which watchlist coins swing strongly (≥ 8% in
 24h or ≥ 15% in 72h) with a rule-based buy / sell / watch note from the 7-day
 range and a disclaimer; a "Tín hiệu" section in the 9am digest; a proactive
 message from `/cron/signals` (every 30 min, ≤ 1 per chat per hour, default on,
@@ -169,7 +199,7 @@ Out of scope: paid tiers, non-Zalo channels, coins outside the watchlist for
 proactive messages, RSI/MACD, personal thresholds.
 **Decided:** all data in Upstash Redis (not Postgres) to keep Neon asleep; price
 history back-filled once per coin from CoinGecko `market_chart` (verified).
-**Deploy still needed (after merge):** set `SIGNALS_CRON_SECRET`, deploy, call
+**Deploy still needed:** set `SIGNALS_CRON_SECRET`, deploy, call
 `/cron/signals` once by hand, read `/tinhieu backtest btc`, then add the
 cron-job.org job (`docs/DEPLOYMENT.md` step 8c). No Postgres migration.
 **Why:** Differentiates from a "just a price lookup" bot.
