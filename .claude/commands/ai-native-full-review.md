@@ -154,9 +154,13 @@ broken rule, and stage 6 is where it gets fixed.
 
 ## Output
 
-Write `docs/epics/$0/artifacts/review.md`, ending with a one-line verdict —
-**ship** or **hold** — and, when it is a hold, the shortest list of changes that
-would turn it into a ship.
+Write `docs/epics/$0/artifacts/review.md`. State the verdict once, on a line of
+its own, exactly `Verdict: ship` or `Verdict: hold`. When it is a hold, list the
+shortest set of changes that would turn it into a ship under a
+`## Shortest path to ship` heading.
+
+A validator reads that line. A missing, misspelled or contradictory verdict counts as a
+hold, and the changes you list are what the engineer is handed next.
 
 ## Task
 
@@ -165,7 +169,8 @@ The user invoked you with epic id `$ARGUMENTS`.
 1. Read `docs/epics/$ARGUMENTS/state.json` to understand the current run state.
    - If the step has `feedback` from a prior rejection, address it explicitly in this revision.
    - Check `history` entries for rejection reasons and context.
-2. Read `docs/epics/$ARGUMENTS/inputs.json` for capability inputs (Jira ticket, Figma URL, files glob, GitHub repo, etc.).
+   - A step whose `status` is `skipped` is disabled for this epic — treat it as not part of the pipeline. If that is this step, say so and stop.
+2. Read `docs/epics/$ARGUMENTS/inputs.json` for capability inputs (Jira ticket, Figma URL, files glob, GitHub repo, etc.). If it has `from_epic` (and `also_from`, comma-separated), this epic follows those epics and inherits their business rules: before writing, read each one's `docs/epics/<parent>/artifacts/intent.md` and `spec.md` (whichever exist), keep what this epic does not change, and say what it changes.
 3. Write your output to `docs/epics/$ARGUMENTS/artifacts/review.md`. Read `.aidlc/aidlc-templates/ai-native-full/review.md` first and follow its structure — it is the blank template for this artifact, and the steps downstream read it expecting those sections. The AIDLC validator checks for this file when the step is marked done — the folder starts empty, so every file in it is one an agent wrote.
 4. When finished, summarize what you produced and tell the user to click **"Mark step done"** in the AIDLC panel to advance the pipeline.
 

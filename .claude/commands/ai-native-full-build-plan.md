@@ -120,6 +120,15 @@ A table, not prose. Real paths.
 Numbered steps in dependency order, each one independently reviewable. Say what is
 true after each step that was not true before it.
 
+Then group the steps into **batches**: runs of consecutive steps that one fresh
+agent session can finish, with tests passing, in about half an hour. A run with
+`batches: true` on `implement` gives each batch its own session, so reviewing the
+plan is also reviewing where those sessions start and stop. Keep a batch to one
+area of the code, and end it where the tests pass. A small plan is one batch.
+
+    **Batch 1** — steps 1–2: <what is true when it ends>
+    **Batch 2** — steps 3–5: <what is true when it ends>
+
 ### Risks
 
 | Risk | Likelihood | What we do about it |
@@ -158,7 +167,8 @@ The user invoked you with epic id `$ARGUMENTS`.
 1. Read `docs/epics/$ARGUMENTS/state.json` to understand the current run state.
    - If the step has `feedback` from a prior rejection, address it explicitly in this revision.
    - Check `history` entries for rejection reasons and context.
-2. Read `docs/epics/$ARGUMENTS/inputs.json` for capability inputs (Jira ticket, Figma URL, files glob, GitHub repo, etc.).
+   - A step whose `status` is `skipped` is disabled for this epic — treat it as not part of the pipeline. If that is this step, say so and stop.
+2. Read `docs/epics/$ARGUMENTS/inputs.json` for capability inputs (Jira ticket, Figma URL, files glob, GitHub repo, etc.). If it has `from_epic` (and `also_from`, comma-separated), this epic follows those epics and inherits their business rules: before writing, read each one's `docs/epics/<parent>/artifacts/intent.md` and `spec.md` (whichever exist), keep what this epic does not change, and say what it changes.
 3. Write your output to `docs/epics/$ARGUMENTS/artifacts/plan.md`. Read `.aidlc/aidlc-templates/ai-native-full/plan.md` first and follow its structure — it is the blank template for this artifact, and the steps downstream read it expecting those sections. The AIDLC validator checks for this file when the step is marked done — the folder starts empty, so every file in it is one an agent wrote.
 4. When finished, summarize what you produced and tell the user to click **"Mark step done"** in the AIDLC panel to advance the pipeline.
 

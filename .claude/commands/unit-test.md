@@ -13,8 +13,9 @@ procedure exactly as `/aidlc <epic> unit-test` would:
 2. In `.aidlc/workspace.yaml`, find that pipeline and its `unit-test` step
    (`name`/`agent` === `unit-test`). Use that step's `agent` + `skills` —
    never assume; two pipelines can wire `unit-test` differently.
-3. **If the pipeline has no `unit-test` step**, tell the user this epic's
-   pipeline (`<pipelineId>`) has no `unit-test` phase, suggest
+3. **If the pipeline has no `unit-test` step, or `state.json` lists it as
+   `skipped`** (disabled for this epic — the same as not having it), tell
+   the user this epic's pipeline (`<pipelineId>`) has no `unit-test` phase, suggest
    `/aidlc <epic>` to run the next eligible phase, and stop.
 4. Load the persona and skill(s) that step names. Resolve each from
    `workspace.yaml` first — a `skills[]` / `agents[]` entry may
@@ -22,7 +23,7 @@ procedure exactly as `/aidlc <epic> unit-test` would:
    ones — and only fall back to `.claude/skills/<id>.md` and
    `.claude/agents/<id>.md` when none is declared. Adopt them (unless the
    active standard is `none`), then follow the structural contract: read
-   state/inputs, write to
+   state/inputs (If it has `from_epic` (and `also_from`, comma-separated), this epic follows those epics and inherits their business rules: before writing, read each one's `docs/epics/<parent>/artifacts/intent.md` and `spec.md` (whichever exist), keep what this epic does not change, and say what it changes.), write to
    `docs/epics/<epic>/artifacts/UNIT-TEST-SUMMARY.md` (or the step's declared
    artifact), and tell the user to click **"Mark step done"**.
 
