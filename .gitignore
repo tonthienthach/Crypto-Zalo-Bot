@@ -41,3 +41,10 @@ ngrok.yml
 
 .vercel
 .env*
+
+# Per-checkout AIDLC settings (epic_id_prefix, active/watched epics) — never shared
+.aidlc/user.yaml
+.ast-graph/
+
+# CodeGraph index (local, rebuilt by the AIDLC extension)
+.codegraph/

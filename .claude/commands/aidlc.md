@@ -12,16 +12,21 @@ The first token is the **epic id**; an optional second token is the **phase**.
 1. Read `docs/epics/<epic>/state.json`. Note `pipelineId` (the pipeline this
    epic is bound to) and the per-step `status` list. If the file is missing,
    tell the user the epic isn't started and stop.
+2. A step whose `status` is `skipped` is disabled for this epic: treat it
+   exactly as a step the pipeline does not have. Never run or pick it, and
+   read a `depends_on` that names it as naming what *it* depends on.
 
 ## 2. Choose the phase
 
 - **If a phase was given**, use it. Validate it is a step in the epic's
-  pipeline (see step 3). If it isn't, tell the user which phases the pipeline
+  pipeline (see step 3) and not `skipped`. If it isn't, tell the user which phases the pipeline
   *does* have and stop.
-- **If no phase was given**, pick the **next eligible phase**: the first step
-  that is `awaiting_work`, else the first `rejected` step, else the first
-  `pending` step whose every `depends_on` is `approved`. If none is
-  actionable (all approved or paused for review), say so and stop.
+- **If no phase was given**, pick the **next eligible phase**, checking each
+  rule against every step before moving to the next rule: any step that is
+  `awaiting_work`, else any `rejected` step *not* marked `optional: true`,
+  else the first `pending` step whose every `depends_on` is `approved`, else
+  a `rejected` `optional` step. If none is actionable (all approved or
+  paused for review), say so and stop.
 
 ## 3. Resolve composition from the pipeline (never from the command name)
 
@@ -29,6 +34,9 @@ The first token is the **epic id**; an optional second token is the **phase**.
 2. In that pipeline's `steps`, find the step whose `name` (or `agent` when
    unnamed) === the chosen phase. That step's `agent` + `skills` are the
    wiring. If the step omits `skills`, use the referenced agent's `skills:`.
+   If the step sets `default_skill`, its `skills` are alternatives: load
+   **only one** — the step's `skill` in `.aidlc/runs/<epic>.json` when it
+   is one of them, else `default_skill`. Never load the others.
 3. Load the persona from `.claude/agents/<agent>.md` (fall back to
    `~/.claude/agents/<agent>.md`), and each skill from
    `.claude/skills/<skill>.md` (fall back to `~/.claude/skills/<skill>.md`).
@@ -42,7 +50,7 @@ Claude — but still follow the structural contract below.
 
 1. Read `docs/epics/<epic>/state.json` for prior feedback/history and address
    any rejection reasons in this revision.
-2. Read `docs/epics/<epic>/inputs.json` for capability inputs.
+2. Read `docs/epics/<epic>/inputs.json` for capability inputs. If it has `from_epic` (and `also_from`, comma-separated), this epic follows those epics and inherits their business rules: before writing, read each one's `docs/epics/<parent>/artifacts/intent.md` and `spec.md` (whichever exist), keep what this epic does not change, and say what it changes.
 3. Before writing, read the blank template for that artifact at
    `.aidlc/aidlc-templates/<templatesId>/<FILE>` and follow its structure —
    `<templatesId>` is the pipeline's `derived_from` when it has one (a
