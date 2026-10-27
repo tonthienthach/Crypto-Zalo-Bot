@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 2,
+  "runId": "EPIC-004",
+  "pipelineId": "ai-native-full",
+  "context": {
+    "epic": "EPIC-004"
+  },
+  "startedAt": "2026-09-30T00:00:00.000Z",
+  "updatedAt": "2026-10-08T17:28:08.867Z",
+  "currentStepIdx": 6,
+  "status": "completed",
+  "steps": [
+    {
+      "stepIdx": 0,
+      "agent": "aidlc-native-originator",
+      "name": "intent",
+      "revision": 1,
+      "status": "approved",
+      "startedAt": "2026-09-30T00:00:00.000Z",
+      "finishedAt": "2026-09-30T15:53:09.226Z",
+      "artifactsProduced": [
+        "docs/epics/EPIC-004/artifacts/intent.md"
+      ],
+      "history": [
+        {
+          "kind": "approve",
+          "at": "2026-09-30T15:53:09.226Z",
+          "revision": 1
+        }
+      ],
+      "feedback": "Approved by originator (Thach) 2026-09-30."
+    },
+    {
+      "stepIdx": 1,
+      "agent": "aidlc-native-product-owner",
+      "name": "spec",
+      "revision": 1,
+      "status": "approved",
+      "startedAt": "2026-09-30T15:53:09.226Z",
+      "finishedAt": "2026-09-30T16:11:05.876Z",
+      "artifactsProduced": [
+        "docs/epics/EPIC-004/artifacts/spec.md"
+      ],
+      "history": [
+        {
+          "kind": "approve",
+          "at": "2026-09-30T16:11:05.876Z",
+          "revision": 1
+        }
+      ],
+      "feedback": "Approved by originator (Thach) 2026-09-30."
+    },
+    {
+      "stepIdx": 2,
+      "agent": "aidlc-native-engineer",
+      "name": "build-plan",
+      "revision": 1,
+      "status": "approved",
+      "startedAt": "2026-09-30T16:11:05.876Z",
+      "finishedAt": "2026-10-07T15:18:18.516Z",
+      "artifactsProduced": [
+        "docs/epics/EPIC-004/artifacts/plan.md"
+      ],
+      "history": [
+        {
+          "kind": "approve",
+          "at": "2026-10-07T15:18:18.516Z",
+          "revision": 1
+        }
+      ],
+      "feedback": "Approved by originator (Thach) 2026-10-07."
+    },
+    {
+      "stepIdx": 3,
+      "agent": "aidlc-native-engineer",
+      "name": "implement",
+      "revision": 1,
+      "status": "approved",
+      "startedAt": "2026-10-07T15:18:18.516Z",
+      "finishedAt": "2026-10-07T16:06:49.662Z",
+      "artifactsProduced": [
+        "docs/epics/EPIC-004/artifacts/implement.md"
+      ],
+      "history": [
+        {
+          "kind": "approve",
+          "at": "2026-10-07T16:06:49.662Z",
+          "revision": 1
+        }
+      ],
+      "feedback": "Approved by originator (Thach) 2026-10-07."
+    },
+    {
+      "stepIdx": 4,
+      "agent": "aidlc-native-verifier",
+      "name": "verify",
+      "revision": 2,
+      "status": "approved",
+      "startedAt": "2026-10-07T16:06:49.662Z",
+      "finishedAt": "2026-10-08T17:00:00.000Z",
+      "artifactsProduced": [
+        "docs/epics/EPIC-004/artifacts/verify.md"
+      ],
+      "history": [
+        {
+          "kind": "approve",
+          "at": "2026-10-08T17:00:00.000Z",
+          "revision": 2
+        }
+      ],
+      "feedback": "Approved by originator (Thach) 2026-10-08: rev 2 verdict fail only on AC04 (deferred to post-deploy observation). Findings #12/#14 fixed in a657a08."
+    },
+    {
+      "stepIdx": 5,
+      "agent": "aidlc-native-reviewer",
+      "name": "review",
+      "revision": 1,
+      "status": "approved",
+      "startedAt": "2026-10-08T17:00:00.000Z",
+      "finishedAt": "2026-10-08T17:05:00.000Z",
+      "artifactsProduced": [
+        "docs/epics/EPIC-004/artifacts/review.md"
+      ],
+      "history": [
+        {
+          "kind": "approve",
+          "at": "2026-10-08T17:05:00.000Z",
+          "revision": 1
+        }
+      ],
+      "feedback": "Ship with follow-up (2026-10-08). 487 tests pass, no blockers. Ready for PR merge and deploy."
+    },
+    {
+      "stepIdx": 6,
+      "agent": "aidlc-native-operator",
+      "name": "maintain",
+      "revision": 1,
+      "status": "approved",
+      "artifactsProduced": [],
+      "startedAt": "2026-10-08T17:05:00.000Z",
+      "finishedAt": "2026-10-08T17:28:08.866Z",
+      "feedback": "Skipped via aidlc step skip."
+    }
+  ]
+}
