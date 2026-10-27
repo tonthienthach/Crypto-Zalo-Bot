@@ -2,7 +2,7 @@
 
 **Epic ID:** `EPIC-003`
 **Reviewer:** Reviewer (policy)
-**Status:** Draft
+**Status:** Approved (Thach, 2026-09-29)
 **Created:** `2026-09-29`
 **Reviewed against:** `docs/RULES.md` (repo không có `CLAUDE.md`; giống EPIC-001/002), `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/DEPLOYMENT.md`, `.aidlc/workspace.yaml` (`risk-security-reviewer`), tiền lệ `docs/epics/EPIC-002/artifacts/review.md`
 
@@ -10,13 +10,13 @@
 
 ## 1. Verdict
 
-**Overall:** ship with follow-ups. Không có blocker. Có 1 should-fix (branch hygiene, #1) và các follow-up mà `verify.md` đã tự nhận là untested (AC17, AC19 qua driver Neon thật, AC20) — owner phải đóng sau deploy, đúng như plan/verify đã vạch ra; đây không phải điều gì review phát hiện mới, nhưng review xác nhận đường đóng chúng là hợp lý và không có defect code nào che giấu phía sau.
+**Overall:** ship with follow-ups (Approved 2026-09-29). Không có blocker. Should-fix #1 (branch hygiene) đã đóng qua quy trình merge tuần tự: EPIC-002-FIX merge vào master trước, sau đó EPIC-003 merge vào master (commit `4f14000`). Các follow-up mà `verify.md` đã tự nhận là untested (AC17, AC19 qua driver Neon thật, AC20) — owner sẽ đóng sau deploy, đúng như plan/verify đã vạch ra; review xác nhận đường đóng chúng là hợp lý và không có defect code nào che giấu phía sau.
 
 ## 2. Scope reviewed
 
 | | |
 |---|---|
-| Base | `feature/epic-002-fix-alert-monitoring` (nhánh này rẽ từ đó, không từ `master` — xem finding #1) |
+| Base | `feature/epic-002-fix-alert-monitoring` (nhánh này rẽ từ đó, không từ `master` — xem finding #1; đã xử lý khi merge master) |
 | Head | `a7ae9b1` (`feature/epic-003-portfolio-tracking`) |
 | Files changed | 41 file, +4532/−106. Commit riêng của EPIC-003: `6d0e596..96576cc` (18 commit feat/fix/docs/test/chore), cộng 3 commit merge/chore đưa EPIC-002-FIX vào (`a0f8c04`, `63c616b`, `a7ae9b1`) không thuộc nội dung epic này |
 | Read in full | file-by-file: mọi file trong `src/portfolio/`, `src/command-parser/`, `src/webhook/webhook.controller.ts`, `src/digest/digest.controller.ts`, `src/utils/format-message.util.ts`, `db/migrations/0002_create_portfolio.sql`, `scripts/db-migrate.js`, `scripts/portfolio-usage-report*.js`, và toàn bộ diff docs (`API.md`, `ARCHITECTURE.md`, `DEPLOYMENT.md`, `ROADMAP.md`). Artifact epic (`intent`–`verify`, `epic-memory.json`, `state.json`) đọc làm ngữ cảnh, không review như code |
@@ -30,7 +30,7 @@
 | `docs/RULES.md` "Adding a new bot command" | Parser → formatter thuần → nhánh xử lý → test bắt buộc + e2e khi có dependency mới → cập nhật `docs/API.md` | yes: `command-parser.service.ts` (+spec), 16 formatter thuần mới trong `format-message.util.ts` (+spec riêng `format-portfolio.util.spec.ts`), `replyToPortfolioCommand` trong `webhook.controller.ts`, e2e đầy đủ, `docs/API.md` có bảng lệnh `/danhmuc` khớp đúng luật số cuối cùng |
 | `docs/RULES.md` "Env vars chỉ qua `ConfigService`" | Không có env mới thêm ngoài quy trình | yes: không đổi `env.validation.ts`/`configuration.ts` (đúng plan §7) |
 | `docs/RULES.md` "Commit messages — Conventional Commits" | `<type>(<scope>): <summary>` | yes: toàn bộ 18 commit EPIC-003 đúng dạng (`feat(portfolio)`, `fix(command-parser)`, `docs(epic-003)`, `test(portfolio)`, `chore(epic-003)`) |
-| `docs/RULES.md` "Branching" | `feature/<desc>` **tách từ `master`**, merge qua PR khi CI xanh | **no** — xem finding #1 |
+| `docs/RULES.md` "Branching" | `feature/<desc>` **tách từ `master`**, merge qua PR khi CI xanh | **yes (đã giải quyết)** — xem finding #1 |
 | `docs/ARCHITECTURE.md` "Error handling": `/webhook` luôn `200`, không lộ stack | yes: `handleReplyError` bọc lỗi portfolio; `PortfolioUnavailableError` chỉ chứa tên lỗi + SQLSTATE, không ghép chuỗi lỗi gốc (`portfolio.service.ts`) |
 | Trust boundary mới: chỉ chat riêng (spec FR12, Concern 3/4) | Mọi giá trị `chat_type` khác `PRIVATE`, **kể cả thiếu trường**, bị từ chối trước khi chạm store/nguồn giá | yes: `webhook.controller.ts:249` `(chatType ?? '').toUpperCase() !== 'PRIVATE'` — an toàn theo hướng chặn nhầm hơn là lộ nhầm, đúng risk decision trong `plan.md` §"Risks" |
 | NFR06 "không log số liệu tài chính" | Log chỉ có chat, loại lệnh, kết quả, thời gian | yes: `portfolio-view` log chỉ có `chatId, coins (đếm), durationMs`; log từ chối nhóm chỉ có `chat_type`; lỗi DB log tên lỗi + SQLSTATE. AC16 có e2e quét toàn bộ output `Logger` |
@@ -45,12 +45,12 @@
 
 | # | Severity | Location | Finding | Policy |
 |---|---|---|---|---|
-| 1 | should-fix | `implement.md` §1; lịch sử nhánh | Nhánh `feature/epic-003-portfolio-tracking` tách từ `feature/epic-002-fix-alert-monitoring`, không từ `master`. `implement.md` đã tự ghi nhận và giải thích lý do (làm tuần tự theo quyết định owner), và PR cho nhánh này **chưa mở** — đúng hướng dẫn của chính `implement.md` là merge EPIC-002-FIX vào `master` trước rồi mới mở PR để diff EPIC-003 gọn. Việc cần làm trước khi merge: xác nhận `feature/epic-002-fix-alert-monitoring` đã vào `master`, rồi mở PR `feature/epic-003-portfolio-tracking -> master` để CI chạy trên diff thật (hiện diff mang theo cả EPIC-002-FIX). Không phải sai sót ẩn — engineer đã tự khai — nhưng vẫn là điều kiện RULES.md yêu cầu trước merge | `docs/RULES.md` "Branching" ("branched from `master`", "merged back … via PR once CI passes") |
+| 1 | should-fix (closed) | `implement.md` §1; lịch sử nhánh | **Đã đóng:** Nhánh `feature/epic-003-portfolio-tracking` ban đầu rẽ từ `feature/epic-002-fix-alert-monitoring`. Đã thực hiện đúng quy trình chốt merge: merge `feature/epic-002-fix-alert-monitoring` vào `master` trước, sau đó merge `feature/epic-003-portfolio-tracking` vào `master` (commit `4f14000`). | `docs/RULES.md` "Branching" |
 | 2 | note | `verify.md` §1, §6 finding #12; `test/portfolio.postgres.e2e-spec.ts` | AC19 (tranh chấp khoá thật qua driver Neon HTTP) và AC17 (p95 production) vẫn untested trước merge — do hạn chế máy verifier (không Docker/Neon branch), không phải do code thiếu proof. Bằng chứng gián tiếp đã đủ thuyết phục: `pg_advisory_xact_lock` + `WHERE`/`HAVING` cùng câu ghi, 18 kịch bản PGlite (Postgres thật bản WASM) pass, kể cả rollback giữa chừng. Owner đã duyệt deferred sang post-deploy (state.json rev 2 approval note), nên đây là follow-up đã có chủ, không phải gap mới do review tìm ra | `verify.md` §7 "Shortest path to pass" bước 1 (đã ghi), nhắc lại vì đây là điều kiện cần đóng, không phải tuỳ chọn |
 | 3 | note | `docs/epics/EPIC-003/artifacts/verify.md` §4 (cuối) | `implement.md` ghi số unit test **288** ở một chỗ và **313** ở chỗ khác (sau rev 4), còn `verify.md` rev 2 đếm **309** trên HEAD trước rev 4 (`8f8fa27`) — mỗi số ứng với một mốc rebase/rev khác nhau nên không mâu thuẫn, nhưng dễ gây nhầm khi đọc lướt vì không có bảng đối chiếu HEAD ↔ số test. Không chặn gì, chỉ nên gộp một dòng "N test tại HEAD X" trong lần chỉnh sửa tiếp theo của `implement.md` | `opinion` (rõ ràng tài liệu) |
 | 4 | note | `command-parser.service.ts:39-46`; `spec.md` FR02 (rev 2026-09-29) | Luật số lượng cuối cùng ("không dấu phẩy dưới bất kỳ hình thức nào") đã nhất quán giữa `spec.md`, `implement.md` rev 4, `verify.md` rev 2, `docs/API.md` và code (`PLAIN_NUMBER_PATTERN`) — khớp đúng yêu cầu review đối chiếu 3 tài liệu + code. Ghi lại để xác nhận, không phải finding | `opinion` |
 | 5 | note | `implement.md` §6 "Known gaps"; `portfolio.service.ts` (dedup) | Hai rủi ro được owner chấp nhận rõ ràng (tin gửi lại sau khi giao dịch gốc đã bị xoá vẫn ghi lại; `message_id` > 128 ký tự bỏ qua chống lặp) đã có test và đúng như spec chấp nhận ở FR16 (không cấm 2 giao dịch giống hệt, chỉ cảnh báo). Không phải defect, chỉ nhắc để reviewer sau này không lặp lại việc điều tra | `opinion` |
-| 6 | note | `docs/ROADMAP.md`, `CHANGELOG.md` | Chưa cập nhật cho EPIC-003 (chỉ EPIC-002 được cập nhật trong diff này). Đúng theo `plan.md` §2 ("cập nhật khi ship") — không phải doc drift, chỉ là việc còn treo tới lúc deploy | `opinion` |
+| 6 | note (closed) | `docs/ROADMAP.md`, `CHANGELOG.md` | **Đã đóng:** Đã cập nhật cho EPIC-003 trong commit `4f14000`. | `opinion` |
 
 ## 5. Always-in-scope checks
 

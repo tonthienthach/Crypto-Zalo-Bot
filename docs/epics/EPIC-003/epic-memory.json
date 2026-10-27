@@ -1,6 +1,6 @@
 {
   "epic": "EPIC-003",
-  "summary": "Portfolio tracking (Initiative 3). Implement done 2026-09-26 on feature/epic-003-portfolio-tracking (9 commits), not pushed/deployed. Pending: real Neon driver run of opt-in spec, deploy (migrate 0002 first), AC17/AC20 post-deploy. Artifacts in Vietnamese.",
+  "summary": "Portfolio tracking (Initiative 3). Review approved 2026-09-29 (ship with follow-ups). Merged to master (commit 4f14000), not yet deployed. Pending: deploy (migrate 0002 first), AC17/AC20 post-deploy, real Neon driver run of opt-in spec. Artifacts in Vietnamese.",
   "entries": [
     {
       "at": "2026-09-24T15:32:29.322Z",
@@ -55,6 +55,12 @@
       "author": "Thach <vnsnake123@gmail.com>",
       "kind": "context",
       "text": "scripts/db-migrate.js now exports splitStatements/applyMigrations (CLI unchanged) so tests run the exact migration code. Local lint on Windows needs prettier endOfLine:auto (CRLF working copy); no .gitattributes yet."
+    },
+    {
+      "at": "2026-09-29T15:33:42.702Z",
+      "author": "Thach <vnsnake123@gmail.com>",
+      "kind": "decision",
+      "text": "Review approved 2026-09-29 (ship with follow-ups). Should-fix #1 (branch hygiene) resolved by merge order: EPIC-002-FIX -> master first, then EPIC-003 -> master (commit 4f14000). CHANGELOG.md & docs/ROADMAP.md updated."
     }
   ],
   "reflections": [
@@ -64,5 +70,5 @@
       "text": "Spent several attempts on an in-process Postgres (PGlite) before checking whether its loader works under Jest CJS at all. Next time: probe a new test dependency in the real runner with a 5-line spike before building an adapter around it. Also: walking the digest failure order found ZaloService resolving false being counted as sent - check return values, not just throws."
     }
   ],
-  "updatedAt": "2026-09-26T02:34:33.559Z"
+  "updatedAt": "2026-09-29T15:33:42.702Z"
 }
