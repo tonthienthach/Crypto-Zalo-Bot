@@ -21,7 +21,7 @@
     {
       "agent": "aidlc-native-originator",
       "name": "intent",
-      "status": "approved",
+      "status": "done",
       "revision": 1,
       "runStatus": "approved",
       "startedAt": "2026-09-30T00:00:00.000Z",
@@ -40,7 +40,7 @@
     {
       "agent": "aidlc-native-product-owner",
       "name": "spec",
-      "status": "approved",
+      "status": "done",
       "revision": 1,
       "runStatus": "approved",
       "startedAt": "2026-09-30T15:53:09.226Z",
@@ -59,7 +59,7 @@
     {
       "agent": "aidlc-native-engineer",
       "name": "build-plan",
-      "status": "approved",
+      "status": "done",
       "revision": 1,
       "runStatus": "approved",
       "startedAt": "2026-09-30T16:11:05.876Z",
@@ -78,7 +78,7 @@
     {
       "agent": "aidlc-native-engineer",
       "name": "implement",
-      "status": "approved",
+      "status": "done",
       "revision": 1,
       "runStatus": "approved",
       "startedAt": "2026-10-07T15:18:18.516Z",
@@ -97,7 +97,7 @@
     {
       "agent": "aidlc-native-verifier",
       "name": "verify",
-      "status": "approved",
+      "status": "done",
       "revision": 2,
       "runStatus": "approved",
       "startedAt": "2026-10-07T16:06:49.662Z",
@@ -116,7 +116,7 @@
     {
       "agent": "aidlc-native-reviewer",
       "name": "review",
-      "status": "approved",
+      "status": "done",
       "revision": 1,
       "runStatus": "approved",
       "startedAt": "2026-10-08T17:00:00.000Z",
