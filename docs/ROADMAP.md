@@ -36,7 +36,11 @@ closed (`docs/epics/EPIC-004/artifacts/incident.md`).
    test.
 6. ✅ **Signals** (§8c): call `/cron/signals` once by hand (log `outcome` must
    be `healthy`), read `/tinhieu backtest btc|eth|sol`, *then* add the
-   cron-job.org job (every 30 min).
+   cron-job.org job (every 30 min). Done 2026-10-27: job runs healthy, but
+   `coins: 0` until the Redis watchlist mirror is filled — it is only written by
+   `/dangky`, `/watchlist` or the 9am digest (`syncAll`), not at deploy. Send
+   `/watchlist <coins>` once, or wait for the next digest, then re-check
+   `npm run signals:report`.
 7. ⬜ **After 24–48h**: Vercel Active CPU, Upstash commands/month (target
    < 400k total), `npm run alerts:report`, `npm run signals:report`.
 8. ⬜ **Close the deferred verify items**: EPIC-003 AC17 / AC19 / AC20,
