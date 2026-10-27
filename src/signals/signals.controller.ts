@@ -5,7 +5,7 @@ import { pricesBySymbol } from '../portfolio/portfolio-prices';
 import { formatSignalAlertMessage } from '../utils/format-signals.util';
 import { ZaloService } from '../zalo/zalo.service';
 import { ChatSignalState, CoinSignal, SignalRunSummary } from './interfaces/signal.interface';
-import { recordSent, selectCoinsToAlert } from './signal-repeat';
+import { isBackedOff, recordFailed, recordSent, selectCoinsToAlert } from './signal-repeat';
 import { SignalsStateService } from './signals-state.service';
 import { SignalsService } from './signals.service';
 import { SIGNALS_SEND_BUDGET_MS } from './signals.constants';
@@ -127,6 +127,8 @@ export class SignalsController {
         .filter((signal): signal is CoinSignal => signal !== undefined);
       const picked = selectCoinsToAlert(chatSignals, sentStates[chatId] ?? FRESH_STATE, startedAt);
       if (picked.length === 0) continue;
+      // A chat that keeps refusing our messages is tried once per backoff window, not every run.
+      if (isBackedOff(sentStates[chatId] ?? FRESH_STATE, startedAt)) continue;
 
       if (Date.now() - sendsStartedAt > SIGNALS_SEND_BUDGET_MS) {
         summary.deferred++;
@@ -164,6 +166,11 @@ export class SignalsController {
     );
     if (!delivered) {
       summary.failures++;
+      try {
+        await this.state.setSentState(chatId, recordFailed(previous, now));
+      } catch (error) {
+        this.logger.error(`Could not record the failed send for ${chatId}: ${String(error)}`);
+      }
       return;
     }
     summary.chatsAlerted++;

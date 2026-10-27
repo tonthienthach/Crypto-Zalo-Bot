@@ -26,6 +26,7 @@ describe('SignalsService', () => {
   const backfill = jest.fn().mockResolvedValue([]);
   const loadHourly = jest.fn();
   const loadDaily = jest.fn();
+  const backfillFailure = jest.fn();
   const trackExtra = jest.fn();
   const listRecords = jest.fn();
   const recordVerdicts = jest.fn().mockResolvedValue(undefined);
@@ -39,7 +40,13 @@ describe('SignalsService', () => {
     service = new SignalsService(
       { get: () => undefined } as unknown as ConfigService,
       { getPricesBySymbols, getMarketChart, resolveSymbolToId } as unknown as CoingeckoService,
-      { snapshot, backfill, loadHourly, loadDaily } as unknown as SignalsHistoryService,
+      {
+        snapshot,
+        backfill,
+        loadHourly,
+        loadDaily,
+        backfillFailure,
+      } as unknown as SignalsHistoryService,
       { trackExtra, listRecords, recordVerdicts } as unknown as SignalsStateService,
     );
   });
@@ -226,6 +233,29 @@ describe('SignalsService', () => {
       await expect(service.getSignalFor('x', NOW)).rejects.toBeInstanceOf(
         CoingeckoUnavailableError,
       );
+    });
+  });
+
+  describe('history that could not be fetched (verify finding 13)', () => {
+    beforeEach(() => {
+      getPricesBySymbols.mockResolvedValue([{ id: 'ada', symbol: 'ada', priceUsd: 1 }]);
+      trackExtra.mockResolvedValue(true);
+      loadHourly.mockResolvedValue({ ada: [] });
+    });
+
+    it('says "try later" when CoinGecko rate limited the backfill of a new coin', async () => {
+      backfillFailure.mockResolvedValue('busy');
+      await expect(service.getSignalFor('ada', NOW)).rejects.toBeInstanceOf(
+        CoingeckoUnavailableError,
+      );
+    });
+
+    it('keeps "not enough data" for a coin CoinGecko does not have, or one not yet attempted', async () => {
+      for (const reason of ['notfound', null]) {
+        backfillFailure.mockResolvedValue(reason);
+        const result = await service.getSignalFor('ada', NOW);
+        expect(result.signal.result.insufficientData).toBe(true);
+      }
     });
   });
 });

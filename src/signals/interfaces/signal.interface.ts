@@ -41,6 +41,10 @@ export interface SignalResult {
 export interface ChatSignalState {
   /** Epoch ms of the last proactive signal message; null when none. */
   lastSentAt: number | null;
+  /** Sends in a row that Zalo refused; absent or 0 when the last send worked. */
+  failures?: number;
+  /** Epoch ms of the last refused send. */
+  failedAt?: number | null;
   /** Per coin symbol: what the last message said. */
   coins: Record<string, { sentAt: number; direction: SwingDirection; movePct: number }>;
 }

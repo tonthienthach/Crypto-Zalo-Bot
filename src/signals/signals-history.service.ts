@@ -1,11 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis } from '@upstash/redis';
-import { CoingeckoService } from '../coingecko/coingecko.service';
+import { CoingeckoCoinNotFoundError, CoingeckoService } from '../coingecko/coingecko.service';
 import { MarketChartPoint } from '../coingecko/interfaces/coingecko-response.interface';
 import { PricePoint } from './interfaces/signal.interface';
 import {
-  BACKFILL_RETRY_HOLD_SECONDS,
+  BACKFILL_BUSY_HOLD_SECONDS,
+  BACKFILL_NOTFOUND_HOLD_SECONDS,
   BACKTEST_DAYS,
   DAILY_RETENTION_MS,
   DAY_MS,
@@ -146,9 +147,10 @@ export class SignalsHistoryService {
   /**
    * Fills history once for coins seen for the first time, from CoinGecko's
    * market chart. At most MAX_BACKFILL_PER_RUN coins per call; a coin that
-   * fails (unknown to CoinGecko, rate limited) is held for a while so it
-   * does not burn a call every run. The "filled" flag is only set on success.
-   * Returns the symbols filled.
+   * fails is held so it does not burn a call every run: 2h when CoinGecko
+   * does not know it, 10 minutes when CoinGecko rate limited us (and then
+   * the rest of this call is skipped instead of hammering the limit). The
+   * "filled" flag is only set on success. Returns the symbols filled.
    */
   async backfill(symbols: string[], now: number): Promise<string[]> {
     if (symbols.length === 0) return [];
@@ -170,12 +172,22 @@ export class SignalsHistoryService {
         filled.push(symbol);
       } catch (error) {
         this.logger.warn(`Backfill failed for ${symbol}: ${(error as Error).message}`);
+        const notFound = error instanceof CoingeckoCoinNotFoundError;
         await this.redis
-          .set(REDIS_KEYS.backfillFailed(symbol), '1', { ex: BACKFILL_RETRY_HOLD_SECONDS })
+          .set(REDIS_KEYS.backfillFailed(symbol), notFound ? 'notfound' : 'busy', {
+            ex: notFound ? BACKFILL_NOTFOUND_HOLD_SECONDS : BACKFILL_BUSY_HOLD_SECONDS,
+          })
           .catch(() => undefined);
+        if (!notFound) break;
       }
     }
     return filled;
+  }
+
+  /** Why the last backfill of a coin failed, while it is held: null when it did not (or the hold ended). */
+  async backfillFailure(symbol: string): Promise<'notfound' | 'busy' | null> {
+    const value = await this.redis.get<string>(REDIS_KEYS.backfillFailed(symbol));
+    return value === 'notfound' || value === 'busy' ? value : null;
   }
 
   private async writeBackfill(

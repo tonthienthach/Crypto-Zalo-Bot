@@ -1,5 +1,9 @@
 import { ConfigService } from '@nestjs/config';
-import { CoingeckoService, CoingeckoUnavailableError } from '../coingecko/coingecko.service';
+import {
+  CoingeckoCoinNotFoundError,
+  CoingeckoService,
+  CoingeckoUnavailableError,
+} from '../coingecko/coingecko.service';
 import {
   buildBackfillPoints,
   parseMembers,
@@ -101,7 +105,7 @@ describe('SignalsHistoryService', () => {
     expect(result).toEqual({ btc: [{ t: NOW, p: 84_000 }], eth: [] });
   });
 
-  it('backfills only coins with no flag, at most 5, and marks them filled', async () => {
+  it('backfills only coins with no flag, at most 3, and marks them filled', async () => {
     getMarketChart.mockResolvedValue([{ t: NOW, p: 1 }]);
     mockRedis.mget.mockResolvedValue([null, null, '1', null, null, '1', null, null]);
 
@@ -112,13 +116,36 @@ describe('SignalsHistoryService', () => {
     expect(mockTx.set).toHaveBeenCalledWith('signals:bf:a', '1', expect.any(Object));
   });
 
-  it('holds a coin for a while when its backfill fails', async () => {
+  it('holds a rate-limited coin for 10 minutes and stops hammering the limit (verify finding 4)', async () => {
     getMarketChart.mockRejectedValue(new CoingeckoUnavailableError('429'));
-    mockRedis.mget.mockResolvedValue([null, null]);
+    mockRedis.mget.mockResolvedValue([null, null, null, null, null, null]);
     mockRedis.set.mockResolvedValue('OK');
 
-    expect(await service.backfill(['xyz'], NOW)).toEqual([]);
-    expect(mockRedis.set).toHaveBeenCalledWith('signals:bf-fail:xyz', '1', { ex: 7200 });
+    expect(await service.backfill(['xyz', 'abc', 'def'], NOW)).toEqual([]);
+
+    expect(getMarketChart).toHaveBeenCalledTimes(1);
+    expect(mockRedis.set).toHaveBeenCalledWith('signals:bf-fail:xyz', 'busy', { ex: 600 });
     expect(mockTx.set).not.toHaveBeenCalled();
+  });
+
+  it('holds a coin CoinGecko does not know for 2 hours and goes on with the next one', async () => {
+    getMarketChart
+      .mockRejectedValueOnce(new CoingeckoCoinNotFoundError('404'))
+      .mockResolvedValueOnce([{ t: NOW, p: 1 }]);
+    mockRedis.mget.mockResolvedValue([null, null, null, null]);
+    mockRedis.set.mockResolvedValue('OK');
+
+    expect(await service.backfill(['nope', 'btc'], NOW)).toEqual(['btc']);
+
+    expect(mockRedis.set).toHaveBeenCalledWith('signals:bf-fail:nope', 'notfound', { ex: 7200 });
+  });
+
+  it('says why a coin could not be backfilled', async () => {
+    const get = jest.fn();
+    (mockRedis as unknown as { get: jest.Mock }).get = get;
+    get.mockResolvedValueOnce('busy').mockResolvedValueOnce('notfound').mockResolvedValueOnce(null);
+    expect(await service.backfillFailure('a')).toBe('busy');
+    expect(await service.backfillFailure('b')).toBe('notfound');
+    expect(await service.backfillFailure('c')).toBeNull();
   });
 });

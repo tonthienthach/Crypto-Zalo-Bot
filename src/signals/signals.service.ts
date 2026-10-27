@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { CoingeckoCoinNotFoundError, CoingeckoService } from '../coingecko/coingecko.service';
+import {
+  CoingeckoCoinNotFoundError,
+  CoingeckoService,
+  CoingeckoUnavailableError,
+} from '../coingecko/coingecko.service';
 import { pricesBySymbol } from '../portfolio/portfolio-prices';
 import {
   BacktestResult,
@@ -106,6 +110,13 @@ export class SignalsService {
     const tracked = await this.state.trackExtra(symbol, now);
     if (tracked) {
       const [signal] = await this.evaluateWithPrices([symbol], { [symbol]: coin.priceUsd }, now);
+      // No history because CoinGecko rate limited the backfill is "try again in a minute", not "a coin that is too new".
+      if (
+        signal?.result.insufficientData &&
+        (await this.history.backfillFailure(symbol)) === 'busy'
+      ) {
+        throw new CoingeckoUnavailableError(`History of ${symbol} is temporarily unavailable`);
+      }
       return { signal, tracked };
     }
     const hourly = (await this.chartPoints(symbol, now)).hourly;

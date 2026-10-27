@@ -201,8 +201,9 @@ describe('SignalsController', () => {
     await controller.checkSignals();
 
     expect(sendTextMessage).toHaveBeenCalledTimes(2);
-    expect(setSentState).toHaveBeenCalledTimes(1);
-    expect(setSentState).toHaveBeenCalledWith('chat2', expect.anything());
+    // chat1 only gets its failure streak recorded (what it was told is unchanged); chat2 got the message.
+    expect(sentStates.chat1).toMatchObject({ lastSentAt: null, failures: 1 });
+    expect(sentStates.chat2.lastSentAt).toBe(T0);
     expect(lastRun()).toMatchObject({ outcome: 'healthy', chatsAlerted: 1, failures: 1 });
 
     sendTextMessage.mockClear();
@@ -210,6 +211,29 @@ describe('SignalsController', () => {
     await controller.checkSignals();
     expect(sendTextMessage).toHaveBeenCalledTimes(1);
     expect(sendTextMessage.mock.calls[0][0]).toBe('chat1');
+  });
+
+  it('backs off a chat whose last three sends were refused, then tries it again after 6 hours (verify finding 8)', async () => {
+    getWatchlists.mockResolvedValue({ chat1: ['btc'] });
+    sendTextMessage.mockResolvedValue(false);
+
+    for (let i = 0; i < 3; i++) {
+      jest.setSystemTime(T0 + i * 30 * 60_000);
+      await controller.checkSignals();
+    }
+    expect(sendTextMessage).toHaveBeenCalledTimes(3);
+    expect(sentStates.chat1.failures).toBe(3);
+
+    jest.setSystemTime(T0 + 3 * HOUR_MS);
+    await controller.checkSignals();
+    expect(sendTextMessage).toHaveBeenCalledTimes(3);
+    expect(lastRun()).toMatchObject({ outcome: 'healthy', failures: 0 });
+
+    sendTextMessage.mockResolvedValue(true);
+    jest.setSystemTime(T0 + 30 * 60_000 * 2 + 6 * HOUR_MS);
+    await controller.checkSignals();
+    expect(sendTextMessage).toHaveBeenCalledTimes(4);
+    expect(sentStates.chat1.failures).toBeUndefined();
   });
 
   it('AC15: a chat that throws is counted and the others still get their message', async () => {

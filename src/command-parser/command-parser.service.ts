@@ -25,6 +25,16 @@ const SIGNAL_STATS_KEYWORDS = new Set(['thongke', 'stats']);
 const SIGNAL_OFF_KEYWORDS = new Set(['tat', 'off']);
 const SIGNAL_ON_KEYWORDS = new Set(['bat', 'on']);
 const SIGNAL_SYMBOL_PATTERN = /^[a-z0-9]+$/;
+/** Slips of the keywords that must show the syntax, not be read as a coin called "tatt". Short real tickers (TAO, BAT) are never matched fuzzily. */
+const SIGNAL_KEYWORD_TYPOS = new Set([
+  'tatt',
+  'batt',
+  'thongk',
+  'thongkee',
+  'backtes',
+  'bactest',
+  'backtst',
+]);
 const PORTFOLIO_BUY_KEYWORDS = new Set(['mua', 'buy']);
 const PORTFOLIO_SELL_KEYWORDS = new Set(['ban', 'sell']);
 const PORTFOLIO_HISTORY_KEYWORDS = new Set(['lichsu', 'history']);
@@ -201,7 +211,7 @@ export class CommandParserService {
         ? { type: CommandType.SIGNAL_BACKTEST, symbols: [rest[0]] }
         : invalid;
     }
-    return rest.length === 0 && validSymbol(keyword)
+    return rest.length === 0 && validSymbol(keyword) && !SIGNAL_KEYWORD_TYPOS.has(keyword)
       ? { type: CommandType.SIGNAL_VIEW, symbols: [keyword] }
       : invalid;
   }

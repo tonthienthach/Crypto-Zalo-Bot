@@ -361,6 +361,10 @@ describe('CommandParserService', () => {
 
     it.each([
       '/tinhieu backtest',
+      '/tinhieu tatt',
+      '/tinhieu batt',
+      '/tinhieu bactest btc',
+      '/tinhieu thongkee',
       '/tinhieu backtest btc eth',
       '/tinhieu btc eth',
       '/tinhieu thongke btc',

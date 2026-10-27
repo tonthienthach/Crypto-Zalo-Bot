@@ -104,12 +104,16 @@ describeIfRedis('Signals stores against a real Redis (integration)', () => {
       expect(await history.backfill(['xyz'], NOW)).toEqual([]);
       expect(getMarketChart).toHaveBeenCalledTimes(1);
       expect(await redis.exists('signals:bf:xyz')).toBe(0);
+      expect(await history.backfillFailure('xyz')).toBe('busy');
+      const ttl = await redis.ttl('signals:bf-fail:xyz');
+      expect(ttl).toBeGreaterThan(0);
+      expect(ttl).toBeLessThanOrEqual(600);
     });
 
-    it('backfills at most 5 coins per call', async () => {
+    it('backfills at most 3 coins per call', async () => {
       getMarketChart.mockResolvedValue([{ t: NOW, p: 1 }]);
       const filled = await history.backfill(['a', 'b', 'c', 'd', 'e', 'f', 'g'], NOW);
-      expect(filled).toEqual(['a', 'b', 'c', 'd', 'e']);
+      expect(filled).toEqual(['a', 'b', 'c']);
     });
   });
 

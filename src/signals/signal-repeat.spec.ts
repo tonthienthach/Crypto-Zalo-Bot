@@ -1,4 +1,4 @@
-import { recordSent, selectCoinsToAlert } from './signal-repeat';
+import { isBackedOff, recordFailed, recordSent, selectCoinsToAlert } from './signal-repeat';
 import { ChatSignalState, CoinSignal, SignalResult } from './interfaces/signal.interface';
 import { HOUR_MS } from './signals.constants';
 
@@ -89,5 +89,43 @@ describe('recordSent', () => {
     const next = recordSent(old, [strong('btc', -16)], T0);
     expect(next.lastSentAt).toBe(T0);
     expect(next.coins).toEqual({ btc: { sentAt: T0, direction: 'down', movePct: -16 } });
+  });
+
+  describe('send failure backoff (verify finding 8)', () => {
+    const fresh = (): ChatSignalState => ({ lastSentAt: null, coins: {} });
+
+    it('is not backed off until three sends in a row were refused', () => {
+      let state = fresh();
+      for (let i = 0; i < 2; i++) state = recordFailed(state, T0);
+      expect(isBackedOff(state, T0 + MIN)).toBe(false);
+      state = recordFailed(state, T0);
+      expect(isBackedOff(state, T0 + MIN)).toBe(true);
+    });
+
+    it('tries again once the 6 hour window has passed, and backs off again if it fails again', () => {
+      let state = fresh();
+      for (let i = 0; i < 3; i++) state = recordFailed(state, T0);
+      expect(isBackedOff(state, T0 + 6 * HOUR_MS - 1)).toBe(true);
+      expect(isBackedOff(state, T0 + 6 * HOUR_MS)).toBe(false);
+
+      state = recordFailed(state, T0 + 6 * HOUR_MS);
+      expect(state.failures).toBe(4);
+      expect(isBackedOff(state, T0 + 7 * HOUR_MS)).toBe(true);
+    });
+
+    it('forgets the streak after a message went out', () => {
+      let state = fresh();
+      for (let i = 0; i < 3; i++) state = recordFailed(state, T0);
+      state = recordSent(state, [strong('btc', -16)], T0 + 7 * HOUR_MS);
+      expect(state.failures).toBeUndefined();
+      expect(isBackedOff(state, T0 + 7 * HOUR_MS)).toBe(false);
+    });
+
+    it('keeps what the chat was told when a send fails', () => {
+      const told = recordSent(fresh(), [strong('btc', -16)], T0);
+      const failed = recordFailed(told, T0 + HOUR_MS);
+      expect(failed.lastSentAt).toBe(T0);
+      expect(failed.coins.btc).toEqual(told.coins.btc);
+    });
   });
 });

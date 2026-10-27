@@ -56,7 +56,7 @@ Mọi lệnh dưới đây đã chạy thật trong phiên này, kết quả là
 ### 3.1 Đo `market_chart` thật (plan bước 2)
 
 - `GET /coins/bitcoin/market_chart?vs_currency=usd&days=90`, không key: HTTP 200, 2.161 điểm cách nhau 1 giờ, phủ đủ 90 ngày, khoảng 223 KB.
-- 5 coin liên tiếp, không nghỉ (ethereum, solana, binancecoin, ripple, cardano): đều HTTP 200, mỗi lệnh khoảng 0,5 giây, 220–225 KB. Giới hạn tốc độ không chạm tới ở mức 5 coin/lượt, nên không thêm khoảng nghỉ; lỗi 429 vẫn được xử lý (bỏ qua coin, giữ 2 giờ, thử lại).
+- 5 coin liên tiếp, không nghỉ (ethereum, solana, binancecoin, ripple, cardano): đều HTTP 200, mỗi lệnh khoảng 0,5 giây, 220–225 KB. **Kết luận này sau đó bị verify rev 2 bác:** trong lượt chạy của verifier, CoinGecko không key trả 429 sau khoảng 4 lệnh. Đã chỉnh ở §7 (rev 3): tối đa 3 coin mỗi lượt, gặp 429 thì dừng lượt đó và giữ coin 10 phút.
 
 ### 3.2 Chạy thật cả hệ thống (plan §6, "instance chạy tay")
 
@@ -119,9 +119,22 @@ Báo cáo verify rev 1 (`verify.md`): fail, 16/18 pass, AC10 fail, AC04 untested
 | 10 | Bản ghi nhận định dùng `HSETNX` trên hash theo chat (field `coin:nhận-định:ngày`), không phải `ZADD NX` như plan §2; hành vi tương đương, test Redis thật xác nhận | `signals.redis.e2e-spec.ts` |
 | 12 | Lọc giá ≤ 0 và không hữu hạn khỏi `priceNear`, `rangePrices`, `parseMembers`, `snapshot` và `evaluateWithPrices`; thêm spec | `signal-evaluator.spec.ts`, `signals-history.service.spec.ts` |
 
-**Không sửa, có chủ đích:** #3 (vòng phản hồi không phủ AC04 ≤ 30 phút, NFR01/02/04, ngân sách Upstash, Lua trên Upstash thật: chỉ kiểm được sau deploy), #4 và #5 (lấp lịch sử thêm lệnh `market_chart` và tin đầu tiên của chat nhiều coin mới chưa gộp đủ: plan §1 đã chấp nhận), #8 (chat chặn bot bị thử lại mỗi lượt: quy mô nhỏ, nên cân nhắc đánh dấu sau N lần từ chối nếu có nhiều chat), #11 (`/tinhieu tatt` gõ nhầm bị hiểu là coin), #13 (thông báo 429 khi lấp lịch sử /tinhieu).
+**Không sửa, có chủ đích:** #3 (vòng phản hồi không phủ AC04 ≤ 30 phút, NFR01/02/04, ngân sách Upstash, Lua trên Upstash thật: chỉ kiểm được sau deploy) và #5 (tin đầu tiên của chat nhiều coin mới có thể chưa gộp đủ vì lấp lịch sử theo đợt: đúng FR05, chỉ khác trải nghiệm ngày đầu).
 
-Sau vòng sửa: `npx jest` 33 suite, 487 test pass; `tsc`, `eslint` (thư mục đã sửa) không lỗi.
+### 7.1 Rework after review (revision 3)
+
+Sau khi review kết luận "ship with follow-ups", bốn case còn mở của verify được sửa nốt trước khi chuyển bước (owner yêu cầu "sửa các case cho hoàn chỉnh"):
+
+| Finding | Việc đã làm | Kiểm bằng |
+|---|---|---|
+| 4 | `MAX_BACKFILL_PER_RUN` 5 → 3. Lỗi giới hạn tốc độ (không phải 404): coin giữ **10 phút** (trước là 2 giờ) và phần còn lại của lượt bị bỏ qua thay vì dồn thêm lệnh vào giới hạn. Coin CoinGecko không biết (404) vẫn giữ 2 giờ và lượt đi tiếp | `signals-history.service.spec.ts` (3 ca mới), `test/signals.redis.e2e-spec.ts` (TTL ≤ 600s, tối đa 3 coin) |
+| 13 | Khóa `signals:bf-fail:<coin>` nay ghi lý do (`busy` / `notfound`). `/tinhieu <coin mới>` mà lịch sử thiếu vì `busy` trả thông báo "tạm thời không lấy được giá" thay vì "chưa đủ dữ liệu"; `notfound` hoặc chưa thử vẫn là "chưa đủ dữ liệu" | `signals.service.spec.ts` (2 ca mới), `signals-history.service.spec.ts` (`backfillFailure`) |
+| 8 | Sau 3 lần gửi liên tiếp bị Zalo từ chối, chat chỉ được thử lại mỗi 6 giờ (`SEND_FAILURES_BEFORE_BACKOFF`, `SEND_BACKOFF_MS`), như cảnh báo giá; lượt thử thành công xoá chuỗi lỗi. Trạng thái "đã báo gì" không đổi khi gửi lỗi. Thêm đúng một lần ghi Redis cho mỗi lần gửi lỗi | `signal-repeat.spec.ts` (4 ca), `signals.controller.spec.ts` (ca chuỗi 3 lần, 6 giờ, thành công) |
+| 11 | `/tinhieu tatt`, `batt`, `bactest`, `thongkee`... (danh sách lỗi gõ cố định, không so khớp mờ) hiện cú pháp thay vì tìm coin tên đó. Không so khớp mờ cho mã ngắn: TAO, BAT vẫn là coin | `command-parser.service.spec.ts` |
+
+Báo cáo `verify.md` (rev 2) và `review.md` có trước các thay đổi này; chúng không đổi hành vi đã được duyệt (AC01–AC18) nhưng nên chạy lại `/verify` hoặc ít nhất đọc diff nếu muốn một bản xác nhận độc lập mới.
+
+Sau vòng sửa: `npx jest` 33 suite, 487 test pass (500 sau rev 3, §7.1; e2e tuần tự trên Redis thật 84 pass); `tsc`, `eslint` (thư mục đã sửa) không lỗi.
 
 ## 8. Next step
 

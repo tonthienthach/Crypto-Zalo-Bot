@@ -3,7 +3,9 @@ import {
   COMPARE_EPSILON,
   REPEAT_EXTRA_PP,
   REPEAT_WINDOW_MS,
+  SEND_BACKOFF_MS,
   SEND_COOLDOWN_MS,
+  SEND_FAILURES_BEFORE_BACKOFF,
 } from './signals.constants';
 
 function isStrong(signal: CoinSignal): boolean {
@@ -38,6 +40,24 @@ export function selectCoinsToAlert(
       Math.abs(previous.movePct) + REPEAT_EXTRA_PP - COMPARE_EPSILON
     );
   });
+}
+
+/**
+ * True for a chat whose last SEND_FAILURES_BEFORE_BACKOFF sends were all
+ * refused (it blocked the bot, or no longer exists): it is tried only once
+ * per SEND_BACKOFF_MS instead of on every 30-minute run.
+ */
+export function isBackedOff(state: ChatSignalState, now: number): boolean {
+  return (
+    (state.failures ?? 0) >= SEND_FAILURES_BEFORE_BACKOFF &&
+    state.failedAt != null &&
+    now - state.failedAt < SEND_BACKOFF_MS
+  );
+}
+
+/** State after a refused send: the streak grows; what the chat was told is unchanged. */
+export function recordFailed(state: ChatSignalState, now: number): ChatSignalState {
+  return { ...state, failures: (state.failures ?? 0) + 1, failedAt: now };
 }
 
 /** State after `sent` went out at `now`; entries past the repeat window are dropped. */

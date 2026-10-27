@@ -50,10 +50,17 @@ export const HOURLY_RETENTION_MS = 8 * DAY_MS;
 export const DAILY_RETENTION_MS = 90 * DAY_MS;
 
 /** A coin is backfilled from CoinGecko at most this many per run, to stay inside the free tier. */
-export const MAX_BACKFILL_PER_RUN = 5;
+export const MAX_BACKFILL_PER_RUN = 3;
 
 /** After a failed backfill the coin is not retried for this long (an unknown coin would fail forever). */
-export const BACKFILL_RETRY_HOLD_SECONDS = 2 * 60 * 60;
+export const BACKFILL_NOTFOUND_HOLD_SECONDS = 2 * 60 * 60;
+
+/** After CoinGecko rate-limited a backfill the coin waits only briefly: the limit clears within a minute or two. */
+export const BACKFILL_BUSY_HOLD_SECONDS = 10 * 60;
+
+/** After this many sends in a row that Zalo refused (a chat that blocked the bot), a chat is tried only once per SEND_BACKOFF_MS. */
+export const SEND_FAILURES_BEFORE_BACKOFF = 3;
+export const SEND_BACKOFF_MS = 6 * 60 * 60_000;
 
 /** Coins asked about with /tinhieu but on nobody's watchlist, tracked so their verdicts can be scored (spec EPIC-004-FR11). */
 export const MAX_EXTRA_TRACKED = 50;
